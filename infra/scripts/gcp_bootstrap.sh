@@ -24,10 +24,22 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudb
   billingbudgets.googleapis.com iam.googleapis.com
 
 echo "== team access (Editor is fine for a 9-day hackathon project; remove after)"
-IFS=',' read -ra MEMBERS <<< "$TEAM_EMAILS"
-for m in "${MEMBERS[@]}"; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$m" --role=roles/editor >/dev/null
-done
+# Empty is the safe default and must stay a no-op. The example ships a@/b@/c@gmail.com as
+# placeholders, those are real Google accounts owned by strangers, and an Editor binding to
+# one of them is not undone by fixing env.sh later -- so refuse the placeholders outright.
+if [[ -z "${TEAM_EMAILS:-}" ]]; then
+  echo "   TEAM_EMAILS empty: no team bindings (set real addresses in infra/env.sh and re-run)"
+else
+  IFS=',' read -ra MEMBERS <<< "$TEAM_EMAILS"
+  for m in "${MEMBERS[@]}"; do
+    [[ -z "${m// }" ]] && continue
+    if [[ "$m" =~ ^user:[abcd]@gmail\.com$ ]]; then
+      echo "Refusing to grant Editor to the example placeholder $m -- edit infra/env.sh." >&2
+      exit 1
+    fi
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$m" --role=roles/editor >/dev/null
+  done
+fi
 
 echo "== Artifact Registry"
 gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2>&1 || \
