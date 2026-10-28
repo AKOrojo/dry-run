@@ -23,5 +23,12 @@ COPY dryrun/ ./dryrun/
 RUN pip install ".[sim,meta]"
 COPY --from=web /web/dist ./web/dist
 ENV DRYRUN_WEB_DIST=/app/web/dist PORT=8080
+# Non-root. Nothing in the image is written at runtime -- state lives in GCS -- so the whole
+# tree can stay read-only to the service. A bug in an upload or render path then cannot
+# overwrite the code it is running.
+RUN useradd --system --uid 10001 --no-create-home dryrun \
+ && chmod -R a-w /app \
+ && mkdir -p /app/runs /app/data && chown 10001:0 /app/runs /app/data && chmod 750 /app/runs /app/data
+USER 10001
 # Cloud Run sets $PORT. 1 worker: the solver is CPU-bound, Cloud Run scales instances instead.
 CMD exec uvicorn dryrun.api.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --timeout-keep-alive 75

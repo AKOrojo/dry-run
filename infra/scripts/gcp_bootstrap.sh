@@ -67,7 +67,8 @@ if [[ "$(gcloud secrets versions access latest --secret=admin-token)" == "unset"
 fi
 
 echo "== image retention (old images are billed storage forever otherwise)"
-gcloud artifacts repositories set-cleanup-policies "$REPO" --location="$REGION" --no-dry-run \
+# No --dry-run: that flag only PREVIEWS deletions. Omitting it is what actually enforces.
+gcloud artifacts repositories set-cleanup-policies "$REPO" --location="$REGION" \
   --policy=infra/cleanup-policy.json >/dev/null 2>&1 || \
   echo "!! cleanup policy not applied (needs a recent gcloud): apply infra/cleanup-policy.json by hand"
 
