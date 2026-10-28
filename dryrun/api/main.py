@@ -78,6 +78,10 @@ if _origins:
 _p = urlparse(storage.PUBLIC_RUNS_BASE)
 _runs_origin = f"{_p.scheme}://{_p.netloc}" if _p.scheme and _p.netloc else ""
 _CESIUM = "https://api.cesium.com https://assets.ion.cesium.com https://*.cesium.com"
+# Globe.tsx falls back to OpenStreetMap raster tiles whenever no Cesium ion token is configured,
+# which is the default state of a fresh deploy -- so this is the basemap the demo actually shows,
+# not an optional extra. Omitting it costs 45 blocked requests and a black globe.
+_BASEMAP = "https://tile.openstreetmap.org"
 # 'unsafe-eval' is here because CesiumJS requires it, not because it is acceptable. Its widget
 # layer evaluates strings as JavaScript, and without it the bundle throws EvalError during module
 # init and the page renders completely blank -- measured in a real browser, not assumed. That
@@ -92,8 +96,8 @@ CSP = "; ".join(" ".join(part.split()) for part in [
     "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
-    f"img-src 'self' data: blob: {_runs_origin} {_CESIUM}",
-    f"connect-src 'self' {_runs_origin} {_CESIUM}",
+    f"img-src 'self' data: blob: {_runs_origin} {_CESIUM} {_BASEMAP}",
+    f"connect-src 'self' {_runs_origin} {_CESIUM} {_BASEMAP}",
     "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
