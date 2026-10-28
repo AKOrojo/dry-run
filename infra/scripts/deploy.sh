@@ -15,6 +15,12 @@ REPO="${REPO:-dryrun}"
 DATA_BUCKET="${DATA_BUCKET:-${PROJECT_ID}-data}"
 RUNS_BUCKET="${RUNS_BUCKET:-${PROJECT_ID}-runs}"
 RUNTIME_SA="${RUNTIME_SA:-dryrun-run@${PROJECT_ID}.iam.gserviceaccount.com}"
+# Pin the build account. Left unpinned, Cloud Build runs as the DEFAULT COMPUTE account, which
+# holds roles/editor -- every build step would then be arbitrary code with project-wide edit
+# rights, and CI would need actAs on it, handing a leaked CI token exactly the same. dryrun-build
+# has only roles/cloudbuild.builds.builder. This needs `logging: CLOUD_LOGGING_ONLY` in
+# cloudbuild.yaml (already set): a user-specified build SA with default logging is rejected.
+BUILD_SA="${BUILD_SA:-dryrun-build@${PROJECT_ID}.iam.gserviceaccount.com}"
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "not a git repo: run 'git init' and commit first"; exit 1; }
 [[ -f web/package-lock.json ]] || { echo "web/package-lock.json missing: run 'cd web && npm install' and commit it"; exit 1; }
 TAG=$(git rev-parse --short HEAD)$( [[ -n "$(git status --porcelain)" ]] && echo "-dirty" || true )
@@ -32,6 +38,7 @@ if [[ "${SIM_BACKEND:-fake}" == "fake" || "${AGENT_PROVIDER:-fake}" == "fake" ]]
 fi
 
 gcloud builds submit --project "$PROJECT_ID" --config infra/cloudbuild.yaml \
+  --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA}" \
   --substitutions=_TAG="$TAG",_REGION="$REGION",_REPO="$REPO" .
 
 gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \

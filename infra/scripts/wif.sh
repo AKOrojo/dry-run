@@ -72,6 +72,20 @@ done
 # Scoped to the runtime SA only: deploy may run Cloud Run AS that account, nothing else.
 bind_retry gc iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
   --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser
+# `gcloud builds submit` also needs actAs on whichever account the BUILD runs as -- without it
+# CI dies at the first build with "caller does not have permission to act as service account
+# <numeric id>", naming an account that appears nowhere in this script. The temptation is to
+# grant actAs on the default compute account it names; do not. That account holds roles/editor,
+# so actAs on it turns a leaked CI token into project-wide edit via a one-line build step.
+# deploy.sh pins the build to dryrun-build (roles/cloudbuild.builds.builder only) instead, and
+# this binding is scoped to that one account. Created by billing_guard.sh for the function build.
+BUILD_SA="dryrun-build@${PROJECT_ID}.iam.gserviceaccount.com"
+if gc iam service-accounts describe "$BUILD_SA" >/dev/null 2>&1; then
+  bind_retry gc iam service-accounts add-iam-policy-binding "$BUILD_SA" \
+    --member="serviceAccount:$DEPLOY_SA" --role=roles/iam.serviceAccountUser
+else
+  echo "!! $BUILD_SA missing: run infra/scripts/billing_guard.sh first, then re-run this script." >&2
+fi
 
 echo "== let only $GITHUB_REPO impersonate the deploy account"
 PROJECT_NUMBER=$(gc projects describe "$PROJECT_ID" --format='value(projectNumber)')
