@@ -51,7 +51,13 @@ gcloud storage buckets describe "gs://$DATA_BUCKET" >/dev/null 2>&1 || \
 gcloud storage buckets describe "gs://$RUNS_BUCKET" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://$RUNS_BUCKET" --location="$REGION" --uniform-bucket-level-access
 # Runs bucket is PUBLIC-READ: frames are rendered model output only. Never put user uploads here.
-gcloud storage buckets add-iam-policy-binding "gs://$RUNS_BUCKET" --member=allUsers --role=roles/storage.objectViewer
+# legacyObjectReader, NOT objectViewer: objectViewer also carries storage.objects.list, which lets
+# anyone enumerate every run the service has ever produced. The UI only ever fetches explicit paths
+# out of a manifest, so listing is capability we do not use. legacyObjectReader is exactly
+# storage.objects.get -- one permission, which is the whole requirement.
+gcloud storage buckets add-iam-policy-binding "gs://$RUNS_BUCKET" --member=allUsers --role=roles/storage.legacyObjectReader
+# Drop the wider grant if an earlier run of this script applied it.
+gcloud storage buckets remove-iam-policy-binding "gs://$RUNS_BUCKET" --member=allUsers --role=roles/storage.objectViewer >/dev/null 2>&1 || true
 gcloud storage buckets update "gs://$RUNS_BUCKET" --cors-file=infra/cors.json
 # Delete scratch runs after 30 days (demo runs are re-created by scripts/warm_cache.py).
 gcloud storage buckets update "gs://$RUNS_BUCKET" --lifecycle-file=infra/lifecycle.json

@@ -14,6 +14,7 @@ import math
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,10 +63,51 @@ def _check_aoi(aoi_id: str) -> None:
         storage.load_aoi(aoi_id)
     except Exception as exc:  # noqa: BLE001 - missing file / GCS NotFound
         raise HTTPException(404, f"unknown AOI {aoi_id}") from exc
-app.add_middleware(  # dev only: Vite runs on :5173. Same-origin in prod.
-    CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","),
-    allow_methods=["*"], allow_headers=["*"],
-)
+# The browser only ever talks to this one origin in prod -- this service serves the web app too --
+# so CORS exists purely for `vite dev` on :5173. Default to that ONLY when running locally.
+# Carrying the allowance into prod lets any page on any developer's machine drive the live API
+# from a visitor's browser, which buys nothing there.
+_cors_default = "http://localhost:5173" if storage.MODE == "local" else ""
+_origins = [o for o in os.getenv("CORS_ORIGINS", _cors_default).split(",") if o.strip()]
+if _origins:
+    app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"])
+
+# Frames and manifests load straight from the public runs bucket, so its origin must be allowed.
+# Derived from the configured base rather than hardcoded, so changing bucket or region cannot
+# silently blank the globe. Local mode uses a relative "/runs" and contributes no origin.
+_p = urlparse(storage.PUBLIC_RUNS_BASE)
+_runs_origin = f"{_p.scheme}://{_p.netloc}" if _p.scheme and _p.netloc else ""
+_CESIUM = "https://api.cesium.com https://assets.ion.cesium.com https://*.cesium.com"
+# CesiumJS genuinely needs 'wasm-unsafe-eval' (Draco/KTX2 decoders), blob: workers and inline
+# styles for its widgets; a stricter policy renders a blank canvas. Everything not required by
+# the globe is closed: no object/embed, no framing, no <base> injection.
+CSP = "; ".join(" ".join(part.split()) for part in [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval' blob:",
+    "worker-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    f"img-src 'self' data: blob: {_runs_origin} {_CESIUM}",
+    f"connect-src 'self' {_runs_origin} {_CESIUM}",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+])
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline response headers -- Cloud Run adds none of these for you."""
+    resp = await call_next(request)
+    resp.headers.setdefault("Content-Security-Policy", CSP)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    # frame-ancestors covers this for modern browsers; kept for the ones that ignore CSP.
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    # Cloud Run is HTTPS-only, so this cannot lock anyone out of a working http:// path.
+    resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resp
 
 
 # NOT /healthz: Cloud Run reserves some paths ending in "z" at its front end.
