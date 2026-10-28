@@ -10,14 +10,9 @@ cd "$(dirname "$0")/../.."
 source infra/env.sh
 : "${BILLING_ACCOUNT:?set BILLING_ACCOUNT in infra/env.sh (gcloud billing accounts list)}"
 
-# `gcloud billing budgets` goes through Application Default Credentials, NOT the account from
-# `gcloud auth login`, and it needs a quota project. Without ADC it fails with a SERVICE_DISABLED
-# error naming Google's own project number, which looks like a permissions problem and is not.
-if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
-  echo "No Application Default Credentials. The budget and the kill switch cannot be created." >&2
-  echo "Run:  gcloud auth application-default login" >&2
-  exit 1
-fi
+# `gcloud billing budgets` needs a quota project. Without one it fails with SERVICE_DISABLED
+# quoting Google's own project number, which reads like a permissions problem and is not --
+# hence --billing-project on every budget call below. That is sufficient: ADC is NOT required.
 # The billing account must be OPEN. A closed one silently links but leaves billingEnabled=false,
 # and every paid API then refuses with UREQ_PROJECT_BILLING_NOT_OPEN.
 if [[ "$(gcloud billing accounts describe "$BILLING_ACCOUNT" --format='value(open)' 2>/dev/null)" != "True" ]]; then
