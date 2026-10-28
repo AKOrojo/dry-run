@@ -47,3 +47,33 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
       - run: bash infra/scripts/deploy.sh
+      - name: publish the URL
+        run: |
+          URL=$(gcloud run services describe "${SERVICE:-dryrun}" --project "$PROJECT_ID" \
+                  --region "$REGION" --format='value(status.url)')
+          echo "## Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+
+  # A workflow whose only real job is skipped still reports green. Without this, a "deploy ✓"
+  # on the commit list means nothing was deployed -- a bad thing to discover on demo day.
+  status:
+    needs: deploy
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: say what actually happened
+        run: |
+          if [[ "${{ needs.deploy.result }}" == "success" ]]; then
+            echo "### Deployed to Cloud Run" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### NOT DEPLOYED — there is no live URL from this run"
+              echo
+              echo "deploy job: \`${{ needs.deploy.result }}\`"
+              echo
+              echo "The deploy job is gated on the \`GCP_PROJECT_ID\` repo variable, which is"
+              echo "currently \`${{ vars.GCP_PROJECT_ID || '(unset)' }}\`. Run"
+              echo "\`infra/scripts/wif.sh\` against a real project and set the four variables"
+              echo "it prints. CI passing does not mean the site is up."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
