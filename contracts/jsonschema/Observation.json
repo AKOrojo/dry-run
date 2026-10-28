@@ -1,0 +1,145 @@
+{
+  "additionalProperties": false,
+  "description": "Produced by /observe (SAM 3.1 + Muse Spark vision). Shown as pins on the map.",
+  "properties": {
+    "obs_id": {
+      "title": "Obs Id",
+      "type": "string"
+    },
+    "lon": {
+      "title": "Lon",
+      "type": "number"
+    },
+    "lat": {
+      "title": "Lat",
+      "type": "number"
+    },
+    "t_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "aligned to sim clock if known",
+      "title": "T S"
+    },
+    "source": {
+      "enum": [
+        "citizen_photo",
+        "drone_video",
+        "satellite_chip"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "est_depth_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Est Depth M"
+    },
+    "depth_low_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Depth Low M"
+    },
+    "depth_high_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Depth High M"
+    },
+    "reference_object": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "examples": [
+        "car tyre",
+        "door"
+      ],
+      "title": "Reference Object"
+    },
+    "water_fraction": {
+      "description": "share of image masked as flood water",
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Water Fraction",
+      "type": "number"
+    },
+    "mask_png": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mask Png"
+    },
+    "model_notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Notes"
+    },
+    "sim_depth_m": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "filled by backend for a given run_id",
+      "title": "Sim Depth M"
+    }
+  },
+  "required": [
+    "obs_id",
+    "lon",
+    "lat",
+    "source",
+    "est_depth_m",
+    "water_fraction"
+  ],
+  "title": "Observation",
+  "type": "object"
+}

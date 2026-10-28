@@ -1,0 +1,30 @@
+{
+  "additionalProperties": false,
+  "description": "Streamed to the UI over SSE from POST /agent (one JSON per event).",
+  "properties": {
+    "kind": {
+      "enum": [
+        "thought",
+        "tool_call",
+        "tool_result",
+        "run_ready",
+        "brief",
+        "error",
+        "done"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    }
+  },
+  "required": [
+    "kind",
+    "data"
+  ],
+  "title": "AgentEvent",
+  "type": "object"
+}

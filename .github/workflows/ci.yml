@@ -1,0 +1,31 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:   # deploy.yml reuses this so a deploy can never outrun a green build
+jobs:
+  python:
+    # Pinned, not ubuntu-latest: that label migrates to Ubuntu 26 from Oct 19 2026 and we are
+    # not spending hackathon time on a runner image change. Revisit after submission.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev,sim]"   # sim = numba, so A's solver tests run in CI
+      - run: ruff check dryrun tests scripts
+      - run: python -c "import dryrun.api.main"   # catches a broken API module
+      - run: pytest -q
+      - run: PYTHONPATH=. python scripts/smoke.py
+      - name: contracts in sync
+        run: |
+          PYTHONPATH=. python scripts/export_contracts.py
+          git diff --exit-code contracts/jsonschema || (echo "Run 'make contracts' and commit" && exit 1)
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: "22" }
+      - run: cd web && (npm ci || npm install) && npm run typecheck && npm run build

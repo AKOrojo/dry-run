@@ -1,0 +1,16 @@
+# gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_TAG=$(git rev-parse --short HEAD) .
+substitutions:
+  _REGION: us-central1
+  _REPO: dryrun
+  _TAG: manual
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, infra/Dockerfile, -t, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}", .]
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${_TAG}
+options:
+  machineType: E2_HIGHCPU_8
+  # Avoids "build service account needs logs bucket access" failures on new projects.
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s

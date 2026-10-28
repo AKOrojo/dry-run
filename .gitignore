@@ -1,0 +1,50 @@
+# ---- Team-internal planning docs: NOT published (repo must be public) ----
+docs/
+
+# ---- Secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+*-sa.json
+*credentials*.json
+service-account*.json
+
+# ---- Data & run outputs (live in GCS, never in git) ----
+data/
+runs/
+models/
+*.tif
+*.tiff
+*.mp4
+*.mov
+# (small .npy/.geojson/.graphml test fixtures under tests/ ARE allowed)
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# ---- Node / web ----
+node_modules/
+web/dist/
+web/.vite/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated contracts (contracts/jsonschema, web/src/contracts/gen) ARE committed;
+# CI fails if they drift from dryrun/contracts/schemas.py.
+
+# ---- Infra local config ----
+infra/env.sh

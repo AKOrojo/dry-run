@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "GridSpec": {
+      "additionalProperties": false,
+      "description": "Describes every raster in an AOI. All AOI rasters share this grid exactly.",
+      "properties": {
+        "crs": {
+          "const": "EPSG:4326",
+          "default": "EPSG:4326",
+          "title": "Crs",
+          "type": "string"
+        },
+        "cell_size_m": {
+          "description": "nominal cell size (= sqrt(dx_m*dy_m))",
+          "examples": [
+            30.0
+          ],
+          "exclusiveMinimum": 0,
+          "title": "Cell Size M",
+          "type": "number"
+        },
+        "dx_m": {
+          "description": "east-west cell size in metres",
+          "exclusiveMinimum": 0,
+          "title": "Dx M",
+          "type": "number"
+        },
+        "dy_m": {
+          "description": "north-south cell size in metres",
+          "exclusiveMinimum": 0,
+          "title": "Dy M",
+          "type": "number"
+        },
+        "nx": {
+          "description": "columns",
+          "exclusiveMinimum": 0,
+          "title": "Nx",
+          "type": "integer"
+        },
+        "ny": {
+          "description": "rows",
+          "exclusiveMinimum": 0,
+          "title": "Ny",
+          "type": "integer"
+        },
+        "bounds_wgs84": {
+          "description": "west, south, east, north in degrees; used by the UI to place frames",
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Bounds Wgs84",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cell_size_m",
+        "dx_m",
+        "dy_m",
+        "nx",
+        "ny",
+        "bounds_wgs84"
+      ],
+      "title": "GridSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.",
+  "properties": {
+    "contract_version": {
+      "default": "0.3.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "aoi_id": {
+      "examples": [
+        "lagos-lekki-v1",
+        "fixture-synthetic"
+      ],
+      "title": "Aoi Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "grid": {
+      "$ref": "#/$defs/GridSpec"
+    },
+    "layers": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1).",
+      "title": "Layers",
+      "type": "object"
+    },
+    "sources": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Layer name -> attribution / licence string",
+      "title": "Sources",
+      "type": "object"
+    },
+    "is_synthetic": {
+      "default": false,
+      "title": "Is Synthetic",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "aoi_id",
+    "name",
+    "grid",
+    "layers",
+    "sources"
+  ],
+  "title": "AOIManifest",
+  "type": "object"
+}

@@ -1,0 +1,104 @@
+{
+  "additionalProperties": false,
+  "description": "Every number the agent is allowed to cite MUST come from here (or RouteResult).",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "buildings_flooded": {
+      "description": "buildings whose max depth (3x3 around footprint) >= 0.15 m",
+      "title": "Buildings Flooded",
+      "type": "integer"
+    },
+    "buildings_flooded_severe": {
+      "description": "max depth >= 0.5 m",
+      "title": "Buildings Flooded Severe",
+      "type": "integer"
+    },
+    "road_km_impassable": {
+      "description": "road length with max depth >= passability threshold",
+      "title": "Road Km Impassable",
+      "type": "number"
+    },
+    "people_exposed": {
+      "description": "population in cells with max depth >= 0.15 m",
+      "title": "People Exposed",
+      "type": "integer"
+    },
+    "flooded_area_km2": {
+      "title": "Flooded Area Km2",
+      "type": "number"
+    },
+    "max_depth_m": {
+      "title": "Max Depth M",
+      "type": "number"
+    },
+    "peak_t_s": {
+      "description": "time of maximum flooded area",
+      "title": "Peak T S",
+      "type": "integer"
+    },
+    "rain_volume_m3": {
+      "title": "Rain Volume M3",
+      "type": "number"
+    },
+    "drained_volume_m3": {
+      "title": "Drained Volume M3",
+      "type": "number"
+    },
+    "infiltrated_volume_m3": {
+      "title": "Infiltrated Volume M3",
+      "type": "number"
+    },
+    "stored_volume_end_m3": {
+      "title": "Stored Volume End M3",
+      "type": "number"
+    },
+    "boundary_outflow_m3": {
+      "description": "water leaving through the lagoon/edge boundary",
+      "title": "Boundary Outflow M3",
+      "type": "number"
+    },
+    "mass_balance_error_pct": {
+      "description": "100*(rain - drained - infiltrated - outflow - stored_end) / rain; solver sanity check, |err| should be < 1%",
+      "title": "Mass Balance Error Pct",
+      "type": "number"
+    },
+    "buildings_in_ponds": {
+      "default": 0,
+      "description": "buildings inside pond polygons (displaced, not 'saved')",
+      "title": "Buildings In Ponds",
+      "type": "integer"
+    },
+    "passability_threshold_m": {
+      "default": 0.3,
+      "title": "Passability Threshold M",
+      "type": "number"
+    },
+    "is_surrogate": {
+      "default": false,
+      "description": "True if produced by the ML emulator, not the solver",
+      "title": "Is Surrogate",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "run_id",
+    "buildings_flooded",
+    "buildings_flooded_severe",
+    "road_km_impassable",
+    "people_exposed",
+    "flooded_area_km2",
+    "max_depth_m",
+    "peak_t_s",
+    "rain_volume_m3",
+    "drained_volume_m3",
+    "infiltrated_volume_m3",
+    "stored_volume_end_m3",
+    "boundary_outflow_m3",
+    "mass_balance_error_pct"
+  ],
+  "title": "RunStats",
+  "type": "object"
+}

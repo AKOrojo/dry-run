@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "description": "Per-frame series for charts and event markers on the shared clock (same order as frames).",
+  "properties": {
+    "t_s": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "T S",
+      "type": "array"
+    },
+    "flooded_area_km2": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Flooded Area Km2",
+      "type": "array"
+    },
+    "road_km_impassable": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Road Km Impassable",
+      "type": "array"
+    },
+    "edges_cut": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Edges Cut",
+      "type": "array"
+    }
+  },
+  "required": [
+    "t_s",
+    "flooded_area_km2",
+    "road_km_impassable",
+    "edges_cut"
+  ],
+  "title": "Timeseries",
+  "type": "object"
+}

@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "description": "Stats inside one named place for one run (get_area_stats tool; claim field area:<place>:<stat>).",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "place": {
+      "title": "Place",
+      "type": "string"
+    },
+    "buildings_flooded": {
+      "title": "Buildings Flooded",
+      "type": "integer"
+    },
+    "people_exposed": {
+      "title": "People Exposed",
+      "type": "integer"
+    },
+    "road_km_impassable": {
+      "title": "Road Km Impassable",
+      "type": "number"
+    },
+    "max_depth_m": {
+      "title": "Max Depth M",
+      "type": "number"
+    },
+    "flooded_area_km2": {
+      "title": "Flooded Area Km2",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "place",
+    "buildings_flooded",
+    "people_exposed",
+    "road_km_impassable",
+    "max_depth_m",
+    "flooded_area_km2"
+  ],
+  "title": "AreaStats",
+  "type": "object"
+}

@@ -1,0 +1,393 @@
+{
+  "$defs": {
+    "DrainUpgrade": {
+      "additionalProperties": false,
+      "description": "No polygon/place = whole AOI.",
+      "properties": {
+        "polygon": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "name from get_aoi_info places",
+          "title": "Place"
+        },
+        "type": {
+          "const": "drain_upgrade",
+          "default": "drain_upgrade",
+          "title": "Type",
+          "type": "string"
+        },
+        "capacity_factor": {
+          "default": 1.0,
+          "description": "multiplies EXISTING drains: 1.4 = +40%",
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Capacity Factor",
+          "type": "number"
+        },
+        "add_mm_h": {
+          "default": 0,
+          "description": "NEW drainage inside the area (where none is mapped)",
+          "maximum": 200,
+          "minimum": 0,
+          "title": "Add Mm H",
+          "type": "number"
+        }
+      },
+      "title": "DrainUpgrade",
+      "type": "object"
+    },
+    "GreenInfrastructure": {
+      "additionalProperties": false,
+      "properties": {
+        "polygon": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "name from get_aoi_info places",
+          "title": "Place"
+        },
+        "type": {
+          "const": "green",
+          "default": "green",
+          "title": "Type",
+          "type": "string"
+        },
+        "infiltration_mm_h": {
+          "default": 40,
+          "maximum": 200,
+          "minimum": 0,
+          "title": "Infiltration Mm H",
+          "type": "number"
+        },
+        "manning": {
+          "default": 0.08,
+          "maximum": 0.3,
+          "minimum": 0.01,
+          "title": "Manning",
+          "type": "number"
+        }
+      },
+      "title": "GreenInfrastructure",
+      "type": "object"
+    },
+    "RetentionPond": {
+      "additionalProperties": false,
+      "description": "Draw on open land. Buildings inside are reported as buildings_in_ponds (displaced), roads are cut.",
+      "properties": {
+        "polygon": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "name from get_aoi_info places",
+          "title": "Place"
+        },
+        "type": {
+          "const": "pond",
+          "default": "pond",
+          "title": "Type",
+          "type": "string"
+        },
+        "depth_m": {
+          "default": 2.0,
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Depth M",
+          "type": "number"
+        }
+      },
+      "title": "RetentionPond",
+      "type": "object"
+    },
+    "RoadClosure": {
+      "additionalProperties": false,
+      "properties": {
+        "polygon": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "name from get_aoi_info places",
+          "title": "Place"
+        },
+        "type": {
+          "const": "road_closure",
+          "default": "road_closure",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "RoadClosure",
+      "type": "object"
+    },
+    "Storm": {
+      "additionalProperties": false,
+      "properties": {
+        "total_mm": {
+          "examples": [
+            120
+          ],
+          "maximum": 600,
+          "minimum": 0,
+          "title": "Total Mm",
+          "type": "number"
+        },
+        "duration_h": {
+          "examples": [
+            3
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 12,
+          "title": "Duration H",
+          "type": "number"
+        },
+        "pattern": {
+          "$ref": "#/$defs/StormPattern",
+          "default": "center_peaked"
+        }
+      },
+      "required": [
+        "total_mm",
+        "duration_h"
+      ],
+      "title": "Storm",
+      "type": "object"
+    },
+    "StormPattern": {
+      "enum": [
+        "uniform",
+        "front_loaded",
+        "center_peaked"
+      ],
+      "title": "StormPattern",
+      "type": "string"
+    },
+    "TideLevel": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "tide",
+          "default": "tide",
+          "title": "Type",
+          "type": "string"
+        },
+        "boundary_level_m": {
+          "description": "water level at outflow boundary",
+          "maximum": 5,
+          "minimum": -2,
+          "title": "Boundary Level M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "boundary_level_m"
+      ],
+      "title": "TideLevel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "default": "0.3.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "aoi_id": {
+      "title": "Aoi Id",
+      "type": "string"
+    },
+    "storm": {
+      "$ref": "#/$defs/Storm"
+    },
+    "interventions": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "drain_upgrade": "#/$defs/DrainUpgrade",
+            "green": "#/$defs/GreenInfrastructure",
+            "pond": "#/$defs/RetentionPond",
+            "road_closure": "#/$defs/RoadClosure",
+            "tide": "#/$defs/TideLevel"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/DrainUpgrade"
+          },
+          {
+            "$ref": "#/$defs/GreenInfrastructure"
+          },
+          {
+            "$ref": "#/$defs/RetentionPond"
+          },
+          {
+            "$ref": "#/$defs/TideLevel"
+          },
+          {
+            "$ref": "#/$defs/RoadClosure"
+          }
+        ]
+      },
+      "title": "Interventions",
+      "type": "array"
+    },
+    "sim_hours": {
+      "default": 6,
+      "exclusiveMinimum": 0,
+      "maximum": 12,
+      "title": "Sim Hours",
+      "type": "number"
+    },
+    "output_interval_min": {
+      "default": 10,
+      "maximum": 60,
+      "minimum": 5,
+      "title": "Output Interval Min",
+      "type": "integer"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "human label; NOT part of run_id",
+      "title": "Label"
+    }
+  },
+  "required": [
+    "aoi_id",
+    "storm"
+  ],
+  "title": "ScenarioSpec",
+  "type": "object"
+}

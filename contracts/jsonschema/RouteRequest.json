@@ -1,0 +1,58 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "t_s": {
+      "description": "use the flood state at this time",
+      "title": "T S",
+      "type": "integer"
+    },
+    "origin": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Origin",
+      "type": "array"
+    },
+    "destination": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "None = nearest shelter",
+      "title": "Destination"
+    }
+  },
+  "required": [
+    "run_id",
+    "t_s",
+    "origin"
+  ],
+  "title": "RouteRequest",
+  "type": "object"
+}

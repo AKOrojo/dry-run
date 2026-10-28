@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "base_run_id": {
+      "title": "Base Run Id",
+      "type": "string"
+    },
+    "alt_run_id": {
+      "title": "Alt Run Id",
+      "type": "string"
+    },
+    "delta": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "alt - base for each field in COMPARE_FIELDS",
+      "title": "Delta",
+      "type": "object"
+    }
+  },
+  "required": [
+    "base_run_id",
+    "alt_run_id",
+    "delta"
+  ],
+  "title": "CompareResult",
+  "type": "object"
+}

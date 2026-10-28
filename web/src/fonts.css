@@ -1,0 +1,16 @@
+/* Self-hosted IBM Plex (bundled by Vite: no font CDN at runtime; demo wifi and flood-time links are flaky).
+   Plex Sans tops out at 700: never set font-weight 800. Tokens: Dry Run design system. */
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+:root {
+  --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+html, body { font-family: var(--font-sans); }
+code, kbd, samp, .mono { font-family: var(--font-mono); }
+.num { font-variant-numeric: tabular-nums; }

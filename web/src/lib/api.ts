@@ -1,0 +1,77 @@
+// Thin typed client for the Dry Run API (owner: Eng B).
+// Types are GENERATED from the Python contracts: `make contracts` -> src/contracts/gen/*.d.ts
+// Until the first generation lands, the minimal hand-written types below unblock work.
+// Delete them once gen/ exists and import from "../contracts/gen/..." instead.
+
+export const API = import.meta.env.VITE_API_BASE ?? "";
+
+export type Storm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
+// Area = EITHER polygon OR place (a name from the AOI's places layer); exactly one, except
+// drain_upgrade where neither means the whole AOI.
+type Area = { polygon: [number, number][]; place?: never } | { place: string; polygon?: never };
+export type Intervention =
+  | ({ type: "drain_upgrade"; capacity_factor?: number; add_mm_h?: number } & (Area | {}))
+  | ({ type: "green"; infiltration_mm_h?: number; manning?: number } & Area)
+  | ({ type: "pond"; depth_m?: number } & Area)
+  | { type: "tide"; boundary_level_m: number }
+  | ({ type: "road_closure" } & Area);
+export type ScenarioSpec = {
+  aoi_id: string; storm: Storm; interventions?: Intervention[];
+  sim_hours?: number; output_interval_min?: number; label?: string | null;
+};
+export type FrameRef = { t_s: number; png: string; depth: string };
+export type RunStats = Record<string, number | boolean | string> & { run_id: string };
+export type RunManifest = {
+  run_id: string; building_depths: string | null; intervention_cells: number[];
+  timeseries: { t_s: number[]; flooded_area_km2: number[]; road_km_impassable: number[]; edges_cut: number[] } | null; status: "queued" | "running" | "done" | "failed"; frames: FrameRef[];
+  max_depth_png: string | null; stats: RunStats | null; backend: "fake" | "solver" | "surrogate";
+  colormap: { depth_m: number[] }; error: string | null; scenario: ScenarioSpec;
+};
+export type AOIManifest = {
+  aoi_id: string; name: string; is_synthetic: boolean;
+  grid: { bounds_wgs84: [number, number, number, number]; nx: number; ny: number; cell_size_m: number };
+};
+export type AgentEvent = { kind: "thought" | "tool_call" | "tool_result" | "run_ready" | "brief" | "error" | "done"; data: any };
+
+// Team rehearsals: run `localStorage.setItem("dr_team_token", "<DRYRUN_ADMIN_TOKEN>")` in the console
+// once to bypass the public rate limits. Never commit the token.
+const team = (): Record<string, string> => {
+  try { const t = localStorage.getItem("dr_team_token"); return t ? { "X-Team-Token": t } : {}; } catch { return {}; }
+};
+const JSONH = () => ({ "Content-Type": "application/json", ...team() });
+
+async function j<T>(r: Response): Promise<T> {
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json() as Promise<T>;
+}
+
+export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string }>);
+export const getAOI = (id: string) => fetch(`${API}/api/aoi/${id}`).then(j<AOIManifest>);
+export const simulate = (s: ScenarioSpec) =>
+  fetch(`${API}/api/simulate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s) }).then(j<RunManifest>);
+export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
+
+/** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
+export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
+
+/** POST /api/agent streams Server-Sent Events; EventSource can't POST, so read the stream manually. */
+export async function* askAgent(question: string, provider = "meta"): AsyncGenerator<AgentEvent> {
+  const r = await fetch(`${API}/api/agent`, {
+    method: "POST", headers: JSONH(), body: JSON.stringify({ question, provider }),
+  });
+  if (!r.body) throw new Error("no stream");
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, i).replace(/^data: /, "");
+      buf = buf.slice(i + 2);
+      if (chunk.trim()) yield JSON.parse(chunk) as AgentEvent;
+    }
+  }
+}

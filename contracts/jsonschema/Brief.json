@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "Claim": {
+      "additionalProperties": false,
+      "description": "The model supplies text, unit, source_run_id and field. The VERIFIER looks the number up\nand writes it into `value`; the model's own number is kept in `model_value` for audit.",
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "filled by verify.py from storage (truth)",
+          "title": "Value"
+        },
+        "model_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "what the model claimed",
+          "title": "Model Value"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "source_run_id": {
+          "title": "Source Run Id",
+          "type": "string"
+        },
+        "field": {
+          "description": "Where the value came from. One of: '<RunStats field>' | 'delta:<RunStats field>:<base_run_id>' (value = this run minus base) | 'route:<route_id>:<RouteResult field>' | 'area:<place name>:<AreaStats field>'",
+          "title": "Field",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "description": "lookup ok AND model_value matched (ints exact) AND text has no digits",
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text",
+        "unit",
+        "source_run_id",
+        "field"
+      ],
+      "title": "Claim",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "description": "prose with NO numbers; numbers live in claims",
+      "title": "Summary",
+      "type": "string"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "recommended_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recommended Run Id"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "meta",
+        "baseten",
+        "fake"
+      ],
+      "title": "Provider",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "summary",
+    "claims",
+    "model",
+    "provider"
+  ],
+  "title": "Brief",
+  "type": "object"
+}

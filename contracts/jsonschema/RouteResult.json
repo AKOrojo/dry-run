@@ -1,0 +1,85 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "t_s": {
+      "title": "T S",
+      "type": "integer"
+    },
+    "reachable": {
+      "title": "Reachable",
+      "type": "boolean"
+    },
+    "path": {
+      "description": "lon/lat polyline",
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Path",
+      "type": "array"
+    },
+    "length_km": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Length Km"
+    },
+    "eta_min": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "assumes walking 4 km/h unless noted",
+      "title": "Eta Min"
+    },
+    "edges_removed": {
+      "description": "road edges cut by flooding at t_s",
+      "title": "Edges Removed",
+      "type": "integer"
+    },
+    "destination_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Destination Name"
+    }
+  },
+  "required": [
+    "run_id",
+    "t_s",
+    "reachable",
+    "edges_removed"
+  ],
+  "title": "RouteResult",
+  "type": "object"
+}

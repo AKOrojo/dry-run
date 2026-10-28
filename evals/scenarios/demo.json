@@ -1,0 +1,14 @@
+{
+  "_comment": "Scenarios pre-warmed into the cache before recording/demo (scripts/warm_cache.py). Owner: Eng C + D. Replace aoi_id when real AOI lands.",
+  "scenarios": [
+    {"label": "baseline 120mm/3h", "aoi_id": "fixture-synthetic", "storm": {"total_mm": 120, "duration_h": 3}},
+    {"label": "drains +40%", "aoi_id": "fixture-synthetic", "storm": {"total_mm": 120, "duration_h": 3},
+     "interventions": [{"type": "drain_upgrade", "capacity_factor": 1.4}]},
+    {"label": "high tide lock", "aoi_id": "fixture-synthetic", "storm": {"total_mm": 120, "duration_h": 3},
+     "interventions": [{"type": "tide", "boundary_level_m": 1.0}]}
+  ],
+  "agent_questions": [
+    "Find the smallest set of interventions that keeps the main corridor passable in a 120 mm / 3 h storm.",
+    "With the lagoon held 1 m high (tide lock), how do flooded buildings and the evacuation route to the nearest shelter change?"
+  ]
+}

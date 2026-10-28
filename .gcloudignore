@@ -1,0 +1,17 @@
+# What `gcloud builds submit .` uploads. Never ship secrets, data or local outputs.
+.git
+.gitignore
+.env
+.env.*
+infra/env.sh
+docs/
+data/
+runs/
+**/node_modules/
+web/dist/
+**/__pycache__/
+.venv/
+*.tif
+*.npy
+*.mp4
+*.mov

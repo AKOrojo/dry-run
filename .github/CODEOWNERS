@@ -1,0 +1,34 @@
+# Replace @eng-a..@eng-d with real GitHub handles BEFORE enabling branch protection
+# (GitHub ignores unknown handles). GitHub uses the LAST matching line, so the
+# contracts rule is at the bottom on purpose.
+
+*                                   @eng-d
+
+/dryrun/sim/                     @eng-a
+/dryrun/surrogate/               @eng-a
+/dryrun/pipeline/build_layers.py @eng-a
+/evals/validation/                  @eng-a
+/tests/test_solver.py               @eng-a
+
+/web/                               @eng-b
+/dryrun/api/render_routes.py     @eng-b @eng-c
+
+/dryrun/agent/                   @eng-c
+/dryrun/meta/                    @eng-c
+/dryrun/api/agent_routes.py      @eng-c
+/evals/parity/                      @eng-c
+/evals/api_samples/                 @eng-c
+/evals/scenarios/                   @eng-c @eng-d
+
+/dryrun/pipeline/fixtures.py     @eng-d
+/dryrun/pipeline/ee_export.py    @eng-d
+/dryrun/pipeline/osm.py          @eng-d
+/dryrun/routing/                 @eng-d
+/dryrun/storage.py               @eng-d
+/dryrun/api/main.py              @eng-d
+/infra/                             @eng-d
+
+# Contracts: any two workstreams (keep LAST)
+/dryrun/contracts/               @eng-a @eng-b @eng-c @eng-d
+/contracts/                         @eng-a @eng-b @eng-c @eng-d
+/web/src/contracts/                 @eng-a @eng-b @eng-c @eng-d
