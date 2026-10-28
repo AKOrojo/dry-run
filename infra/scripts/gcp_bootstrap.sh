@@ -9,6 +9,14 @@ echo "== project"
 gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Dry Run"
 gcloud config set project "$PROJECT_ID"
 [[ -n "$BILLING_ACCOUNT" ]] && gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT"
+# `billing projects link` SUCCEEDS against a closed billing account and leaves billingEnabled
+# false. Every paid API then fails with UREQ_PROJECT_BILLING_NOT_OPEN several steps later, which
+# reads like a permissions problem. Check the thing that actually matters, here, once.
+if [[ "$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingEnabled)')" != "True" ]]; then
+  echo "Billing is NOT enabled on $PROJECT_ID (account ${BILLING_ACCOUNT:-unset} is closed or unlinked)." >&2
+  echo "Nothing below this line can be created. Reopen the account or create a new one." >&2
+  exit 1
+fi
 
 echo "== APIs"
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com \
