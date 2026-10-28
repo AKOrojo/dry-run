@@ -112,7 +112,13 @@ async def security_headers(request: Request, call_next):
     resp = await call_next(request)
     resp.headers.setdefault("Content-Security-Policy", CSP)
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    # strict-origin-when-cross-origin, NOT no-referrer. OpenStreetMap's tile usage policy
+    # requires an app to identify itself, and no-referrer strips the only thing identifying us:
+    # every tile came back as the 6987-byte "Access blocked" image, served with HTTP 200 so
+    # nothing in the logs or status codes showed a problem -- only the rendered pixels did.
+    # This sends the bare origin cross-site (no path, no query, HTTPS->HTTP suppressed), which
+    # leaks nothing about which run or scenario a user is looking at.
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     # frame-ancestors covers this for modern browsers; kept for the ones that ignore CSP.
     resp.headers.setdefault("X-Frame-Options", "DENY")
     # Cloud Run is HTTPS-only, so this cannot lock anyone out of a working http:// path.
