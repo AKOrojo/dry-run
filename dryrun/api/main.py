@@ -78,12 +78,18 @@ if _origins:
 _p = urlparse(storage.PUBLIC_RUNS_BASE)
 _runs_origin = f"{_p.scheme}://{_p.netloc}" if _p.scheme and _p.netloc else ""
 _CESIUM = "https://api.cesium.com https://assets.ion.cesium.com https://*.cesium.com"
-# CesiumJS genuinely needs 'wasm-unsafe-eval' (Draco/KTX2 decoders), blob: workers and inline
-# styles for its widgets; a stricter policy renders a blank canvas. Everything not required by
-# the globe is closed: no object/embed, no framing, no <base> injection.
+# 'unsafe-eval' is here because CesiumJS requires it, not because it is acceptable. Its widget
+# layer evaluates strings as JavaScript, and without it the bundle throws EvalError during module
+# init and the page renders completely blank -- measured in a real browser, not assumed. That
+# costs us CSP's main anti-XSS guarantee, so treat it as a reason to be stricter about escaping
+# in the UI, not a reason to relax. What the policy still buys is worth keeping: frame-ancestors
+# blocks clickjacking, object-src kills plugin embedding, base-uri stops <base> hijacking, and
+# connect-src/img-src bound where any injected code could send data. 'wasm-unsafe-eval' stays for
+# the Draco and KTX2 decoders; blob: for Cesium's workers; inline styles for its widgets.
+# If Cesium ever drops its eval dependency, remove 'unsafe-eval' and re-test the globe.
 CSP = "; ".join(" ".join(part.split()) for part in [
     "default-src 'self'",
-    "script-src 'self' 'wasm-unsafe-eval' blob:",
+    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
     f"img-src 'self' data: blob: {_runs_origin} {_CESIUM}",
