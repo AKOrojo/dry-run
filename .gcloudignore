@@ -1,6 +1,16 @@
 # What `gcloud builds submit .` uploads. Never ship secrets, data or local outputs.
 .git
 .gitignore
+# google-github-actions/auth writes its credential config into the WORKSPACE ROOT, which is
+# exactly the directory `builds submit .` tarballs up -- so without this line it is uploaded to
+# the staging bucket on every CI deploy. Verified by unpacking the tarball, not assumed. It holds
+# no long-lived key (that is the point of WIF), but credential_source.headers carries the live
+# Actions bearer token, which can mint OIDC tokens for our provider while the job runs.
+# `*credentials*.json` in .gitignore does NOT match it: the file is named "creds", not
+# "credentials". This also keeps the CI checkout clean, so deploy.sh stops tagging images
+# "<sha>-dirty" -- a mutable tag that silently breaks rollback-by-tag.
+gha-creds-*.json
+gha-oidc-*
 .env
 .env.*
 infra/env.sh

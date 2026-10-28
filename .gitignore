@@ -9,6 +9,11 @@ docs/
 *-sa.json
 *credentials*.json
 service-account*.json
+# google-github-actions/auth drops these in the workspace root. "creds", not "credentials",
+# so the pattern above does not catch them. Mirrored in .gcloudignore, which is what actually
+# keeps them out of the Cloud Build upload.
+gha-creds-*.json
+gha-oidc-*
 
 # ---- Data & run outputs (live in GCS, never in git) ----
 data/

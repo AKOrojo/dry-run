@@ -92,6 +92,17 @@ if [[ "$(gcloud secrets versions access latest --secret=admin-token)" == "unset"
   echo "   admin-token created: gcloud secrets versions access latest --secret=admin-token"
 fi
 
+echo "== Cloud Build staging retention"
+# Cloud Build keeps every uploaded source tarball forever, billed, in a bucket it creates on
+# first build -- so this can only run after one. Those tarballs are a snapshot of the build
+# context, which on a CI run has included the Actions credential config (see .gcloudignore).
+# Spent build inputs; 7 days is already generous.
+if gcloud storage buckets describe "gs://${PROJECT_ID}_cloudbuild" >/dev/null 2>&1; then
+  gcloud storage buckets update "gs://${PROJECT_ID}_cloudbuild" --lifecycle-file=infra/cloudbuild-lifecycle.json >/dev/null
+else
+  echo "   staging bucket not created yet (appears after the first build): re-run after deploy.sh"
+fi
+
 echo "== image retention (old images are billed storage forever otherwise)"
 # No --dry-run: that flag only PREVIEWS deletions. Omitting it is what actually enforces.
 gcloud artifacts repositories set-cleanup-policies "$REPO" --location="$REGION" \
