@@ -48,3 +48,5 @@ Thumbs.db
 
 # ---- Infra local config ----
 infra/env.sh
+
+# ---- Local agent working notes (not published) ----
