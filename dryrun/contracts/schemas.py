@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.5.0"
+CONTRACT_VERSION = "0.5.1"
 
 
 class _Base(BaseModel):
@@ -61,7 +61,7 @@ class AOIManifest(_Base):
             "Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep "
             ".tif/.parquet copies alongside only for QGIS/offline work). "
             "Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), "
-            "obs_flood_extent (Sentinel-1)."
+            "obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py)."
         )
     )
     sources: dict[str, str] = Field(description="Layer name -> attribution / licence string")
@@ -87,6 +87,7 @@ OPTIONAL_AOI_LAYERS = (
     "buildings_geojson",  # footprints for the UI, props id + height_m; SAME ids as buildings
     "places",  # GeoJSON Polygons (<=20 vertices), props name, kind: agent geography + area stats
     "obs_flood_extent",  # .npy Sentinel-1 flood mask for validation
+    "inflows",  # inflows.json {t0_utc, sources: [{name, gauges, cells [[r,c]], hydrograph [[t_s, m3_s]]}], note}
 )
 
 

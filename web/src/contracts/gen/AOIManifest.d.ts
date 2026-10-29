@@ -63,7 +63,7 @@ export interface GridSpec {
   bounds_wgs84: BoundsWgs84;
 }
 /**
- * Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1).
+ * Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py).
  */
 export interface Layers {
   [k: string]: string;

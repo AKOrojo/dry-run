@@ -77,3 +77,37 @@ def test_invalid_raw_is_not_published(raw_inputs, bad):
     with pytest.raises(ValueError):
         build("invalid", str(raw))
     assert not storage._exists("data", "invalid/manifest.json")
+
+
+def _river_xml(grid):
+    w, s, e, n = grid.bounds_wgs84
+    lat = (s + n) / 2
+    nodes = [(i + 1, w + (e - w) * f, lat) for i, f in enumerate((0.0, 0.5, 1.0))]
+    return ("<osm version='0.6'>" + "".join(f"<node id='{i}' lat='{la}' lon='{lo}'/>" for i, lo, la in nodes)
+            + "<way id='9'>" + "".join(f"<nd ref='{i}'/>" for i, _, _ in nodes)
+            + "<tag k='waterway' v='river'/><tag k='name' v='Test River'/></way></osm>")
+
+
+def test_inflows_layer_is_built_and_read_by_the_engine(raw_inputs, tmp_path):
+    pytest.importorskip("osmnx")  # the river comes from OSM XML (pipeline extra; CI installs .[dev,sim] only)
+    from dryrun.sim import engine
+
+    raw, grid = raw_inputs
+    feats = tmp_path / "features.osm"
+    feats.write_text(_river_xml(grid))
+    gauges = tmp_path / "gauges.json"
+    gauges.write_text(json.dumps({"units": "m3/s", "sites": {"G1": {"rows": [["2025-07-04T07:00", 10.0],
+                                                                             ["2025-07-04T09:00", 30.0]]}}}))
+    w, s, e, n = grid.bounds_wgs84
+    cfg = {"gauges": str(gauges), "t0_utc": "2025-07-04T07:00", "hours": 2, "note": "test gauges",
+           "sources": [{"name": "Test River", "gauges": {"G1": 1}, "entry": [w, (s + n) / 2]}]}
+    with pytest.raises(ValueError, match="river mask"):
+        build("tiny-inflow", str(raw), {"features": str(feats)}, inflows_config=cfg)
+    m = build("tiny-inflow", str(raw), {"features": str(feats)}, coastal=False, outlet_side="east",
+              inflows_config=cfg)
+    assert m.layers["inflows"] == "inflows.json" and "USGS" in m.sources["inflows"]
+    layer = json.loads(storage.load_aoi_file("tiny-inflow", "inflows"))
+    src = layer["sources"][0]
+    assert src["cells"] and all(c == 0 for _, c in src["cells"])  # entered on the west edge
+    assert src["hydrograph"][0][1] == pytest.approx(10.0) and layer["note"] == "test gauges"
+    assert engine._inflows("tiny-inflow", storage.load_aoi("tiny-inflow"))  # the engine turns it into sources

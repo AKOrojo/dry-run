@@ -312,7 +312,7 @@
   "additionalProperties": false,
   "properties": {
     "contract_version": {
-      "default": "0.5.0",
+      "default": "0.5.1",
       "title": "Contract Version",
       "type": "string"
     },

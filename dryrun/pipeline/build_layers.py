@@ -186,12 +186,16 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           keywords: Sequence[str] | None = None, place_aliases: dict | None = None,
           building_source: str = "open_buildings", debug_layers: bool = False,
           place_tags: dict | None = None, corridor_tags: dict | None = None,
-          coastal: bool = True, outlet_side: str | None = None) -> AOIManifest:
+          coastal: bool = True, outlet_side: str | None = None, inflows_config: dict | None = None) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write.
 
     Inland AOIs: coastal=False plus outlet_side ("east", ...): the OSM river (waterway=river|stream from
     osm_files["features"]) is burned like a canal and exits through river_outlet() on that edge.
+    inflows_config ({gauges: path, t0_utc, hours, sources, note}): river inflows from USGS gauges, written as the
+    `inflows` layer by Eng A's inflows.build_inflows() (needs the river mask, so outlet_side or debug_layers).
     """
+    if inflows_config and not (outlet_side or debug_layers):
+        raise ValueError("inflows need the river mask: pass outlet_side (or debug_layers)")
     if storage._exists("data", f"{aoi_id}/manifest.json"):
         raise ValueError("AOI ids are immutable; publish a new id")
     reader = osm.building_reader(building_source)
@@ -299,6 +303,16 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
             vector_sources.update(buildings=ob, buildings_geojson=ob)
     layers.update(vector_layers)
     sources.update(vector_sources)
+    if inflows_config:
+        from dryrun.pipeline import inflows
+
+        gauges = json.loads(storage.read_local_file(inflows_config["gauges"]))
+        gauges = gauges.get("sites", gauges)  # usgs.py writes {units, source, sites: {site: {rows, ...}}}
+        layer = inflows.build_inflows(grid, river_mask, gauges, inflows_config["t0_utc"], inflows_config["hours"],
+                                      inflows_config["sources"], inflows_config.get("note", ""))
+        storage.write_aoi_file(aoi_id, "inflows.json", json.dumps(layer).encode(), "application/json")
+        layers["inflows"] = "inflows.json"
+        sources["inflows"] = "USGS NWIS instantaneous values (provisional); " + (layer.get("note") or "see inflows.py")
     manifest = AOIManifest(aoi_id=aoi_id, name=name or aoi_id, grid=grid, layers=layers,
                            sources=sources, is_synthetic=False)
     storage.write_aoi_file(aoi_id, "manifest.json", manifest.model_dump_json(indent=2).encode(), "application/json")
@@ -359,6 +373,7 @@ def main() -> None:
     parser.add_argument("--inland", action="store_true", help="no sea: no JRC boundary (needs --outlet-side)")
     parser.add_argument("--outlet-side", choices=("north", "south", "east", "west"),
                         help="edge where the OSM river leaves the AOI (free outflow)")
+    parser.add_argument("--inflows-config", help="JSON: {gauges, t0_utc, hours, sources, note} (pipeline/inflows.py)")
     args = parser.parse_args()
     if args.inland and not args.outlet_side:
         parser.error("--inland needs --outlet-side, or water has no way out")
@@ -372,7 +387,8 @@ def main() -> None:
           keywords=cfg.get("keywords", keywords), place_aliases=cfg.get("place_aliases"),
           building_source=args.building_source, debug_layers=args.debug_layers,
           place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"),
-          coastal=not args.inland, outlet_side=args.outlet_side)
+          coastal=not args.inland, outlet_side=args.outlet_side,
+          inflows_config=json.loads(storage.read_local_file(args.inflows_config)) if args.inflows_config else None)
 
 
 if __name__ == "__main__":
