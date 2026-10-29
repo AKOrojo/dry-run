@@ -1,0 +1,12 @@
+{
+  "gauges": "evals/validation/usgs_guadalupe_20250704.json",
+  "t0_utc": "2025-07-04T06:00",
+  "hours": 12,
+  "note": "USGS NWIS provisional 15-min discharge. South Fork is ungauged: Hunt minus North Fork, an estimate. Leads = OSM river distance / 2.85 m/s (observed Hunt->Kerrville peak travel, 17.1 km in 100 min): South Fork entry->Hunt 17.3 km (101 min), North Fork gauge->Hunt 9.4 km (55 min), North Fork entry->gauge 3.7 km (22 min).",
+  "sources": [
+    {"name": "South Fork Guadalupe River (Hunt minus North Fork, estimated)",
+     "gauges": {"08165500": [1, 101], "08165300": [-1, 46]}, "entry": [-99.4136, 29.9901]},
+    {"name": "North Fork Guadalupe River", "gauges": {"08165300": [1, 22]}, "entry": [-99.4199, 30.0565]},
+    {"name": "Johnson Creek", "gauges": {"08166000": 1}, "entry": [-99.2798, 30.0994]}
+  ]
+}

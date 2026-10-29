@@ -81,6 +81,12 @@ DEM_SMOOTH_SIGMA_CELLS = 1.0
 WATER_BED_M = -1.0
 CANAL_BURN_M = 1.0
 OUTLET_DROP_M = 0.5
+#   Inland rivers are also CARVED: every river cell connected to the outlet is lowered (never raised) so the
+#   channel runs downhill to it by at least CARVE_DROP_M per cell. At 2" a narrow canyon averages into
+#   ridges of 10-28 m across the bed (South Fork Guadalupe), which the local canal burn cannot breach.
+#   River cells get RIVER_MANNING, a natural clean channel (Chow 1959), not the land cover around them.
+CARVE_DROP_M = 0.01
+RIVER_MANNING = 0.035
 
 
 def landcover_layers(worldcover: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -135,6 +141,35 @@ def river_outlet(river_mask: np.ndarray, side: str) -> np.ndarray:
     if not out.any():
         raise ValueError(f"river mask does not reach the {side} edge: no outlet")
     return out
+
+
+def carve_rivers(dem: np.ndarray, river: np.ndarray, outlet: np.ndarray) -> np.ndarray:
+    """River cells lowered so each runs downhill to the outlet (breaching, never filling).
+
+    BFS from the outlet over 8-connected river cells gives every connected cell a downstream parent;
+    processing the farthest cells first, each parent ends at most CARVE_DROP_M below its lowest child.
+    """
+    z = np.asarray(dem, np.float64).copy()
+    ny, nx = z.shape
+    dist = np.full(z.shape, -1, np.int64)
+    parent: dict[tuple[int, int], tuple[int, int]] = {}
+    queue = deque()
+    for r, c in zip(*np.nonzero(outlet)):
+        dist[r, c] = 0
+        queue.append((int(r), int(c)))
+    while queue:
+        r, c = queue.popleft()
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                rr, cc = r + dr, c + dc
+                if (dr or dc) and 0 <= rr < ny and 0 <= cc < nx and river[rr, cc] and dist[rr, cc] < 0:
+                    dist[rr, cc] = dist[r, c] + 1
+                    parent[(rr, cc)] = (r, c)
+                    queue.append((rr, cc))
+    for cell in sorted(parent, key=lambda p: -dist[p]):
+        down = parent[cell]
+        z[down] = min(z[down], z[cell] - CARVE_DROP_M)
+    return z.astype(np.float32)
 
 
 def treat_dem(dem: np.ndarray, boundary: np.ndarray, exclude: np.ndarray,
@@ -242,9 +277,13 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         outlet = river_outlet(river_mask, outlet_side)
         boundary |= outlet
     dem = treat_dem(raw["dem"], boundary, exclude, outlet)
+    if outlet is not None:
+        dem = carve_rivers(dem, river_mask, outlet)
     if not np.isfinite(dem).all():
         raise ValueError("treated DEM must be finite")
     manning, infiltration = landcover_layers(raw["worldcover"])
+    if outlet is not None:
+        manning[river_mask] = RIVER_MANNING
     sink = drain_sink(waterway_cells(grid, lines))
     population = np.nan_to_num(raw["population"].astype(np.float32), nan=0.0)
     rasters = {"dem": dem, "manning": manning, "infiltration_mm_h": infiltration,
@@ -311,7 +350,7 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         gauges = json.loads(storage.read_local_file(inflows_config["gauges"]))
         gauges = gauges.get("sites", gauges)  # usgs.py writes {units, source, sites: {site: {rows, ...}}}
         layer = inflows.build_inflows(grid, river_mask, gauges, inflows_config["t0_utc"], inflows_config["hours"],
-                                      inflows_config["sources"], inflows_config.get("note", ""))
+                                      inflows_config["sources"], inflows_config.get("note", ""), boundary=boundary)
         storage.write_aoi_file(aoi_id, "inflows.json", json.dumps(layer).encode(), "application/json")
         layers["inflows"] = "inflows.json"
         sources["inflows"] = "USGS NWIS instantaneous values (provisional); " + (layer.get("note") or "see inflows.py")

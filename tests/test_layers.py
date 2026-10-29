@@ -100,6 +100,9 @@ def test_entry_cells_find_where_the_river_crosses_the_edge():
     assert [15, 0] in cells and all(c == 0 for _, c in cells)
     with pytest.raises(ValueError):
         fl.entry_cells(_grid(), np.zeros((30, 60), bool), -99.6, 30.05)
+    outlet = bl.river_outlet(river, "east")
+    with pytest.raises(ValueError):  # an entry on the outlet edge has nowhere legal to go
+        fl.entry_cells(_grid(), river, -99.0, 30.05, boundary=outlet)
 
 
 def test_hydrograph_is_a_clipped_signed_sum_from_t0():
@@ -108,3 +111,14 @@ def test_hydrograph_is_a_clipped_signed_sum_from_t0():
     h = dict((t, q) for t, q in fl.hydrograph(gauges, {"A": 1, "B": -1}, "2025-07-04T07:00", 3))
     assert h[0.0] == 0.0  # 100 - 150 clipped
     assert h[7200.0] == 800.0 and h[3 * 3600.0] == 800.0  # held after the last reading
+    led = dict((t, q) for t, q in fl.hydrograph(gauges, {"A": [1, 60]}, "2025-07-04T07:00", 3))
+    assert led[0.0] == 500.0  # read 60 min later: the water enters before the gauge downstream sees it
+
+
+def test_carving_breaches_ridges_and_never_raises():
+    dem, river = _valley()
+    dem[15, 30] += 12.0  # a canyon averaged into a ridge across the bed
+    outlet = bl.river_outlet(river, "east")
+    out = bl.carve_rivers(dem, river, outlet).astype(np.float64)
+    assert (np.diff(out[15]) < 0).all()  # downhill all the way to the outlet
+    assert (out <= dem + 1e-4).all() and np.array_equal(out[~river], dem[~river].astype(np.float32))
