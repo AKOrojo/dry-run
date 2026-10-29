@@ -355,3 +355,11 @@ def test_demo_presets_are_valid_specs():
     assert rows and {s["aoi_id"] for s in rows} >= {"lagos-lekki-v1", "texas-guadalupe-v0"}
     for s in rows:
         ScenarioSpec.model_validate(s)  # a preset the agent copies must pass run_simulation's validation
+
+
+def test_aois_lists_default_and_preset_aois_that_exist(monkeypatch):
+    monkeypatch.setenv("DRYRUN_DEFAULT_AOI", fixtures.AOI_ID)
+    monkeypatch.setattr(presets, "demo", lambda: {"scenarios": [{"aoi_id": "not-published"}, {"aoi_id": fixtures.AOI_ID}]})
+    with TestClient(app) as c:
+        rows = c.get("/api/aois").json()
+    assert [r["aoi_id"] for r in rows] == [fixtures.AOI_ID] and rows[0]["name"]

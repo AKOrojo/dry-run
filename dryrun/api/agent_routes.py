@@ -43,6 +43,22 @@ def agent(req: AgentRequest, request: Request):
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@router.get("/aois")
+def aois():
+    """AOIs the UI can switch between: the default plus every AOI with presets, if its data exists."""
+    from dryrun import presets, storage
+
+    ids = [os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")]
+    ids += sorted({s["aoi_id"] for s in presets.demo()["scenarios"]} - set(ids))
+    out = []
+    for aoi_id in ids:
+        try:
+            out.append({"aoi_id": aoi_id, "name": storage.load_aoi(aoi_id).name})
+        except Exception:  # noqa: BLE001 - not published in this storage (e.g. local dev)
+            continue
+    return out
+
+
 @router.get("/runs/{run_id}/area")
 def get_area(run_id: str, place: str):
     """Stats inside a named place (same numbers the agent cites as area:<place>:<stat>)."""

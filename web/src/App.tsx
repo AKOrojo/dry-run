@@ -2,7 +2,7 @@
 // load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
 // Cesium globe replaces the <img> preview in Globe.tsx on Day 1-2.
 import { useEffect, useMemo, useState } from "react";
-import { AOIManifest, getAOI, getConfig, getRun, RunManifest, runFileUrl, simulate } from "./lib/api";
+import { AOIManifest, API, getAOI, getAOIs, getConfig, getRun, RunManifest, runFileUrl, simulate } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { Globe } from "./components/Globe";
 import { AgentPanel } from "./components/AgentPanel";
@@ -13,6 +13,8 @@ export default function App() {
   const [judgeKeyRequired, setJudgeKeyRequired] = useState(false);
   const [ionToken, setIonToken] = useState("");
   const [buildingsUrl, setBuildingsUrl] = useState("");
+  const [defaultAoi, setDefaultAoi] = useState("");
+  const [aois, setAois] = useState<{ aoi_id: string; name: string }[]>([]);
   const [buildingsStatus, setBuildingsStatus] = useState("loading…");
   const [runsBase, setRunsBase] = useState("/runs");
   const [run, setRun] = useState<RunManifest>();
@@ -21,8 +23,14 @@ export default function App() {
   const { t_s, playing } = useClock();
 
   useEffect(() => {
-    getConfig().then((h) => { setBuildingsUrl(h.buildings_url); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
+    getAOIs().then(setAois, () => setAois([]));
+    getConfig().then((h) => { setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
   }, []);
+
+  // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
+  const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
+    : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
+  const switchAoi = (id: string) => { setRun(undefined); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const go = async () => {
     const m = await simulate({
@@ -42,7 +50,7 @@ export default function App() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", height: "100vh", fontFamily: "var(--font-sans)" }}>
       <div style={{ position: "relative" }}>
-        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} buildingsUrl={buildingsUrl}
+        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl}
           buildingDepthsUrl={run?.building_depths ? runFileUrl(runsBase, run.run_id, run.building_depths) : undefined}
           onBuildingsStatus={setBuildingsStatus} />}
         {run?.backend === "fake" && <div className="badge" style={{ position: "absolute", top: 8, left: 8, background: "#b45309", color: "#fff", padding: "2px 8px" }}>PLACEHOLDER PHYSICS</div>}
@@ -56,6 +64,9 @@ export default function App() {
       </div>
       <aside style={{ padding: 12, overflow: "auto", borderLeft: "1px solid #ddd" }}>
         <h3>Scenario</h3>
+        {aois.length > 1 && <label>Area: <select value={aoi?.aoi_id} onChange={(e) => switchAoi(e.target.value)}>
+          {aois.map((a) => <option key={a.aoi_id} value={a.aoi_id}>{a.name}</option>)}
+        </select></label>}
         <div style={{ fontSize: 12, marginBottom: 8 }}>Buildings: {buildingsStatus}</div>
         <label>Rain (mm / 3 h): {rain} <input type="range" min={20} max={250} value={rain} onChange={(e) => setRain(+e.target.value)} /></label><br />
         <label>Drain capacity: x{drains.toFixed(1)} <input type="range" min={0.5} max={4} step={0.1} value={drains} onChange={(e) => setDrains(+e.target.value)} /></label><br />
