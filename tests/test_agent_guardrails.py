@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 os.environ["DRYRUN_STORAGE"] = "local"
 os.environ["DRYRUN_SIM_BACKEND"] = "fake"
 
-from dryrun import storage  # noqa: E402
+from dryrun import presets, storage  # noqa: E402
 from dryrun.agent import loop  # noqa: E402
 from dryrun.api import ratelimit  # noqa: E402
 from dryrun.api.main import app  # noqa: E402
@@ -335,18 +335,23 @@ def test_agent_passes_aoi_through(monkeypatch):
     assert seen == [fixtures.AOI_ID, None]
 
 
-def test_aoi_info_exposes_river_inflows_and_event(monkeypatch):
+def test_aoi_info_exposes_river_inflows_and_presets(monkeypatch):
     from dryrun.agent import tools
 
     info = tools.aoi_info(fixtures.AOI_ID)
-    assert info["has_river_inflows"] is False and "event" not in info
+    assert info["has_river_inflows"] is False and info["presets"] == []
 
-    m = storage.load_aoi(fixtures.AOI_ID)
-    with_inflows = m.model_copy(update={"layers": {**m.layers, "inflows": "inflows.json"}})
-    event = {"name": "replay", "storm": {"total_mm": 1, "duration_h": 1}, "sim_hours": 1}
-    monkeypatch.setattr(storage, "load_aoi", lambda _id: with_inflows)
-    monkeypatch.setattr(storage, "load_aoi_file", lambda _id, layer:
-                        json.dumps({"event": event}).encode() if layer == "inflows"
-                        else storage.__dict__["_read_bytes"]("data", f"{_id}/{m.layers[layer]}"))
+    preset = {"label": "p", "aoi_id": fixtures.AOI_ID, "storm": {"total_mm": 1, "duration_h": 1}}
+    other = {**preset, "aoi_id": "some-other-aoi"}
+    monkeypatch.setattr(presets, "demo", lambda: {"scenarios": [preset, other]})
     info = tools.aoi_info(fixtures.AOI_ID)
-    assert info["has_river_inflows"] is True and info["event"] == event
+    assert info["presets"] == [preset]  # filtered to this AOI, verbatim
+    info["presets"][0]["storm"]["total_mm"] = 99
+    assert preset["storm"]["total_mm"] == 1  # callers get copies
+
+
+def test_demo_presets_are_valid_specs():
+    rows = presets.demo()["scenarios"]
+    assert rows and {s["aoi_id"] for s in rows} >= {"lagos-lekki-v1", "texas-guadalupe-v0"}
+    for s in rows:
+        ScenarioSpec.model_validate(s)  # a preset the agent copies must pass run_simulation's validation

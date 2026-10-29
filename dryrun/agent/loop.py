@@ -33,8 +33,9 @@ city-wide new drainage, never as a local fix.
 Leave storm pattern, sim_hours and output_interval_min at their defaults unless the user asks for them.
 Study area: {aoi_id}. Call get_aoi_info first and reuse its place polygons; never invent coordinates.
 If get_aoi_info has has_river_inflows, gauged river inflows are built into every run and cannot be changed;
-tide is for coastal areas only. If it has an "event", a question about that event uses exactly its storm and
-sim_hours.
+tide is for coastal areas only. Its "presets" are scenarios already run: when one answers part of the question,
+pass it to run_simulation verbatim and it returns instantly. Presets are a speed path, not a menu: if the user
+asks for a different storm, place or intervention, run exactly what they asked, never the nearest preset.
 If a tool result has a "warning", fix the scenario rather than reporting its numbers.
 The simulator is a planning model, not a forecast. Do not give medical, political
 or blame-assigning commentary. Keep tool calls purposeful; stop when you can answer."""

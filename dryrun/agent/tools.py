@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 
-from dryrun import storage
+from dryrun import presets, storage
 from dryrun.contracts import COMPARE_FIELDS, CompareResult, RouteRequest, RunStats, ScenarioSpec
 from dryrun.routing.evac import route
 from dryrun.sim.engine import area_stats, run_scenario, validate
@@ -131,10 +131,7 @@ def aoi_info(aoi_id: str) -> dict:
     m = storage.load_aoi(aoi_id)
     out = {"aoi_id": aoi_id, "name": m.name, "bounds_wgs84": m.grid.bounds_wgs84,
            "is_synthetic": m.is_synthetic, "has_river_inflows": "inflows" in m.layers, "places": [], "shelters": []}
-    if "inflows" in m.layers:
-        event = json.loads(storage.load_aoi_file(aoi_id, "inflows")).get("event")
-        if event:
-            out["event"] = event  # the recorded storm to replay, from the data pipeline
+    out["presets"] = presets.scenarios(aoi_id)
     if "places" in m.layers:
         for f in json.loads(storage.load_aoi_file(aoi_id, "places"))["features"]:
             if f["geometry"]["type"] != "Polygon":
