@@ -191,3 +191,14 @@ def public_run_url(run_id: str, rel: str) -> str:
 
 def dumps(obj) -> bytes:
     return json.dumps(obj, indent=2).encode()
+
+
+# Offline pipeline scratch files have explicit paths, separate from serving keys.
+def read_local_file(path: str | Path) -> bytes:
+    return Path(path).read_bytes()
+
+
+def write_local_file(path: str | Path, data: bytes) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
