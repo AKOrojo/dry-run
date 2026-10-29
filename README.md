@@ -40,6 +40,27 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 
 Built with Muse Spark Open. Data attributions: `ATTRIBUTION.md`.
 
+## Data card: Lagos AOI (`lagos-lekki-v1`)
+
+**Area.** Lekki–Ajah corridor, W 3.470 S 6.420 E 3.620 N 6.510 (EPSG:4326), a 540 × 324 grid of 1 arc-second
+cells (~30.7 × 30.5 m). The Lagos Lagoon is along the north edge and the Atlantic along the south. Built
+2026-10-29 by `ee_export` → `build_layers` → `osm` (`dryrun/pipeline/`); every source and its credit line is in
+`ATTRIBUTION.md` and in the AOI manifest's `sources`. AOI ids are immutable: any change ships as a new id.
+
+| Layer | Source | How it was made | Known limits |
+|---|---|---|---|
+| Terrain | Copernicus GLO-30 | native grid; Eng A's `treat_dem` (see model card) | a surface model; ~7.9k lagoon-fringe cells sit at exactly 0 m |
+| Land cover | ESA WorldCover 2021 | mode-resampled from 10 m | 2021 snapshot; Lekki has built up since |
+| Permanent water | JRC GSW occurrence v1.5 | ≥ 90 % of 1984–2024 | seasonal water (lower occurrence) is treated as land |
+| Population | WorldPop R2025A (2025, constrained, alpha) | sum-resampled from 100 m; total conserved | ~470k people: constrained products count only mapped settlements, so likely low |
+| Buildings | Google Open Buildings v3 (tile 103b) | confidence ≥ 0.8, area ≥ 25 m²; 68,929 footprints | **every building is 6 m tall** (no 2.5D heights yet); centroid cell only |
+| Roads | OpenStreetMap (Geofabrik 2026-10-28) | simple graph, largest connected component; cells sampled ≤ ½ cell | unmapped or mis-tagged roads are missing; bridges come from tags |
+| Drains | OpenStreetMap waterway=drain/ditch/canal | lines buffered 1 cell, 10 / 10 / 25 mm/h | sparse mapping; many real drains are silted, unmapped drains count as 0 |
+| Shelters | OpenStreetMap schools / places of worship / community centres | higher half of land, ≤ 300 m from a road | **candidates, assumed**: not official shelters; routing skips a shelter whose cell is flooded |
+| Places | OSM neighbourhoods, named roads, open land | polygons, or Voronoi cells of named points (≤ 1.5 km); ≤ 20 vertices | neighbourhood shapes are approximate, not official boundaries; protected sites never offered as open land |
+
+Not in v1: an observed flood extent (Sentinel-1, planned as `-v2`) and building heights.
+
 ## Model card: flood simulation
 
 **What it is.** A 2D local-inertial shallow-water model (Bates et al. 2010, the LISFLOOD-FP
