@@ -112,13 +112,22 @@ def estimate_depth(jpeg_bytes: bytes, found: list[str]) -> dict:
               "door ~2.0 m, adult knee ~0.5 m. SAM found: " + (", ".join(found) or "none") +
               ". Return est_depth_m, low, high, reference_object and notes. "
               "Use null for depths and reference_object if depth cannot be judged.")
-    response = _post("/chat/completions", {"model": DEFAULTS["meta"]["model"], "max_tokens": 1500,
+    body = {"model": DEFAULTS["meta"]["model"], "max_tokens": 1500,
         "messages": [{"role": "user", "content": [{"type": "text", "text": prompt},
                      {"type": "image_url", "image_url": {"url": _image_url(jpeg_bytes)}}]}],
         "response_format": {"type": "json_schema", "json_schema": {"name": "depth", "schema": {
             "type": "object", "properties": properties, "required": list(properties),
-            "additionalProperties": False}}}})
-    data = json.loads(response["choices"][0]["message"]["content"])
+            "additionalProperties": False}}}}
+    for _ in range(2):  # the model intermittently returns content=None with finish_reason=stop
+        try:
+            data = json.loads(_post("/chat/completions", body)["choices"][0]["message"]["content"] or "")
+            if isinstance(data, dict):
+                break
+        except ValueError:
+            pass
+    else:
+        return {"est_depth_m": None, "low": None, "high": None, "reference_object": None,
+                "notes": "depth model returned no usable answer"}
     for key in ("est_depth_m", "low", "high"):
         value = data.get(key)
         data[key] = float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 5 else None

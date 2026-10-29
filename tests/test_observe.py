@@ -191,3 +191,15 @@ def test_routes(monkeypatch, photo):
         storage.write_upload(f"observations/{fixed.obs_id}/mask.png", b"png", "image/png")
         response = client.get(f"/api/observations/{fixed.obs_id}/mask.png")
         assert response.status_code == 200 and response.headers["content-type"] == "image/png"
+
+
+def test_estimate_depth_survives_empty_model_answers(monkeypatch):
+    calls = []
+
+    def post(path, body):
+        calls.append(path)
+        return {"choices": [{"message": {"content": None}}]}
+
+    monkeypatch.setattr(observe, "_post", post)
+    out = observe.estimate_depth(b"jpeg", ["flood water"])
+    assert len(calls) == 2 and out["est_depth_m"] is None and "no usable answer" in out["notes"]
