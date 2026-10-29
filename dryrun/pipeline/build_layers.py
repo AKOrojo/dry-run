@@ -23,6 +23,7 @@ import argparse
 import io
 import json
 from collections import deque
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -150,14 +151,17 @@ def waterway_cells(grid: GridSpec, lines_by_kind: dict[str, list[list[tuple[floa
 
 
 def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
-          building_csvs=(), name: str | None = None, full: bool = False) -> AOIManifest:
+          building_csvs=(), name: str | None = None, full: bool = False,
+          keywords: Sequence[str] | None = None, place_aliases: dict | None = None,
+          building_source: str = "open_buildings", debug_layers: bool = False) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write."""
     if storage._exists("data", f"{aoi_id}/manifest.json"):
         raise ValueError("AOI ids are immutable; publish a new id")
+    reader = osm.building_reader(building_source)
     folder = Path(raw_dir)
-    metadata = json.loads((folder / "grid.json").read_text())
+    metadata = json.loads(storage.read_local_file(folder / "grid.json"))
     grid = GridSpec.model_validate({k: v for k, v in metadata.items() if k in GridSpec.model_fields})
-    raw = {k: np.load(folder / f"{k}.npy", allow_pickle=False)
+    raw = {k: np.load(io.BytesIO(storage.read_local_file(folder / f"{k}.npy")), allow_pickle=False)
            for k in ("dem", "worldcover", "jrc_occurrence", "population")}
     for key, arr in raw.items():
         if arr.shape != (grid.ny, grid.nx):
@@ -170,16 +174,25 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         raise ValueError("treated DEM must be finite")
     manning, infiltration = landcover_layers(raw["worldcover"])
     lines = {kind: [] for kind in BASELINE_DRAIN_MM_H}
+    river_mask = np.zeros((grid.ny, grid.nx), bool)
     features_path = (osm_files or {}).get("features")
     if features_path:
         import osmnx as ox
 
-        features = ox.features_from_xml(features_path, tags={"waterway": list(BASELINE_DRAIN_MM_H)})
+        kinds = list(BASELINE_DRAIN_MM_H) + (["river", "stream"] if debug_layers else [])
+        features = ox.features_from_xml(features_path, tags={"waterway": kinds})
         for idx, feature in features.iterrows():
             if isinstance(idx, tuple) and idx[0] != "way":
                 continue
             kind, geom = feature.get("waterway"), feature.geometry
-            if kind not in lines or geom is None:
+            if geom is None or (kind not in lines and kind not in ("river", "stream")):
+                continue
+            if kind in ("river", "stream"):
+                parts = [geom] if geom.geom_type == "LineString" else (
+                    geom.geoms if geom.geom_type == "MultiLineString" else [])
+                for part in parts:
+                    cells = np.asarray(osm.line_cells(grid, list(part.coords)), int).reshape(-1, 2)
+                    river_mask[cells[:, 0], cells[:, 1]] = True
                 continue
             if geom.geom_type == "LineString":
                 lines[kind].append(list(geom.coords))
@@ -214,9 +227,16 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         buf = io.BytesIO()
         np.save(buf, arr.astype(np.float32))
         storage.write_aoi_file(aoi_id, layers[key], buf.getvalue())
+    if debug_layers:
+        for key, arr in {"jrc_occurrence": raw["jrc_occurrence"], "river_mask": river_mask}.items():
+            buf = io.BytesIO()
+            np.save(buf, arr)
+            storage.write_aoi_file(aoi_id, f"{key}.npy", buf.getvalue())
     report = None
     if full:
-        vector_layers, vector_sources, report = osm.build(aoi_id, grid, dem, exclude, building_csvs, osm_files)
+        vector_layers, vector_sources, report = osm.build(
+            aoi_id, grid, dem, exclude, building_csvs, osm_files,
+            building_source=building_source, keywords=keywords, place_aliases=place_aliases)
     else:
         vector_layers = {"roads_graph": "roads.graphml", "shelters": "shelters.geojson",
                          "places": "places.geojson", "buildings": "buildings_index.json",
@@ -225,12 +245,14 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         for filename, data in osm.empty_layers().items():
             content_type = "application/xml" if filename.endswith("graphml") else "application/geo+json"
             storage.write_aoi_file(aoi_id, filename, data, content_type)
-        index, geo = osm.buildings_layers(grid, osm._read_open_buildings(grid, building_csvs)) if building_csvs else (
+        index, geo = osm.buildings_layers(grid, reader(grid, building_csvs)) if building_csvs else (
             {"ids": [], "row": [], "col": []}, {"type": "FeatureCollection", "features": []})
         storage.write_aoi_file(aoi_id, "buildings_index.json", json.dumps(index).encode(), "application/json")
         storage.write_aoi_file(aoi_id, "buildings.geojson", json.dumps(geo).encode(), "application/geo+json")
         if building_csvs:
             ob = f"Google Open Buildings v3, CC BY 4.0; height {osm.DEFAULT_HEIGHT_M:g} m assumed"
+            if building_source == "ms":
+                ob = "Microsoft Global ML Building Footprints, ODbL"
             vector_sources.update(buildings=ob, buildings_geojson=ob)
     layers.update(vector_layers)
     sources.update(vector_sources)
@@ -287,9 +309,17 @@ def main() -> None:
     parser.add_argument("--buildings", nargs="+", default=())
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--name")
+    parser.add_argument("--keywords-file")
+    parser.add_argument("--building-source", choices=("open_buildings", "ms"), default="open_buildings")
+    parser.add_argument("--debug-layers", action="store_true")
     args = parser.parse_args()
     osm_files = {k: v for k, v in (("features", args.osm_features), ("roads", args.osm_roads)) if v}
-    build(args.aoi_id, args.raw, osm_files or None, args.buildings, args.name, args.full)
+    keywords = None
+    if args.keywords_file:
+        keywords = [line.strip() for line in storage.read_local_file(args.keywords_file).decode().splitlines()
+                    if line.strip()]
+    build(args.aoi_id, args.raw, osm_files or None, args.buildings, args.name, args.full,
+          keywords=keywords, building_source=args.building_source, debug_layers=args.debug_layers)
 
 
 if __name__ == "__main__":

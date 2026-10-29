@@ -89,7 +89,7 @@ def test_download_outputs(raster, tmp_path, monkeypatch):
     rasterio = pytest.importorskip('rasterio')
     data = np.full((4, 4), 10, np.float32)
     path = raster(data, ee.STEP)
-    monkeypatch.setattr(ee, 'source_urls', lambda layer, bounds: [path])
+    monkeypatch.setattr(ee, 'source_urls', lambda layer, bounds, country="NGA": [path])
     out = tmp_path / 'raw'
     report = ee.download('test', (0, 0, 4 / 3600, 4 / 3600), str(out))
     metadata = json.loads((out / 'grid.json').read_text())

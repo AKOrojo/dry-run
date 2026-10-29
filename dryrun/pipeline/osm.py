@@ -32,6 +32,7 @@ Decisions taken here that the spec left open (also in the data card):
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 from collections.abc import Iterable, Sequence
@@ -177,7 +178,8 @@ def graphml_bytes(g: nx.Graph) -> bytes:
 def buildings_layers(grid: GridSpec, records: Iterable[dict], cap: int = BUILDING_CAP) -> tuple[dict, dict]:
     """records [{id, lon, lat, area_m2, confidence, ring [(lon, lat), ...]}] (Open Buildings v3 rows)
     -> (buildings_index, buildings_geojson) with the SAME ids in the same order."""
-    keep = [b for b in records if b["confidence"] >= MIN_CONFIDENCE and b["area_m2"] >= MIN_AREA_M2
+    keep = [b for b in records if (b["confidence"] == -1 or b["confidence"] >= MIN_CONFIDENCE)
+            and b["area_m2"] >= MIN_AREA_M2
             and bool(in_grid(grid, b["lon"], b["lat"]))]
     if len(keep) > cap:
         keep = sorted(keep, key=lambda b: -b["area_m2"])[:cap]
@@ -189,7 +191,7 @@ def buildings_layers(grid: GridSpec, records: Iterable[dict], cap: int = BUILDIN
         b["id"] = k if seen[k] == 1 else f"{k}-{seen[k]}"
     rows, cols = cell_of(grid, [b["lon"] for b in keep], [b["lat"] for b in keep]) if keep else ([], [])
     index = {"ids": [str(b["id"]) for b in keep], "row": [int(r) for r in rows], "col": [int(c) for c in cols]}
-    feats = [{"type": "Feature", "properties": {"id": str(b["id"]), "height_m": DEFAULT_HEIGHT_M},
+    feats = [{"type": "Feature", "properties": {"id": str(b["id"]), "height_m": b.get("height_m", DEFAULT_HEIGHT_M)},
               "geometry": {"type": "Polygon",
                            "coordinates": [[[round(x, 5), round(y, 5)] for x, y in b["ring"]]]}} for b in keep]
     return index, {"type": "FeatureCollection", "features": feats}
@@ -281,8 +283,8 @@ def point_places(grid: GridSpec, points: dict[str, tuple[float, float]],
     return out
 
 
-def match_keyword(name: str | None, keywords: Sequence[str]) -> str | None:
-    """OSM name -> the canonical LAGOS_KEYWORDS spelling, or None. Case/space/hyphen-insensitive."""
+def match_keyword(name: str | None, keywords: Sequence[str], place_aliases: dict | None = None) -> str | None:
+    """OSM name -> the canonical keyword spelling, or None. Case/space/hyphen-insensitive."""
     if not isinstance(name, str) or not name:  # pandas gives NaN for features with no name
         return None
 
@@ -290,7 +292,7 @@ def match_keyword(name: str | None, keywords: Sequence[str]) -> str | None:
         return " ".join(x.casefold().replace("-", " ").split())
 
     by = {norm(k): k for k in keywords}
-    by.update({norm(a): k for a, k in PLACE_ALIASES.items() if k in keywords})
+    by.update({norm(a): k for a, k in {**PLACE_ALIASES, **(place_aliases or {})}.items() if k in keywords})
     return by.get(norm(name))
 
 
@@ -429,6 +431,54 @@ def _read_open_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]
                        "confidence": conf, "ring": list(geom.exterior.coords)}
 
 
+def _read_ms_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
+    """Read Microsoft newline GeoJSON, retaining the largest exterior of each footprint."""
+    import gzip
+
+    from dryrun import storage
+
+    for path in paths:
+        data = storage.read_local_file(path)
+        for line in gzip.GzipFile(fileobj=io.BytesIO(data)):
+            if not line.strip():
+                continue
+            feature = json.loads(line)
+            geom, props = feature["geometry"], feature.get("properties", {})
+            polygons = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+            parts = []
+            for polygon in polygons:
+                ring = np.asarray(polygon[0], float)
+                # Shift before shoelace to avoid cancellation at large longitude/latitude.
+                origin = ring[0]
+                xy = ring - origin
+                cross = xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]
+                twice_area = cross.sum()
+                if twice_area == 0:
+                    continue
+                centroid = ((xy + np.roll(xy, -1, axis=0)) * cross[:, None]).sum(0) / (3 * twice_area)
+                lon, lat = centroid + origin
+                area = abs(twice_area) / 2 * _m_per_deg_lon(lat) * M_PER_DEG_LAT
+                parts.append((area, float(lon), float(lat), ring.tolist()))
+            if not parts:
+                continue
+            area, lon, lat, ring = max(parts, key=lambda p: p[0])
+            confidence = props.get("confidence", -1)
+            if (confidence != -1 and confidence < MIN_CONFIDENCE) or area < MIN_AREA_M2 or not in_grid(grid, lon, lat):
+                continue
+            key = hashlib.sha1(f"{lon:.6f},{lat:.6f}".encode()).hexdigest()[:12]
+            record = {"id": "ms-" + key, "lon": lon, "lat": lat, "area_m2": area,
+                      "confidence": confidence, "ring": ring}
+            if props.get("height", -1) > 0:
+                record["height_m"] = props["height"]
+            yield record
+
+
+def building_reader(source: str):
+    if source not in {"open_buildings", "ms"}:
+        raise ValueError(f"unknown building source: {source}")
+    return _read_ms_buildings if source == "ms" else _read_open_buildings
+
+
 def _fetch_shelter_candidates(grid: GridSpec, features_xml: str | None = None) -> list[dict]:
     gdf = _features(grid, SHELTER_TAGS, features_xml)
     out = []
@@ -442,7 +492,8 @@ def _fetch_shelter_candidates(grid: GridSpec, features_xml: str | None = None) -
     return out
 
 
-def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xml: str | None = None) -> list[dict]:
+def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xml: str | None = None,
+                            place_aliases: dict | None = None) -> list[dict]:
     """Neighbourhoods (polygons first, then Voronoi cells of named points), corridors (named roads
     buffered), then the largest open land. Priority order = output order."""
     from shapely.geometry import Point, box
@@ -460,7 +511,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
 
     hoods = _features(grid, {"place": ["suburb", "neighbourhood", "quarter", "village", "town"]}, features_xml)
     for _, f in hoods.iterrows():
-        k = match_keyword(f.get("name"), keywords)
+        k = match_keyword(f.get("name"), keywords, place_aliases)
         if not k:
             continue
         g = f.geometry.intersection(aoi)
@@ -475,7 +526,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
     roads = _features(grid, {"highway": True}, features_xml)
     by_name: dict[str, list] = {}
     for _, f in roads.iterrows():
-        k = match_keyword(f.get("name"), keywords)
+        k = match_keyword(f.get("name"), keywords, place_aliases)
         if k and f.geometry.geom_type in ("LineString", "MultiLineString"):
             by_name.setdefault(k, []).append(f.geometry)
     for k, lines in by_name.items():
@@ -513,7 +564,9 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
 
 
 def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
-          building_csvs: Sequence[str], osm_files: dict[str, str] | None = None
+          building_csvs: Sequence[str], osm_files: dict[str, str] | None = None,
+          building_source: str = "open_buildings", keywords: Sequence[str] | None = None,
+          place_aliases: dict | None = None
           ) -> tuple[dict[str, str], dict[str, str], dict]:
     """Read OSM (osm_extract() files, or Overpass when osm_files is None) + Open Buildings, write the vector
     layers for `aoi_id` through storage. Returns (layers, sources, report) for the manifest that
@@ -522,28 +575,32 @@ def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
     from dryrun import storage
     from dryrun.meta.media import LAGOS_KEYWORDS
 
+    keywords = LAGOS_KEYWORDS if keywords is None else keywords
+    reader = building_reader(building_source)
     w = storage.write_aoi_file
     road = _fetch_roads(grid, roads_xml)
     w(aoi_id, "roads.graphml", graphml_bytes(road), "application/xml")
 
-    index, geo = buildings_layers(grid, _read_open_buildings(grid, building_csvs))
+    index, geo = buildings_layers(grid, reader(grid, building_csvs))
     w(aoi_id, "buildings_index.json", json.dumps(index).encode(), "application/json")
     w(aoi_id, "buildings.geojson", json.dumps(geo, separators=(",", ":")).encode(), "application/geo+json")
 
     shelters = pick_shelters(grid, _fetch_shelter_candidates(grid, feats_xml), dem, ~np.asarray(exclude, bool), road)
     w(aoi_id, "shelters.geojson", json.dumps(shelters).encode(), "application/geo+json")
 
-    places = places_collection(_fetch_place_candidates(grid, LAGOS_KEYWORDS, feats_xml))
+    places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases))
     w(aoi_id, "places.geojson", json.dumps(places).encode(), "application/geo+json")
 
     osm = "© OpenStreetMap contributors, ODbL 1.0"
     layers = {"roads_graph": "roads.graphml", "buildings": "buildings_index.json",
               "buildings_geojson": "buildings.geojson", "shelters": "shelters.geojson", "places": "places.geojson"}
     ob = f"Google Open Buildings v3, CC BY 4.0 (heights: {DEFAULT_HEIGHT_M:g} m assumed for all; no 2.5D data)"
+    if building_source == "ms":
+        ob = "Microsoft Global ML Building Footprints, ODbL"
     sources = {"roads_graph": osm, "buildings": ob, "buildings_geojson": ob,
                "shelters": f"{osm}; {SHELTER_LABEL}", "places": f"{osm}; derived polygons (see osm.py)"}
     found = {f["properties"]["name"] for f in places["features"]}
     report = {"road_nodes": road.number_of_nodes(), "road_edges": road.number_of_edges(),
               "buildings": len(index["ids"]), "shelters": len(shelters["features"]),
-              "places": sorted(found), "keywords_missing": sorted(set(LAGOS_KEYWORDS) - found)}
+              "places": sorted(found), "keywords_missing": sorted(set(keywords) - found)}
     return layers, sources, report

@@ -3,7 +3,8 @@
 GRID (everyone): EPSG:4326, 1 arc-second cells (crsTransform [1/3600, 0, W, 0, -1/3600, N]),
 ~30.7 m x 30.5 m at Lagos. That is Copernicus GLO-30's native grid, so the DEM needs no
 resampling, and bounds_wgs84 is an exact rectangle for Cesium/polygon masks. AOI W/N snapped
-to whole arc-seconds.
+to whole arc-seconds. Optional step_arcsec uses multiples of that spacing and averages DEM/JRC.
+The native default keeps its original metadata; coarser grids record step_arcsec in grid.json.
 
 PRIMARY path (no Earth Engine needed; approval can take >1 day):
   dem         Copernicus GLO-30 COGs, AWS open data bucket `copernicus-dem-30m`
@@ -34,14 +35,16 @@ from pathlib import Path
 
 import numpy as np
 
+from dryrun import storage
 from dryrun.contracts import GridSpec
 
 STEP = 1 / 3600
 WORLDPOP_YEAR = 2025
-WORLDPOP_URL = (
+WORLDPOP_URL_TEMPLATE = (
     "https://data.worldpop.org/GIS/Population/Global_2015_2030/R2025A/"
-    f"{WORLDPOP_YEAR}/NGA/v1/100m/constrained/nga_pop_{WORLDPOP_YEAR}_CN_100m_R2025A_v1.tif"
+    "{year}/{ISO3}/v1/100m/constrained/{iso3}_pop_{year}_CN_100m_R2025A_v1.tif"
 )
+WORLDPOP_URL = WORLDPOP_URL_TEMPLATE.format(year=WORLDPOP_YEAR, ISO3="NGA", iso3="nga")
 # data.worldpop.org ignores Range (answers 200 with the whole file, checked 2026-10-29), so /vsicurl/ fails.
 NO_RANGE_READS = {"population"}
 SOURCES = {
@@ -83,26 +86,29 @@ SOURCES = {
 }
 
 
-def grid_for_bbox(bbox_wgs84: tuple[float, float, float, float]) -> tuple[GridSpec, tuple]:
-    """Cover a non-wrapping WGS84 bbox with whole arc-second cells."""
+def grid_for_bbox(bbox_wgs84: tuple[float, float, float, float], step_arcsec: int = 1) -> tuple[GridSpec, tuple]:
+    """Cover a non-wrapping WGS84 bbox with cells snapped to step_arcsec multiples."""
+    if type(step_arcsec) is not int or step_arcsec < 1:
+        raise ValueError("step_arcsec must be a positive integer")
     w, s, e, n = bbox_wgs84
     if not all(math.isfinite(v) for v in bbox_wgs84) or not (-180 <= w < e <= 180 and -90 <= s < n <= 90):
         raise ValueError("expected finite W S E N within WGS84, without antimeridian crossing")
-    west = math.floor(w * 3600)
-    north = math.ceil(n * 3600)
-    nx = math.ceil(e * 3600) - west
-    ny = north - math.floor(s * 3600)
-    bounds = (west / 3600, (north - ny) / 3600, (west + nx) / 3600, north / 3600)
-    dx = STEP * 111320 * math.cos(math.radians((s + n) / 2))
-    dy = STEP * 110574
+    west = math.floor(w * 3600 / step_arcsec)
+    north = math.ceil(n * 3600 / step_arcsec)
+    nx = math.ceil(e * 3600 / step_arcsec) - west
+    ny = north - math.floor(s * 3600 / step_arcsec)
+    bounds = tuple(v * step_arcsec / 3600 for v in (west, north - ny, west + nx, north))
+    step = step_arcsec / 3600
+    dx = step * 111320 * math.cos(math.radians((s + n) / 2))
+    dy = step * 110574
     grid = GridSpec(nx=nx, ny=ny, dx_m=dx, dy_m=dy, cell_size_m=math.sqrt(dx * dy), bounds_wgs84=bounds)
-    return grid, (STEP, 0, bounds[0], 0, -STEP, bounds[3])
+    return grid, (step, 0, bounds[0], 0, -step, bounds[3])
 
 
-def source_urls(layer: str, bounds: tuple) -> list[str]:
+def source_urls(layer: str, bounds: tuple, country: str = "NGA") -> list[str]:
     """Enumerate tiles intersecting the snapped output extent."""
     if layer == "population":
-        return [WORLDPOP_URL]
+        return [WORLDPOP_URL_TEMPLATE.format(year=WORLDPOP_YEAR, ISO3=country.upper(), iso3=country.lower())]
     w, s, e, n = bounds
     size = {"dem": 1, "worldcover": 3, "jrc_occurrence": 10}[layer]
     urls = []
@@ -131,6 +137,8 @@ def _resample(path: str, grid: GridSpec, transform: tuple, layer: str) -> tuple[
     out = np.full((grid.ny, grid.nx), nodata, np.float32)
     method = {"dem": Resampling.nearest, "worldcover": Resampling.mode,
               "jrc_occurrence": Resampling.nearest, "population": Resampling.sum}[layer]
+    if transform[0] > STEP and layer in {"dem", "jrc_occurrence"}:
+        method = Resampling.average
     remote = path.startswith(("https://", "http://"))
     with rasterio.Env(GDAL_HTTP_USERAGENT="dryrun-pipeline/0.1", GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR"):
         with rasterio.open("/vsicurl/" + path if remote else path) as src:
@@ -149,7 +157,8 @@ def _resample(path: str, grid: GridSpec, transform: tuple, layer: str) -> tuple[
             if layer == "jrc_occurrence":
                 source = data.filled(255)
             reproject(source, out, src_transform=src.window_transform(win), src_crs=src.crs,
-                      src_nodata=255 if layer == "jrc_occurrence" else np.nan, dst_transform=Affine(*transform), dst_crs=grid.crs,
+                      src_nodata=255 if layer == "jrc_occurrence" else np.nan,
+                      dst_transform=Affine(*transform), dst_crs=grid.crs,
                       dst_nodata=nodata, resampling=method)
             total = None
             if layer == "population":
@@ -183,18 +192,19 @@ def resample_population(path: str, grid: GridSpec, transform: tuple) -> np.ndarr
     return _resample(str(path), grid, transform, "population")[0]
 
 
-def download(aoi_id: str, bbox_wgs84: tuple[float, float, float, float], out_dir: str) -> dict:
+def download(aoi_id: str, bbox_wgs84: tuple[float, float, float, float], out_dir: str,
+             country: str = "NGA", step_arcsec: int = 1) -> dict:
     """Write offline scratch files directly; these are not serving storage objects."""
     import rasterio
     from affine import Affine
 
-    grid, transform = grid_for_bbox(bbox_wgs84)
+    grid, transform = grid_for_bbox(bbox_wgs84, step_arcsec)
     folder = Path(out_dir)
     folder.mkdir(parents=True, exist_ok=True)
     report = {"aoi_id": aoi_id, "layers": {}}
     sources = {}
     for layer in ("dem", "worldcover", "jrc_occurrence", "population"):
-        urls = source_urls(layer, grid.bounds_wgs84)
+        urls = source_urls(layer, grid.bounds_wgs84, country)
         fill = {"dem": np.nan, "worldcover": 0, "jrc_occurrence": 255, "population": 0}[layer]
         array = np.full((grid.ny, grid.nx), fill, np.float32)
         for url in urls:
@@ -218,8 +228,12 @@ def download(aoi_id: str, bbox_wgs84: tuple[float, float, float, float], out_dir
                                    "max": float(values.max()) if values.size else None,
                                    "nodata_fraction": float(missing.mean()), "urls": urls}
         sources[layer] = {**SOURCES[layer], "urls": urls}
+        if layer == "population" and country != "NGA":
+            sources[layer]["url"] = urls[0]
     metadata = {**grid.model_dump(mode="json"), "transform": transform, "sources": sources, "aoi_id": aoi_id}
-    (folder / "grid.json").write_text(json.dumps(metadata, indent=2))
+    if step_arcsec != 1:  # absent means native; keep the live Lagos metadata byte-identical
+        metadata["step_arcsec"] = step_arcsec
+    storage.write_local_file(folder / "grid.json", json.dumps(metadata, indent=2).encode())
     return report
 
 
@@ -262,9 +276,11 @@ def main() -> None:
     parser.add_argument("--aoi-id", required=True)
     parser.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("W", "S", "E", "N"))
     parser.add_argument("--out", required=True)
+    parser.add_argument("--country", default="NGA")
+    parser.add_argument("--step-arcsec", type=int, default=1)
     parser.add_argument("--vectors", action="store_true")
     args = parser.parse_args()
-    report = download(args.aoi_id, tuple(args.bbox), args.out)
+    report = download(args.aoi_id, tuple(args.bbox), args.out, country=args.country, step_arcsec=args.step_arcsec)
     if args.vectors:
         report["vectors"] = download_vectors(args.out)
     print(json.dumps(report, indent=2))
