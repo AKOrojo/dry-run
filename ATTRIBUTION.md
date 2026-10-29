@@ -25,7 +25,9 @@ credit strings are also in the AOI manifest's `sources`.
 | JRC Global Surface Water | occurrence v1.5 (1984–2024), tile 0E_10N | permanent water masks | free, no restriction | "Source: EC JRC/Google" (Pekel et al. 2016) |
 | WorldPop | R2025A v1, NGA 2025, 100 m constrained (labelled alpha) | people per cell | CC BY 4.0 | "WorldPop (www.worldpop.org), University of Southampton. R2025A v1, DOI:10.5258/SOTON/WP00839" |
 | OpenStreetMap contributors | Geofabrik Nigeria extract 2026-10-28 | roads, drains, shelters, places | ODbL 1.0 | "© OpenStreetMap contributors" linked to openstreetmap.org/copyright; our derived roads/drains/places DB is share-alike (ODbL) |
-| Google Open Buildings v3 | polygons, S2 cell 103b | building footprints (heights: 6 m assumed, no 2.5D) | CC BY 4.0 (or ODbL) | "Google Open Buildings v3 (CC BY 4.0)"; cite Sirko et al. 2021 |
+| Google Open Buildings v3 | polygons, S2 cell 103b | building footprints | CC BY 4.0 (or ODbL) | "Google Open Buildings v3 (CC BY 4.0)"; cite Sirko et al. 2021 |
+| Google Open Buildings 2.5D Temporal | 2023 tiles 103bc / 103c4 (public bucket) | building heights for the 3D view (median of 2.5D heights per footprint; 98.5 % of buildings, the rest 6 m assumed); served via BUILDINGS_URL, not part of the AOI | CC BY 4.0 (or ODbL) | "Google Open Buildings 2.5D Temporal (CC BY 4.0)"; cite Sirko et al. 2023 (arXiv:2310.11622) |
+| NASA GPM IMERG Late V07 | half-hourly, Jun–Jul 2026 (via Earthdata) | rainfall for validation storms (Eng A) | NASA open data | "GPM IMERG Late Precipitation L3 Half Hourly V07, NASA GES DISC" |
 
 ## Planned — not yet wired up
 
@@ -34,7 +36,6 @@ before the data lands. Add the credit line to the UI in the same commit as the d
 
 | Source | Use | Licence / terms | Notes |
 |---|---|---|---|
-| Google Open Buildings 2.5D Temporal | building heights | CC BY 4.0 (or ODbL) | public bucket, no Earth Engine needed; not used yet (heights are 6 m) |
 | Sentinel-1 (Copernicus), via Microsoft Planetary Computer | validation flood extent (30 Jun 2026 event) | RTC: CC BY 4.0; GRD: Copernicus legal notice | "Contains modified Copernicus Sentinel data [year]" |
 | Cesium ion / basemap imagery | basemap | Community tier is non-commercial only; ion token restricted by URL | open question: the demo may be commercial-adjacent |
 
