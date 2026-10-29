@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import re
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -46,9 +47,9 @@ log = logging.getLogger("dryrun.api")
 
 
 def warm_start(aoi_id: str) -> dict:
-    """Do the first-request work at container start, while Cloud Run's startup CPU boost is on: the numba
-    compile (or cache load), the default AOI's rasters, roads and building index. A cold first run measured
-    136 s in prod against 35 s warm. Never raises: a bad AOI must not block boot."""
+    """Do the first-request work at container start: the numba compile (or cache load), the default AOI's
+    rasters, roads and building index. A cold first run measured 136 s in prod against 35 s warm; with this,
+    43 s. Never raises: a bad AOI must not break the app."""
     took = {}
     steps = [("rasters", lambda: [storage.load_raster(aoi_id, k) for k in (
                  "dem", "manning", "infiltration_mm_h", "drain_sink_mm_h", "boundary_mask", "exclude_mask",
@@ -71,8 +72,11 @@ def warm_start(aoi_id: str) -> dict:
 
 @asynccontextmanager
 async def lifespan(_app):
+    # In a background thread, NOT blocking startup: measured 48-98 s at boot in prod, and blocking would make
+    # even cached requests on a cold instance wait for it. The first uncached run still benefits.
     if os.getenv("DRYRUN_WARM_ON_START") == "1":  # set by deploy.sh; tests and local dev skip it
-        warm_start(os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic"))
+        aoi = os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")
+        threading.Thread(target=warm_start, args=(aoi,), name="warm_start", daemon=True).start()
     yield
 
 
