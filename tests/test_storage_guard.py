@@ -81,3 +81,17 @@ def test_paid_access_gate(monkeypatch, judge, team, headers, ok):
         with pytest.raises(HTTPException) as e:
             ratelimit.require_paid_access(_req(headers))
         assert e.value.status_code == 403
+
+
+def test_warm_start_never_raises_and_reports(monkeypatch, tmp_path):
+    from dryrun.api import main
+    from dryrun.pipeline import fixtures
+
+    monkeypatch.setattr(storage, "LOCAL_DATA", tmp_path / "data")
+    storage.clear_caches()
+    fixtures.build()
+    ok = main.warm_start(fixtures.AOI_ID)
+    assert set(ok) >= {"rasters", "roads", "buildings"} and all(isinstance(v, float) for v in ok.values())
+    bad = main.warm_start("no-such-aoi")
+    assert all(str(v).startswith("failed") for k, v in bad.items() if k != "numba")
+    storage.clear_caches()

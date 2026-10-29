@@ -10,9 +10,12 @@ Endpoint owners:  simulate/runs/depth = A   route/aoi/config/health/compare = D
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -35,10 +38,45 @@ from dryrun.contracts import (
 )
 from dryrun.routing.evac import route as compute_route
 from dryrun.sim import BACKEND as SIM_BACKEND
+from dryrun.sim import exposure
 from dryrun.sim.engine import run_scenario
 
 ADMIN_TOKEN = "" if os.getenv("DRYRUN_ADMIN_TOKEN", "").strip() == "unset" else os.getenv("DRYRUN_ADMIN_TOKEN", "")
-app = FastAPI(title="Dry Run API", version=CONTRACT_VERSION)
+log = logging.getLogger("dryrun.api")
+
+
+def warm_start(aoi_id: str) -> dict:
+    """Do the first-request work at container start, while Cloud Run's startup CPU boost is on: the numba
+    compile (or cache load), the default AOI's rasters, roads and building index. A cold first run measured
+    136 s in prod against 35 s warm. Never raises: a bad AOI must not block boot."""
+    took = {}
+    steps = [("rasters", lambda: [storage.load_raster(aoi_id, k) for k in (
+                 "dem", "manning", "infiltration_mm_h", "drain_sink_mm_h", "boundary_mask", "exclude_mask",
+                 "population")]),
+             ("roads", lambda: exposure.edge_arrays(aoi_id)), ("buildings", lambda: exposure.building_cells(aoi_id))]
+    if SIM_BACKEND == "solver":
+        from dryrun.sim import solver
+
+        steps.insert(0, ("numba", solver.warmup))
+    for name, step in steps:
+        t = time.time()
+        try:
+            step()
+            took[name] = round(time.time() - t, 2)
+        except Exception as exc:  # noqa: BLE001  (log and keep booting)
+            took[name] = f"failed: {type(exc).__name__}: {exc}"
+    log.warning("warm_start %s %s", aoi_id, took)  # WARNING so it shows in Cloud Run logs by default
+    return took
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    if os.getenv("DRYRUN_WARM_ON_START") == "1":  # set by deploy.sh; tests and local dev skip it
+        warm_start(os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic"))
+    yield
+
+
+app = FastAPI(title="Dry Run API", version=CONTRACT_VERSION, lifespan=lifespan)
 
 RUN_ID = re.compile(r"^r_[0-9a-f]{16}$")
 AOI_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
