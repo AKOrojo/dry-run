@@ -81,7 +81,7 @@
   "description": "Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.",
   "properties": {
     "contract_version": {
-      "default": "0.4.0",
+      "default": "0.4.1",
       "title": "Contract Version",
       "type": "string"
     },

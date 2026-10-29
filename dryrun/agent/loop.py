@@ -61,18 +61,22 @@ BRIEF_SCHEMA = {"type": "object", "properties": {
 
 def _parse_brief(text: str, p) -> Brief:
     """Find the first JSON object that validates as a Brief (tolerates reasoning text / code fences)."""
-    dec, last_err = json.JSONDecoder(), None
+    dec, json_err, brief_err = json.JSONDecoder(), None, None
     for i, ch in enumerate(text):
         if ch != "{":
             continue
         try:
             data, _ = dec.raw_decode(text, i)
-            if isinstance(data, dict) and "claims" in data:
-                data.update(model=p.model, provider=p.name)
-                return Brief.model_validate(data)
         except ValueError as exc:
-            last_err = exc
-    raise ValueError(f"no valid brief JSON found ({last_err})")
+            json_err = json_err or exc
+            continue
+        if isinstance(data, dict) and "claims" in data:
+            data.update(model=p.model, provider=p.name)
+            try:
+                return Brief.model_validate(data)
+            except ValueError as exc:  # report THIS, not JSON noise from later braces inside the object
+                brief_err = brief_err or exc
+    raise ValueError(f"no valid brief JSON found ({brief_err or json_err})")
 
 
 def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -> Iterator[AgentEvent]:

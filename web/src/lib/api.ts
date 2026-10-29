@@ -40,7 +40,7 @@ const team = (): Record<string, string> => {
 };
 const JSONH = () => ({ "Content-Type": "application/json", ...team() });
 
-// Judges get a key through the private submission form; paid providers (meta, baseten) need it.
+// Judges get a key through the private submission form; paid providers (meta, baseten, openrouter) need it.
 // sessionStorage: the key is gone when the tab closes.
 const JUDGE = "dr_judge_key";
 export const getJudgeKey = () => { try { return sessionStorage.getItem(JUDGE) ?? ""; } catch { return ""; } };

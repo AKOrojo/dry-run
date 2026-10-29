@@ -30,7 +30,7 @@ export function AgentPanel({ onRun, defaultProvider, judgeKeyRequired = false }:
       <h3>Planner agent</h3>
       <select value={provider} onChange={(e) => setProvider(e.target.value)}>
         <option value="meta">Muse Spark 1.3 (Meta API)</option>
-        <option value="baseten">Muse Spark Open (sovereign mode)</option>
+        <option value="openrouter">Muse Spark Open (sovereign mode)</option>
         <option value="fake">Fake (offline)</option>
       </select>
       {needsKey && (

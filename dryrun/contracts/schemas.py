@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.4.0"
+CONTRACT_VERSION = "0.4.1"
 
 
 class _Base(BaseModel):
@@ -352,7 +352,7 @@ class Brief(_Base):
     claims: list[Claim]
     recommended_run_id: str | None = None
     model: str
-    provider: Literal["meta", "baseten", "fake"]
+    provider: Literal["meta", "baseten", "openrouter", "fake"]
 
 
 class AgentEvent(_Base):

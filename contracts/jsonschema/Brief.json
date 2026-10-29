@@ -102,6 +102,7 @@
       "enum": [
         "meta",
         "baseten",
+        "openrouter",
         "fake"
       ],
       "title": "Provider",

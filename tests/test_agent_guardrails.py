@@ -266,6 +266,8 @@ def tools_dispatch(name, args):
     ("meta", {"X-Judge-Key": "wrong"}, 403),
     ("meta", {"X-Judge-Key": "judge"}, 200),
     ("baseten", {"X-Judge-Key": "judge"}, 200),
+    ("openrouter", None, 403),
+    ("openrouter", {"X-Judge-Key": "judge"}, 200),
     ("meta", {"X-Team-Token": "team"}, 200),
     ("meta", {"X-Judge-Key": "team"}, 403),
 ])
@@ -303,3 +305,11 @@ def test_cache_hits_do_not_spend_run_budget():
     for _ in range(loop.tools.MAX_RUNS_PER_SESSION + 2):
         assert loop.tools.dispatch("run_simulation", args, session)["run_id"] == first["run_id"]
     assert session.runs == 1
+
+
+def test_parse_brief_reports_the_brief_error_not_json_noise():
+    class P:
+        name, model = "nope", "m"
+    text = '{"title": "t", "summary": "s", "claims": [{"text": "x", "unit": "u", "source_run_id": "r", "field": "f"}]}'
+    with pytest.raises(ValueError, match="provider"):
+        loop._parse_brief(text, P())

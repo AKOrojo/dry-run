@@ -394,7 +394,7 @@
       "additionalProperties": false,
       "properties": {
         "contract_version": {
-          "default": "0.4.0",
+          "default": "0.4.1",
           "title": "Contract Version",
           "type": "string"
         },
@@ -587,7 +587,7 @@
   "description": "gs://<runs-bucket>/runs/<run_id>/manifest.json",
   "properties": {
     "contract_version": {
-      "default": "0.4.0",
+      "default": "0.4.1",
       "title": "Contract Version",
       "type": "string"
     },

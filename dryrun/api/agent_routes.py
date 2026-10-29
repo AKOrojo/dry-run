@@ -15,16 +15,16 @@ router = APIRouter(prefix="/api")
 
 class AgentRequest(BaseModel):
     question: str = Field(max_length=1000)
-    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | fake
+    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | openrouter | fake
 
 
 @router.post("/agent")
 def agent(req: AgentRequest, request: Request):
     from dryrun.agent.loop import run
 
-    if req.provider not in {"meta", "baseten", "fake"}:
-        raise HTTPException(400, "provider must be meta | baseten | fake")
-    paid = req.provider != "fake"  # meta and baseten bill the team's credits
+    if req.provider not in {"meta", "baseten", "openrouter", "fake"}:
+        raise HTTPException(400, "provider must be meta | baseten | openrouter | fake")
+    paid = req.provider != "fake"  # meta, baseten and openrouter bill the team's credits
     if paid:
         require_paid_access(request)
     limit(request, "agent", per_hour=int(os.getenv("DRYRUN_AGENT_PER_HOUR", "12")))
