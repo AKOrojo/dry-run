@@ -72,10 +72,15 @@ BOUNDARY_EDGE_MIN_CELLS = 50
 #   arbitrary height; the bed must sit below the tide or the lagoon is a dry cliff), and the remaining
 #   permanent water (canals) is set CANAL_BURN_M below the lower of its own height and its lowest adjacent
 #   bank, so 30 m cells and smoothing cannot break channel connectivity.
+#   Inland AOIs (coastal=False, e.g. Texas Guadalupe): no sea, so no JRC boundary; the OSM river is
+#   burned like a canal, and the river's exit on one AOI edge becomes a free-outflow OUTLET: boundary
+#   cells whose bed stays at ground level (OUTLET_DROP_M below their lowest neighbour). The default tide
+#   (-0.5 m) is far below an inland bed, so outlet cells hold no water and pass everything out.
 DEM_TREATMENT = "leave"
 DEM_SMOOTH_SIGMA_CELLS = 1.0
 WATER_BED_M = -1.0
 CANAL_BURN_M = 1.0
+OUTLET_DROP_M = 0.5
 
 
 def landcover_layers(worldcover: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -99,13 +104,18 @@ def drain_sink(waterway_cells: dict[str, np.ndarray]) -> np.ndarray:
     return out
 
 
-def water_masks(jrc_occurrence: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """JRC occurrence (%, NaN/255 = no data treated as land) -> (boundary_mask, exclude_mask) bool."""
+def water_masks(jrc_occurrence: np.ndarray, coastal: bool = True) -> tuple[np.ndarray, np.ndarray]:
+    """JRC occurrence (%, NaN/255 = no data treated as land) -> (boundary_mask, exclude_mask) bool.
+
+    coastal=False (inland AOI): no JRC water becomes boundary; add river_outlet() cells instead.
+    """
     occ = np.asarray(jrc_occurrence, np.float32)
     water = np.nan_to_num(occ, nan=0.0) >= JRC_PERMANENT_PCT
     water &= occ <= 100  # 255 = JRC no-data
-    labels, sizes = _components(water)
     boundary = np.zeros(water.shape, bool)
+    if not coastal:
+        return boundary, water
+    labels, sizes = _components(water)
     edge = np.zeros(water.shape, bool)
     edge[0, :] = edge[-1, :] = edge[:, 0] = edge[:, -1] = True
     for k, size in enumerate(sizes, start=1):
@@ -115,21 +125,42 @@ def water_masks(jrc_occurrence: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return boundary, water
 
 
-def treat_dem(dem: np.ndarray, boundary: np.ndarray, exclude: np.ndarray) -> np.ndarray:
-    """Raw GLO-30 heights on the grid -> serving DEM (float32), per DEM_TREATMENT above."""
+def river_outlet(river_mask: np.ndarray, side: str) -> np.ndarray:
+    """River cells on one AOI edge ("north" | "south" | "east" | "west") -> outlet mask (bool)."""
+    river = np.asarray(river_mask) > 0.5
+    out = np.zeros(river.shape, bool)
+    edge = {"north": (0, slice(None)), "south": (-1, slice(None)),
+            "west": (slice(None), 0), "east": (slice(None), -1)}[side]
+    out[edge] = river[edge]
+    if not out.any():
+        raise ValueError(f"river mask does not reach the {side} edge: no outlet")
+    return out
+
+
+def treat_dem(dem: np.ndarray, boundary: np.ndarray, exclude: np.ndarray,
+              outlet: np.ndarray | None = None) -> np.ndarray:
+    """Raw GLO-30 heights on the grid -> serving DEM (float32), per DEM_TREATMENT above.
+
+    outlet: boundary cells that are a river exit, not sea; their bed is not lowered to WATER_BED_M.
+    """
     z = np.asarray(dem, np.float64)
     land = ~exclude
     # Normalised convolution: smooth land with land only, so water heights never bleed into the shore.
     w = _gauss(land.astype(np.float64), DEM_SMOOTH_SIGMA_CELLS)
     zs = _gauss(np.where(land, z, 0.0), DEM_SMOOTH_SIGMA_CELLS) / np.where(w > 0, w, 1.0)
     out = np.where(land, zs, z)
+    ny, nx = z.shape
     canal = exclude & ~boundary
     if canal.any():  # never above its own surface or the lowest adjacent bank, then burned
         banks = np.pad(np.where(land, out, np.inf), 1, constant_values=np.inf)
-        ny, nx = z.shape
         low = np.min([banks[r:r + ny, c:c + nx] for r in range(3) for c in range(3)], axis=0)
         out[canal] = np.minimum(z, low)[canal] - CANAL_BURN_M
-    out[boundary] = np.minimum(z[boundary], WATER_BED_M)
+    sea = boundary if outlet is None else boundary & ~outlet
+    out[sea] = np.minimum(z[sea], WATER_BED_M)
+    if outlet is not None and outlet.any():  # a small drop below the lowest neighbour, so the river exits
+        nb = np.pad(np.where(outlet, np.inf, out), 1, constant_values=np.inf)
+        low = np.min([nb[r:r + ny, c:c + nx] for r in range(3) for c in range(3)], axis=0)
+        out[outlet] = np.minimum(out, low)[outlet] - OUTLET_DROP_M
     return out.astype(np.float32)
 
 
@@ -154,8 +185,13 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           building_csvs=(), name: str | None = None, full: bool = False,
           keywords: Sequence[str] | None = None, place_aliases: dict | None = None,
           building_source: str = "open_buildings", debug_layers: bool = False,
-          place_tags: dict | None = None, corridor_tags: dict | None = None) -> AOIManifest:
-    """Publish serving layers from raw exports; the manifest is the final write."""
+          place_tags: dict | None = None, corridor_tags: dict | None = None,
+          coastal: bool = True, outlet_side: str | None = None) -> AOIManifest:
+    """Publish serving layers from raw exports; the manifest is the final write.
+
+    Inland AOIs: coastal=False plus outlet_side ("east", ...): the OSM river (waterway=river|stream from
+    osm_files["features"]) is burned like a canal and exits through river_outlet() on that edge.
+    """
     if storage._exists("data", f"{aoi_id}/manifest.json"):
         raise ValueError("AOI ids are immutable; publish a new id")
     reader = osm.building_reader(building_source)
@@ -169,18 +205,13 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
             raise ValueError(f"{key}: expected shape {(grid.ny, grid.nx)}, got {arr.shape}")
     if not np.isfinite(raw["dem"]).all():
         raise ValueError("DEM must be finite")
-    boundary, exclude = water_masks(raw["jrc_occurrence"])
-    dem = treat_dem(raw["dem"], boundary, exclude)
-    if not np.isfinite(dem).all():
-        raise ValueError("treated DEM must be finite")
-    manning, infiltration = landcover_layers(raw["worldcover"])
     lines = {kind: [] for kind in BASELINE_DRAIN_MM_H}
     river_mask = np.zeros((grid.ny, grid.nx), bool)
     features_path = (osm_files or {}).get("features")
     if features_path:
         import osmnx as ox
 
-        kinds = list(BASELINE_DRAIN_MM_H) + (["river", "stream"] if debug_layers else [])
+        kinds = list(BASELINE_DRAIN_MM_H) + (["river", "stream"] if debug_layers or outlet_side else [])
         features = ox.features_from_xml(features_path, tags={"waterway": kinds})
         for idx, feature in features.iterrows():
             if isinstance(idx, tuple) and idx[0] != "way":
@@ -199,6 +230,16 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
                 lines[kind].append(list(geom.coords))
             elif geom.geom_type == "MultiLineString":
                 lines[kind].extend(list(part.coords) for part in geom.geoms)
+    boundary, exclude = water_masks(raw["jrc_occurrence"], coastal=coastal)
+    outlet = None
+    if outlet_side:
+        exclude |= river_mask  # the channel is burned like a canal and never counts as flooding
+        outlet = river_outlet(river_mask, outlet_side)
+        boundary |= outlet
+    dem = treat_dem(raw["dem"], boundary, exclude, outlet)
+    if not np.isfinite(dem).all():
+        raise ValueError("treated DEM must be finite")
+    manning, infiltration = landcover_layers(raw["worldcover"])
     sink = drain_sink(waterway_cells(grid, lines))
     population = np.nan_to_num(raw["population"].astype(np.float32), nan=0.0)
     rasters = {"dem": dem, "manning": manning, "infiltration_mm_h": infiltration,
@@ -315,7 +356,12 @@ def main() -> None:
     parser.add_argument("--building-source", choices=("open_buildings", "ms"), default="open_buildings")
     parser.add_argument("--debug-layers", action="store_true")
     parser.add_argument("--place-config", help="JSON: {keywords, place_aliases, place_tags, corridor_tags}")
+    parser.add_argument("--inland", action="store_true", help="no sea: no JRC boundary (needs --outlet-side)")
+    parser.add_argument("--outlet-side", choices=("north", "south", "east", "west"),
+                        help="edge where the OSM river leaves the AOI (free outflow)")
     args = parser.parse_args()
+    if args.inland and not args.outlet_side:
+        parser.error("--inland needs --outlet-side, or water has no way out")
     osm_files = {k: v for k, v in (("features", args.osm_features), ("roads", args.osm_roads)) if v}
     keywords = None
     if args.keywords_file:
@@ -325,7 +371,8 @@ def main() -> None:
     build(args.aoi_id, args.raw, osm_files or None, args.buildings, args.name, args.full,
           keywords=cfg.get("keywords", keywords), place_aliases=cfg.get("place_aliases"),
           building_source=args.building_source, debug_layers=args.debug_layers,
-          place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"))
+          place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"),
+          coastal=not args.inland, outlet_side=args.outlet_side)
 
 
 if __name__ == "__main__":

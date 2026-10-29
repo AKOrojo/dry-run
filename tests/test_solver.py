@@ -245,6 +245,30 @@ def test_fixture_mass_balance_and_frames(engine):
     assert 0.3 < m.stats.max_depth_m < 3  # pits pond tens of cm to ~1 m, not tens of metres
 
 
+def test_engine_feeds_an_inflows_layer_to_the_solver(engine):
+    import json
+
+    from dryrun import storage
+
+    m = storage.load_aoi(fixtures.AOI_ID)
+    new = "fixture-inflow"
+    for rel in set(m.layers.values()):
+        storage.write_aoi_file(new, rel, storage.load_aoi_file(fixtures.AOI_ID, next(
+            k for k, v in m.layers.items() if v == rel)))
+    bnd = storage.load_raster(fixtures.AOI_ID, "boundary_mask") > 0.5
+    r = next(i for i in range(bnd.shape[0]) if not bnd[i, 0])
+    layer = {"t0_utc": "2025-07-04T07:00", "note": "test",
+             "sources": [{"name": "test creek", "gauges": {}, "cells": [[r, 0]],
+                          "hydrograph": [[0, 5.0], [3600, 5.0], [3900, 0.0]]}]}
+    storage.write_aoi_file(new, "inflows.json", json.dumps(layer).encode(), "application/json")
+    man = m.model_copy(update={"aoi_id": new, "layers": {**m.layers, "inflows": "inflows.json"}})
+    storage.write_aoi_file(new, "manifest.json", man.model_dump_json().encode(), "application/json")
+    out = engine.run_scenario(ScenarioSpec(aoi_id=new, storm=Storm(total_mm=0, duration_h=3)))
+    assert out.status == "done", out.error
+    assert abs(out.stats.inflow_volume_m3 - 5.0 * 3750) < 1.0  # 1 h at 5 m3/s plus the 5 min ramp down
+    assert abs(out.stats.mass_balance_error_pct) < 1.0 and out.stats.rain_volume_m3 == 0
+
+
 def test_own_cell_building_count_is_stricter(engine):
     m = run(engine)
     s = m.stats

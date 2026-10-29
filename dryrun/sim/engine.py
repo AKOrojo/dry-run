@@ -73,9 +73,22 @@ def _load_inputs(spec: ScenarioSpec):
         dem=r("dem"), manning=r("manning"), infiltration_mm_h=r("infiltration_mm_h"),
         drain_sink_mm_h=r("drain_sink_mm_h"), tide_level_m=None,
         boundary_mask=r("boundary_mask") > 0.5, dx_m=aoi.grid.dx_m, dy_m=aoi.grid.dy_m,
-        exclude_mask=r("exclude_mask") > 0.5,
+        exclude_mask=r("exclude_mask") > 0.5, inflows=_inflows(spec.aoi_id, aoi) or None,
     )
     return aoi, interventions.apply(spec, aoi.grid, base)
+
+
+def _inflows(aoi_id: str, aoi) -> list[interventions.Inflow]:
+    """Optional `inflows` layer (inland AOIs: river gauges, see pipeline/inflows.py) -> solver sources."""
+    if "inflows" not in aoi.layers:
+        return []
+    out = []
+    for src in json.loads(storage.load_aoi_file(aoi_id, "inflows"))["sources"]:
+        rc = np.asarray(src["cells"], np.int64).reshape(-1, 2)
+        t, q = np.asarray(src["hydrograph"], np.float64).T
+        out.append(interventions.Inflow(rc[:, 0] * aoi.grid.nx + rc[:, 1],
+                                        lambda s, t=t, q=q: float(np.interp(s, t, q))))  # holds the ends
+    return out
 
 
 def validate(spec: ScenarioSpec) -> None:

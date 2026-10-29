@@ -122,7 +122,7 @@ def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs) -> SolverInput
         else:  # RoadClosure: routing-only
             changed.append(int(area_mask(spec, grid, iv).sum()))
     return SolverInputs(dem, manning, infil, sink, tide, base.boundary_mask, base.dx_m, base.dy_m,
-                        exclude, changed)
+                        exclude, changed, base.inflows)
 
 
 def pond_mask(spec: ScenarioSpec, grid: GridSpec, existing_water: np.ndarray | None = None) -> np.ndarray:

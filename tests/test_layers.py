@@ -1,8 +1,11 @@
 """Eng A's layer rules in pipeline/build_layers.py (pure numpy, no raw data needed)."""
 
 import numpy as np
+import pytest
 
+from dryrun.contracts import GridSpec
 from dryrun.pipeline import build_layers as bl
+from dryrun.pipeline import inflows as fl
 
 
 def _lekki_like(n=80):
@@ -50,3 +53,58 @@ def test_landcover_and_drains():
     out = bl.drain_sink({"drain": d, "canal": c})
     assert out[0, 0] == bl.BASELINE_DRAIN_MM_H["canal"] and out[1, 1] == bl.BASELINE_DRAIN_MM_H["canal"]
     assert out[0, 1] == 0
+
+
+def _valley(ny=30, nx=60):
+    """Inland valley at ~480 m sloping east, with a 1-cell OSM river along row 15."""
+    x = np.linspace(500, 470, nx)
+    y = np.abs(np.arange(ny) - 15)[:, None] * 0.5
+    dem = (x[None, :] + y).astype(np.float64)
+    river = np.zeros((ny, nx), bool)
+    river[15] = True
+    return dem, river
+
+
+def test_inland_has_no_jrc_boundary():
+    occ = _lekki_like()
+    b, ex = bl.water_masks(occ, coastal=False)
+    assert not b.any() and ex[2].all()
+
+
+def test_outlet_keeps_an_inland_bed_and_drains_the_channel():
+    dem, river = _valley()
+    b, ex = bl.water_masks(np.zeros(dem.shape, np.float32), coastal=False)
+    ex |= river
+    outlet = bl.river_outlet(river, "east")
+    assert outlet.sum() == 1 and outlet[15, -1]
+    out = bl.treat_dem(dem, b | outlet, ex, outlet)
+    assert out[15, -1] > 400  # never lowered to the sea bed
+    assert out[15, -1] < out[15, -2]  # a drop into the outlet: the river can leave
+    assert (np.diff(out[15].astype(np.float64)) < 0).all()  # burned channel still runs downhill
+
+
+def test_outlet_requires_the_river_to_reach_the_edge():
+    _, river = _valley()
+    river[:, -3:] = False
+    with pytest.raises(ValueError):
+        bl.river_outlet(river, "east")
+
+
+def _grid(ny=30, nx=60):
+    return GridSpec(cell_size_m=50, dx_m=50, dy_m=50, nx=nx, ny=ny, bounds_wgs84=(-99.6, 29.9, -99.0, 30.2))
+
+
+def test_entry_cells_find_where_the_river_crosses_the_edge():
+    _, river = _valley()
+    cells = fl.entry_cells(_grid(), river, -99.6, 30.05)  # west edge, row 15 sits at 30.05
+    assert [15, 0] in cells and all(c == 0 for _, c in cells)
+    with pytest.raises(ValueError):
+        fl.entry_cells(_grid(), np.zeros((30, 60), bool), -99.6, 30.05)
+
+
+def test_hydrograph_is_a_clipped_signed_sum_from_t0():
+    gauges = {"A": {"rows": [["2025-07-04T07:00", 100.0], ["2025-07-04T09:00", 900.0]]},
+              "B": {"rows": [["2025-07-04T07:00", 150.0], ["2025-07-04T09:00", 100.0]]}}
+    h = dict((t, q) for t, q in fl.hydrograph(gauges, {"A": 1, "B": -1}, "2025-07-04T07:00", 3))
+    assert h[0.0] == 0.0  # 100 - 150 clipped
+    assert h[7200.0] == 800.0 and h[3 * 3600.0] == 800.0  # held after the last reading
