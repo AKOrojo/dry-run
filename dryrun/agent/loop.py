@@ -44,7 +44,9 @@ number in from the source you name. `field` is one of:
   "<stat name>"                          e.g. "road_km_impassable" of source_run_id
   "delta:<stat name>:<base_run_id>"      source_run_id minus base run
   "route:<route_id>:<field>"             e.g. "route:rt_ab12:eta_min" (source_run_id = the route's run)
-  "area:<place name>:<stat>"             e.g. "area:Lekki Phase 1:buildings_flooded" (from get_area_stats)"""
+  "area:<place name>:<stat>"             e.g. "area:Lekki Phase 1:buildings_flooded" (from get_area_stats)
+Flooded buildings: cite BOTH buildings_flooded ("buildings with flood water close by", within about 45 m) and
+buildings_flooded_own_cell ("buildings with water at the building") from the same source; the truth is between them."""
 
 # Flat schema for providers that support response_format=json_schema (no $refs).
 BRIEF_SCHEMA = {"type": "object", "properties": {
