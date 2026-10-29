@@ -106,7 +106,7 @@ land cells only.
 - **Local-inertial physics:** no advection term. It is accurate for slow, deep floodplain flow and runs slightly slow for
   fast fronts (dam-break test below).
 - **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
-  soakaways and no unmapped drains (drain-down check below).
+  soakaways and no unmapped drains. Against the satellite scenes the visible excess is small (drain-down check below).
 - **Two building counts:** `buildings_flooded` counts a building if any of the 3×3 cells around it reaches 0.15 m. On a
   30 m grid that means flood water within about 45 m, so read it as "buildings with flood water close by". Since
   contract 0.4.0, `buildings_flooded_own_cell` also counts only buildings whose own cell reaches 0.15 m. That count is
@@ -123,8 +123,8 @@ land cells only.
 | Speed, 333 × 333 grid, 6 h simulated | 21 s, single thread (gate: < 60 s on 2 vCPU; `FT_PERF=1 pytest tests/test_solver.py`) |
 
 ### Lagos (`lagos-lekki-v1`, 540 × 324 cells) on the solver
-3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. Times on a Cloud Run vCPU
-are not yet measured.
+3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. On Cloud Run (2 vCPU,
+scaled from zero) the first uncached run took 39 s at 118 mm and a cached result returns in about 0.2 s.
 
 | Storm | Wall time | Mass balance | Buildings flooded, 3×3 / own cell (of 68,929) | Road km cut (of 1,406) | Max depth |
 |---|---|---|---|---|---|
@@ -137,26 +137,37 @@ The share of land that floods falls steadily with height: at 120 mm, 56 % of lan
 cells or fewer). The 0 m lagoon fringe does not drive the counts (506 of those wet cells).
 
 ### Validation against observations
+- **Rainfall.** The validation storms use NASA GPM IMERG V07 half-hourly rain averaged over the AOI
+  (`evals/validation/imerg.py`; the Late run, since the Final run for these dates is not out yet). The series are in
+  `evals/validation/imerg_lagos_*.json`. 10 Jul 2026: about 56 mm between 04:00 and 15:30 UTC, peaking at 10.5 mm/h,
+  then about 18 mm early on 11 Jul. 28 Jun: 34 mm, peaking at 14:00 UTC. IMERG agrees with ERA5 on the 10 Jul daily
+  total (56.7 mm).
 - **Sentinel-1 CSI: not computed.** Validation was attempted on 3 same-orbit Sentinel-1 RTC pairs between 28 Jun and
   12 Jul 2026 (Microsoft Planetary Computer; VV < −18 dB with a drop of more than 3 dB). The scenes show no
   open-water flooding on land at pass time: 0 to 6 cells, and at most 0.12 km² with relaxed thresholds. CSI
   against an empty observation would score every simulated wet cell as a false alarm and says nothing about the
-  model. Likely reasons: the passes come 1–2 days after the rain while Lagos flash floods drain within hours,
-  C-band misses water between buildings, and ERA5 shows the rain as moderate. `evals/validation/csi.py` is ready for
-  a scene that does show flooding.
-- **Drain-down check** (`evals/validation/drain_down.py`): this check does use the empty observation. It runs the
-  10 Jul 2026 storm (ERA5: 56.7 mm, wettest 6 h 27.6 mm; ERA5 likely understates it) as a 6 h storm out to the
-  12 Jul pass, 48 h later, and compares with that scene.
+  model. Likely reasons: the storms in this window were moderate, Lagos flash floods drain within hours, and C-band
+  cannot see water between buildings. `evals/validation/csi.py` is ready for a scene that does show flooding.
+- **Drain-down check** (`evals/validation/drain_down.py --series`): this check does use the empty observations. It
+  drives the solver with the IMERG rain up to each pass and compares what the model still holds with the scene.
+  "Open" means no building in the 3×3 neighbourhood, which is the only water C-band can see.
 
-  | 6 h storm | Wet land at 6 h | Wet land at 48 h | Of which open (no building in 3×3) | S1 observed |
+  | S1 pass (UTC) | IMERG rain so far | Model wet land (≥ 0.15 m) | Of which open | S1 observed |
   |---|---|---|---|---|
-  | 30 mm | 1.72 km² | 0.34 km² | n/a | 0.004 km² |
-  | 57 mm | 6.52 km² | 1.78 km² | 0.17 km² | 0.004 km² (≤ 0.12 relaxed) |
-  | 90 mm | 12.38 km² | 4.13 km² | n/a | 0.004 km² |
+  | 28 Jun 18:02, about 4 h after a 34 mm storm | 34.6 mm | 0.68 km² | 0.03 km² | 0 |
+  | 30 Jun 05:29 | 54.8 mm | 0.35 km² | 0.03 km² | 0.006 km² |
+  | 12 Jul 05:29, 38 h after the 10 Jul storm | 82.9 mm | 1.48 km² | 0.11 km² | 0.004 km² (≤ 0.12 relaxed) |
 
-  The model holds water too long. More than 90 % of what remains at 48 h lies among buildings, where C-band cannot
-  see it. The visible excess (≈ 0.17 km² against ≤ 0.12 km² observed) is small. This is a known bias, partly
-  unverifiable, and it does not test the peak extent, which drives the impact stats.
+  The model never puts more radar-visible water on the ground than the relaxed S1 bound, so the scenes do not
+  contradict it. Most of what the model still holds lies among buildings, where these scenes say nothing. With a
+  synthetic 57 mm / 6 h storm the 48 h remainder in the open was 0.17 km², so part of the earlier "holds water too
+  long" signal came from the assumed storm, not the model. Water still drains only by infiltration and drains, and
+  the check cannot test the peak extent, which drives the impact stats.
+- **Reported flood locations** (`evals/validation/hotspots.py`, Eng D): 16 of 17 places named in Lagos press reports
+  geocoded. At neighbourhood scale the model is consistent with the reports but does not single them out: lift
+  about 1.0–1.2 over the same area's random discs, at every depth threshold. At road scale it does: on the 6 reported
+  roads, the 90th-percentile depth is deeper than on 90 / 91.5 / 95 % of 200 random road samples at 50 / 80 / 120 mm.
+  Six roads is a small sample, so this is suggestive, not conclusive.
 
 ### Surrogate (screening only)
 `dryrun/surrogate/`: one LightGBM model per stat, trained on a Latin hypercube of real solver runs (rain
