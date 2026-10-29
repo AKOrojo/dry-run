@@ -19,10 +19,17 @@ place; Eng D's build() does the I/O (rasterio reads, OSM buffering, storage writ
 
 from __future__ import annotations
 
+import argparse
+import io
+import json
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 
+from dryrun import storage
+from dryrun.contracts import AOIManifest, GridSpec
+from dryrun.pipeline import osm
 from dryrun.pipeline.ee_export import __doc__ as _grid_doc  # noqa: F401  (grid rules live there)
 
 LANDCOVER_LUT = {  # WorldCover class: (manning_n, infiltration_mm_h)
@@ -125,8 +132,118 @@ def treat_dem(dem: np.ndarray, boundary: np.ndarray, exclude: np.ndarray) -> np.
     return out.astype(np.float32)
 
 
-def build(aoi_id: str, raw_dir: str) -> None:
-    raise NotImplementedError("Eng D: read raw rasters, call the functions above, write layers + manifest")
+def waterway_cells(grid: GridSpec, lines_by_kind: dict[str, list[list[tuple[float, float]]]]) -> dict[str, np.ndarray]:
+    """Rasterise waterways and buffer by one cell, without wrapping at edges."""
+    masks = {}
+    for kind in BASELINE_DRAIN_MM_H:
+        mask = np.zeros((grid.ny, grid.nx), bool)
+        for coords in lines_by_kind.get(kind, []):
+            if not coords:
+                continue
+            cells = np.asarray(osm.line_cells(grid, coords), int).reshape(-1, 2)
+            mask[cells[:, 0], cells[:, 1]] = True
+        padded = np.pad(mask, 1)
+        masks[kind] = np.logical_or.reduce([
+            padded[r:r + grid.ny, c:c + grid.nx] for r in range(3) for c in range(3)
+        ])
+    return masks
+
+
+def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
+          building_csvs=(), name: str | None = None, full: bool = False) -> AOIManifest:
+    """Publish serving layers from raw exports; the manifest is the final write."""
+    if storage._exists("data", f"{aoi_id}/manifest.json"):
+        raise ValueError("AOI ids are immutable; publish a new id")
+    folder = Path(raw_dir)
+    metadata = json.loads((folder / "grid.json").read_text())
+    grid = GridSpec.model_validate({k: v for k, v in metadata.items() if k in GridSpec.model_fields})
+    raw = {k: np.load(folder / f"{k}.npy", allow_pickle=False)
+           for k in ("dem", "worldcover", "jrc_occurrence", "population")}
+    for key, arr in raw.items():
+        if arr.shape != (grid.ny, grid.nx):
+            raise ValueError(f"{key}: expected shape {(grid.ny, grid.nx)}, got {arr.shape}")
+    if not np.isfinite(raw["dem"]).all():
+        raise ValueError("DEM must be finite")
+    boundary, exclude = water_masks(raw["jrc_occurrence"])
+    dem = treat_dem(raw["dem"], boundary, exclude)
+    if not np.isfinite(dem).all():
+        raise ValueError("treated DEM must be finite")
+    manning, infiltration = landcover_layers(raw["worldcover"])
+    lines = {kind: [] for kind in BASELINE_DRAIN_MM_H}
+    features_path = (osm_files or {}).get("features")
+    if features_path:
+        import osmnx as ox
+
+        features = ox.features_from_xml(features_path, tags={"waterway": list(BASELINE_DRAIN_MM_H)})
+        for idx, feature in features.iterrows():
+            if isinstance(idx, tuple) and idx[0] != "way":
+                continue
+            kind, geom = feature.get("waterway"), feature.geometry
+            if kind not in lines or geom is None:
+                continue
+            if geom.geom_type == "LineString":
+                lines[kind].append(list(geom.coords))
+            elif geom.geom_type == "MultiLineString":
+                lines[kind].extend(list(part.coords) for part in geom.geoms)
+    sink = drain_sink(waterway_cells(grid, lines))
+    population = np.nan_to_num(raw["population"].astype(np.float32), nan=0.0)
+    rasters = {"dem": dem, "manning": manning, "infiltration_mm_h": infiltration,
+               "drain_sink_mm_h": sink, "boundary_mask": boundary, "exclude_mask": exclude,
+               "population": population}
+    layers = {key: f"{key}.npy" for key in rasters}
+    layers.update(infiltration_mm_h="infiltration.npy", drain_sink_mm_h="drain_sink.npy")
+
+    def credit(key):
+        source = metadata.get("sources", {}).get(key, {})
+        return source if isinstance(source, str) else "; ".join(
+            str(source[k]) for k in ("credit", "licence") if k in source)
+
+    wc_rule = "derived: WorldCover -> LANDCOVER_LUT (assumed values, see README model card)"
+    sources = {
+        "dem": f"{credit('dem')}; derived: treat_dem / DEM_TREATMENT (see README model card)",
+        "manning": f"{credit('worldcover')}; {wc_rule}",
+        "infiltration_mm_h": f"{credit('worldcover')}; {wc_rule}",
+        "boundary_mask": f"{credit('jrc_occurrence')}; derived: water_masks / BOUNDARY rules",
+        "exclude_mask": f"{credit('jrc_occurrence')}; derived: water_masks / JRC_PERMANENT_PCT",
+        "population": credit("population"),
+        "drain_sink_mm_h": ("© OpenStreetMap contributors, ODbL 1.0; " if features_path else
+                            "empty: no OSM waterways supplied; ") +
+                           "derived: BASELINE_DRAIN_MM_H (assumed values, see README model card)",
+    }
+    for key, arr in rasters.items():
+        buf = io.BytesIO()
+        np.save(buf, arr.astype(np.float32))
+        storage.write_aoi_file(aoi_id, layers[key], buf.getvalue())
+    report = None
+    if full:
+        vector_layers, vector_sources, report = osm.build(aoi_id, grid, dem, exclude, building_csvs, osm_files)
+    else:
+        vector_layers = {"roads_graph": "roads.graphml", "shelters": "shelters.geojson",
+                         "places": "places.geojson", "buildings": "buildings_index.json",
+                         "buildings_geojson": "buildings.geojson"}
+        vector_sources = {key: "empty: vector extraction not requested" for key in vector_layers}
+        for filename, data in osm.empty_layers().items():
+            content_type = "application/xml" if filename.endswith("graphml") else "application/geo+json"
+            storage.write_aoi_file(aoi_id, filename, data, content_type)
+        index, geo = osm.buildings_layers(grid, osm._read_open_buildings(grid, building_csvs)) if building_csvs else (
+            {"ids": [], "row": [], "col": []}, {"type": "FeatureCollection", "features": []})
+        storage.write_aoi_file(aoi_id, "buildings_index.json", json.dumps(index).encode(), "application/json")
+        storage.write_aoi_file(aoi_id, "buildings.geojson", json.dumps(geo).encode(), "application/geo+json")
+        if building_csvs:
+            ob = f"Google Open Buildings v3, CC BY 4.0; height {osm.DEFAULT_HEIGHT_M:g} m assumed"
+            vector_sources.update(buildings=ob, buildings_geojson=ob)
+    layers.update(vector_layers)
+    sources.update(vector_sources)
+    manifest = AOIManifest(aoi_id=aoi_id, name=name or aoi_id, grid=grid, layers=layers,
+                           sources=sources, is_synthetic=False)
+    storage.write_aoi_file(aoi_id, "manifest.json", manifest.model_dump_json(indent=2).encode(), "application/json")
+    for key, arr in rasters.items():
+        print(f"{key}: min={arr.min():g} max={arr.max():g}")
+    print(f"boundary cells={boundary.sum()} exclude cells={exclude.sum()} "
+          f"drain cells={np.count_nonzero(sink)} people total={population.sum(dtype=np.float64):g}")
+    if report is not None:
+        print(f"OSM: {report}")
+    return manifest
 
 
 # ------------------------------------------------------------------------------------------ helpers
@@ -159,3 +276,21 @@ def _components(mask: np.ndarray) -> tuple[np.ndarray, list[int]]:
                     q.append((rr, cc))
         sizes.append(n)
     return labels, sizes
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--aoi-id", required=True)
+    parser.add_argument("--raw", required=True)
+    parser.add_argument("--osm-features")
+    parser.add_argument("--osm-roads")
+    parser.add_argument("--buildings", nargs="+", default=())
+    parser.add_argument("--full", action="store_true")
+    parser.add_argument("--name")
+    args = parser.parse_args()
+    osm_files = {k: v for k, v in (("features", args.osm_features), ("roads", args.osm_roads)) if v}
+    build(args.aoi_id, args.raw, osm_files or None, args.buildings, args.name, args.full)
+
+
+if __name__ == "__main__":
+    main()

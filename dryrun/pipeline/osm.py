@@ -336,7 +336,7 @@ def osm_extract(pbf: str, grid: GridSpec, out_dir: str) -> dict[str, str]:
     run = lambda *a: subprocess.run(["osmium", *a, "--overwrite"], check=True)  # noqa: E731
     run("extract", "-b", f"{w},{s},{e},{n}", "--strategy", "complete_ways", str(pbf), "-o", str(aoi))
     run("tags-filter", str(aoi), "w/highway", "-o", str(roads))
-    run("tags-filter", str(aoi), "nwr/amenity", "nwr/place", "nwr/landuse", "nwr/leisure", "nwr/natural",
+    run("tags-filter", str(aoi), "nwr/amenity", "nwr/place", "nwr/landuse", "nwr/leisure", "nwr/natural", "w/waterway",
         "w/highway", "-o", str(feats))
     return {"roads": str(roads), "features": str(feats)}
 
