@@ -17,6 +17,8 @@ from dryrun.contracts import AgentEvent, Brief
 from dryrun.meta.providers import get_provider
 
 MAX_STEPS = 12
+MAX_CALLS_PER_TURN = 6
+MAX_TOOL_CALLS = 24
 SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
 
 SYSTEM = """You are Dry Run's scenario planner for urban flooding in Lagos.
@@ -73,6 +75,7 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
     session = tools.Session()
     aoi_id = aoi_id or os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")
     deadline = time.time() + SESSION_DEADLINE_S
+    dispatched = 0
     msgs: list[dict] = [{"role": "system", "content": SYSTEM.format(aoi_id=aoi_id)},
                         {"role": "user", "content": question}]
     for _ in range(MAX_STEPS):
@@ -92,20 +95,34 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
         msgs.append({"role": "assistant", "content": turn.content, "tool_calls": [
             {"id": c.id, "type": "function", "function": {"name": c.name, "arguments": c.arguments}}
             for c in turn.tool_calls]})
-        for c in turn.tool_calls:  # Muse Spark may return several in parallel
+        timed_out = False
+        for i, c in enumerate(turn.tool_calls):  # Muse Spark may return several in parallel
             try:
                 shown = json.loads(c.arguments or "{}")
             except ValueError:
                 shown = {"_unparsed": c.arguments}
             yield AgentEvent(kind="tool_call", data={"name": c.name, "arguments": shown})
-            try:
-                result = tools.dispatch(c.name, c.arguments, session)
-            except Exception as exc:  # noqa: BLE001 - feed errors back so the model can recover
-                result = {"error": repr(exc)}
+            timed_out = timed_out or time.time() > deadline
+            if timed_out:
+                result = {"error": "Time budget reached; answer with existing results"}
+            elif dispatched >= MAX_TOOL_CALLS:
+                result = {"error": "Tool budget reached; answer with existing results"}
+            elif i >= MAX_CALLS_PER_TURN:
+                result = {"error": "Turn tool budget reached; answer with existing results"}
+            else:
+                dispatched += 1
+                try:
+                    result = tools.dispatch(c.name, c.arguments, session)
+                except Exception as exc:  # noqa: BLE001 - feed errors back so the model can recover
+                    result = {"error": repr(exc)}
             yield AgentEvent(kind="tool_result", data={"name": c.name, "result": result})
             if c.name == "run_simulation" and result.get("status") == "done":
                 yield AgentEvent(kind="run_ready", data={"run_id": result["run_id"]})
             msgs.append({"role": "tool", "tool_call_id": c.id, "content": json.dumps(result)})
+        if timed_out or dispatched >= MAX_TOOL_CALLS:
+            text = "Time budget reached" if timed_out else "Tool budget reached"
+            yield AgentEvent(kind="thought", data={"text": f"{text}; writing the brief."})
+            break
 
     msgs.append({"role": "user", "content": BRIEF_INSTRUCTIONS})
     schema = {"type": "json_schema", "json_schema": {"name": "brief", "schema": BRIEF_SCHEMA}}
