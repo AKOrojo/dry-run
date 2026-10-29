@@ -32,6 +32,7 @@ def reset_limits(monkeypatch):
     ratelimit._hits.clear()
     ratelimit._day.clear()
     monkeypatch.setattr(ratelimit, "_TEAM", "")
+    monkeypatch.setattr(ratelimit, "_JUDGE", "")
     monkeypatch.delenv("DRYRUN_AGENT_PER_HOUR", raising=False)
     monkeypatch.delenv("DRYRUN_AGENT_PER_DAY", raising=False)
 
@@ -255,3 +256,33 @@ def test_api_simulate_rejects_bad_label(client):
 
 def tools_dispatch(name, args):
     return loop.tools.dispatch(name, args, loop.tools.Session())
+
+
+@pytest.mark.parametrize(("provider", "headers", "status"), [
+    ("fake", None, 200),
+    ("meta", None, 403),
+    ("baseten", None, 403),
+    ("meta", {"X-Judge-Key": "wrong"}, 403),
+    ("meta", {"X-Judge-Key": "judge"}, 200),
+    ("baseten", {"X-Judge-Key": "judge"}, 200),
+    ("meta", {"X-Team-Token": "team"}, 200),
+    ("meta", {"X-Judge-Key": "team"}, 403),
+])
+def test_paid_providers_need_a_judge_key(client, monkeypatch, provider, headers, status):
+    monkeypatch.setattr(ratelimit, "_JUDGE", "judge")
+    monkeypatch.setattr(ratelimit, "_TEAM", "team")
+    assert post(client, headers, provider) == status
+
+
+def test_unset_judge_key_opens_nothing(client):
+    # _JUDGE "" is what "unset" maps to: an empty header must not match it
+    assert post(client, {"X-Judge-Key": ""}, "meta") == 403
+
+
+def test_daily_cap_counts_paid_calls_only(client, monkeypatch):
+    monkeypatch.setattr(ratelimit, "_JUDGE", "judge")
+    monkeypatch.setenv("DRYRUN_AGENT_PER_DAY", "2")
+    monkeypatch.setenv("DRYRUN_AGENT_PER_HOUR", "100")
+    assert [post(client) for _ in range(5)] == [200] * 5
+    key = {"X-Judge-Key": "judge"}
+    assert [post(client, key, "meta") for _ in range(3)] == [200, 200, 429]

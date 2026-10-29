@@ -9,7 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, W
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from dryrun.api.ratelimit import limit, limit_global
+from dryrun.api.ratelimit import limit, limit_global, require_paid_access
 
 router = APIRouter(prefix="/api")
 
@@ -23,10 +23,14 @@ class AgentRequest(BaseModel):
 def agent(req: AgentRequest, request: Request):
     from dryrun.agent.loop import run
 
-    limit(request, "agent", per_hour=int(os.getenv("DRYRUN_AGENT_PER_HOUR", "12")))
-    limit_global("agent", per_day=int(os.getenv("DRYRUN_AGENT_PER_DAY", "300")), request=request)
     if req.provider not in {"meta", "baseten", "fake"}:
         raise HTTPException(400, "provider must be meta | baseten | fake")
+    paid = req.provider != "fake"  # meta and baseten bill the team's credits
+    if paid:
+        require_paid_access(request)
+    limit(request, "agent", per_hour=int(os.getenv("DRYRUN_AGENT_PER_HOUR", "12")))
+    if paid:
+        limit_global("agent", per_day=int(os.getenv("DRYRUN_AGENT_PER_DAY", "300")), request=request)
 
     def sse():
         for ev in run(req.question, req.provider):
@@ -49,6 +53,7 @@ def get_area(run_id: str, place: str):
 @router.post("/observe")
 async def observe(request: Request, file: UploadFile = File(...), lon: float = Form(...),
                   lat: float = Form(...), run_id: str | None = Form(None)):
+    require_paid_access(request)
     limit(request, "observe", per_hour=20)  # SAM 3.1 + Spark vision cost money
     raise HTTPException(501, "Eng C: SAM 3.1 observe pipeline lands Day 3-5")
 
