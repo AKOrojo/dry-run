@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.3.1"
+CONTRACT_VERSION = "0.4.0"
 
 
 class _Base(BaseModel):
@@ -205,8 +205,12 @@ class RunStats(_Base):
 
     run_id: str
     # All exposure stats EXCLUDE permanent water (exclude_mask) and retention-pond cells.
-    buildings_flooded: int = Field(description="buildings whose max depth (3x3 around footprint) >= 0.15 m")
+    buildings_flooded: int = Field(description="buildings whose max depth (3x3 around footprint) >= 0.15 m; at "
+                                   "30 m cells that is flood water within about 45 m, so read it as 'water close by'")
     buildings_flooded_severe: int = Field(description="max depth >= 0.5 m")
+    buildings_flooded_own_cell: int = Field(
+        0, description="buildings whose OWN cell's max depth >= 0.15 m: stricter than buildings_flooded (3x3), "
+        "added in contract 0.4.0 (0 on older runs)")
     road_km_impassable: float = Field(description="road length with max depth >= passability threshold")
     people_exposed: int = Field(description="population in cells with max depth >= 0.15 m")
     flooded_area_km2: float
@@ -253,8 +257,8 @@ class RunManifest(_Base):
 
 
 COMPARE_FIELDS = (
-    "buildings_flooded", "buildings_flooded_severe", "road_km_impassable", "people_exposed",
-    "flooded_area_km2", "max_depth_m", "drained_volume_m3", "stored_volume_end_m3", "boundary_outflow_m3",
+    "buildings_flooded", "buildings_flooded_severe", "buildings_flooded_own_cell", "road_km_impassable",
+    "people_exposed", "flooded_area_km2", "max_depth_m", "drained_volume_m3", "stored_volume_end_m3", "boundary_outflow_m3",
 )
 
 
@@ -264,6 +268,7 @@ class AreaStats(_Base):
     run_id: str
     place: str
     buildings_flooded: int
+    buildings_flooded_own_cell: int = 0
     people_exposed: int
     road_km_impassable: float
     max_depth_m: float

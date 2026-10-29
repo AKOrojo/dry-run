@@ -7,13 +7,17 @@
 
 export type RunId = string;
 /**
- * buildings whose max depth (3x3 around footprint) >= 0.15 m
+ * buildings whose max depth (3x3 around footprint) >= 0.15 m; at 30 m cells that is flood water within about 45 m, so read it as 'water close by'
  */
 export type BuildingsFlooded = number;
 /**
  * max depth >= 0.5 m
  */
 export type BuildingsFloodedSevere = number;
+/**
+ * buildings whose OWN cell's max depth >= 0.15 m: stricter than buildings_flooded (3x3), added in contract 0.4.0 (0 on older runs)
+ */
+export type BuildingsFloodedOwnCell = number;
 /**
  * road length with max depth >= passability threshold
  */
@@ -57,6 +61,7 @@ export interface RunStats {
   run_id: RunId;
   buildings_flooded: BuildingsFlooded;
   buildings_flooded_severe: BuildingsFloodedSevere;
+  buildings_flooded_own_cell?: BuildingsFloodedOwnCell;
   road_km_impassable: RoadKmImpassable;
   people_exposed: PeopleExposed;
   flooded_area_km2: FloodedAreaKm2;

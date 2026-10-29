@@ -197,6 +197,14 @@ def test_fixture_mass_balance_and_frames(engine):
     assert 0.3 < m.stats.max_depth_m < 3  # pits pond tens of cm to ~1 m, not tens of metres
 
 
+def test_own_cell_building_count_is_stricter(engine):
+    m = run(engine)
+    s = m.stats
+    assert 0 < s.buildings_flooded_own_cell <= s.buildings_flooded
+    a = engine.area_stats(m.run_id, "North Estate (synthetic)")
+    assert a["buildings_flooded_own_cell"] <= a["buildings_flooded"]
+
+
 def test_odd_duration_ends_on_final_state(engine):
     m = run(engine, sim_hours=2.5, output_interval_min=60)
     assert [f.t_s for f in m.frames] == [0, 3600, 7200, 9000]

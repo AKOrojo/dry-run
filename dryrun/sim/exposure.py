@@ -129,15 +129,17 @@ def impact(aoi_id: str, max_depth: np.ndarray, cell_area_m2: float, exclude: np.
         in_region, in_pond = reg[b[:, 0], b[:, 1]], ponds[b[:, 0], b[:, 1]]
         keep = in_region & ~exclude[b[:, 0], b[:, 1]]
         bd = neighbourhood_max(wet_depth)[b[keep, 0], b[keep, 1]]
+        own = wet_depth[b[keep, 0], b[keep, 1]]
         displaced = int((in_pond & in_region).sum())
     else:
-        bd, displaced = np.zeros(0), 0
+        bd, own, displaced = np.zeros(0), np.zeros(0), 0
     pop = storage.load_raster(aoi_id, "population")
     wet = wet_depth >= FLOODED_M
     road_km = road_km_cut(aoi_id, cut_mask(aoi_id, max_depth, exclude, ponds), region)
     return {
         "buildings_flooded": int((bd >= FLOODED_M).sum()),
         "buildings_flooded_severe": int((bd >= SEVERE_M).sum()),
+        "buildings_flooded_own_cell": int((own >= FLOODED_M).sum()),
         "buildings_in_ponds": displaced,
         "road_km_impassable": round(road_km, 3),
         "people_exposed": int(pop[wet].sum()),

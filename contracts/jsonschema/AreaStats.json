@@ -14,6 +14,11 @@
       "title": "Buildings Flooded",
       "type": "integer"
     },
+    "buildings_flooded_own_cell": {
+      "default": 0,
+      "title": "Buildings Flooded Own Cell",
+      "type": "integer"
+    },
     "people_exposed": {
       "title": "People Exposed",
       "type": "integer"

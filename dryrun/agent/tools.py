@@ -75,8 +75,9 @@ TOOL_SPECS = [
         "parameters": {"type": "object", "properties": {"run_id": {"type": "string"}}, "required": ["run_id"]}}},
     {"type": "function", "function": {
         "name": "get_area_stats",
-        "description": "Impact stats INSIDE one named place for a run (buildings_flooded, people_exposed, "
-                       "road_km_impassable, max_depth_m, flooded_area_km2). Cite as field 'area:<place>:<stat>'.",
+        "description": "Impact stats INSIDE one named place for a run (buildings_flooded, buildings_flooded_own_cell, "
+                       "people_exposed, road_km_impassable, max_depth_m, flooded_area_km2). "
+                       "Cite as field 'area:<place>:<stat>'.",
         "parameters": {"type": "object", "properties": {
             "run_id": {"type": "string"}, "place": {"type": "string"}}, "required": ["run_id", "place"]}}},
     {"type": "function", "function": {

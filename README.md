@@ -88,7 +88,7 @@ scenario always gives the same numbers, and runs are cached by `run_id`.
 | Tide | scenario | Default −0.5 m, held constant through the run (no tidal cycle) |
 | Rain | scenario | Uniform over the AOI; no infiltration-capacity decay (no soil saturation model) |
 | Flooded / severe / passable | `sim/exposure.py` | 0.15 m / 0.5 m / 0.3 m are **assumptions**, not standards |
-| Building depth | `sim/exposure.py` | Max over the 3×3 cells around the footprint (buildings sit on raised DSM cells) |
+| Building depth | `sim/exposure.py` | Max over the 3×3 cells around the footprint (buildings sit on raised DSM cells); `buildings_flooded_own_cell` uses the building's own cell only |
 
 `RunStats` meanings (frozen from Thursday; new meanings get new fields): exposure stats leave out permanent
 water and pond cells. `stored_volume_end_m3` is water gained on land since t = 0. The lagoon held at the
@@ -107,10 +107,11 @@ land cells only.
   fast fronts (dam-break test below).
 - **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
   soakaways and no unmapped drains (drain-down check below).
-- **Generous building rule:** a building counts as flooded if any of the 3×3 cells around it reaches 0.15 m, which on a
-  30 m grid means any building within about 45 m of that water. On Lagos at 120 mm / 3 h this counts about 30,200
-  buildings, against about 13,300 using each building's own cell. The rule is the contract's definition; read
-  `buildings_flooded` as "buildings with flood water close by".
+- **Two building counts:** `buildings_flooded` counts a building if any of the 3×3 cells around it reaches 0.15 m. On a
+  30 m grid that means flood water within about 45 m, so read it as "buildings with flood water close by". Since
+  contract 0.4.0, `buildings_flooded_own_cell` also counts only buildings whose own cell reaches 0.15 m. That count is
+  stricter, and the DSM bias (building cells sit high) likely makes it an undercount. The truth is probably between
+  the two, so a brief should give both. On Lagos at 120 mm / 3 h the counts are 30,202 and 13,314.
 
 ### Verification (synthetic tests, `tests/test_solver.py`)
 | Check | Result |
@@ -125,11 +126,11 @@ land cells only.
 3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. Times on a Cloud Run vCPU
 are not yet measured.
 
-| Storm | Wall time | Mass balance | Buildings flooded (of 68,929) | Road km cut (of 1,406) | Max depth |
+| Storm | Wall time | Mass balance | Buildings flooded, 3×3 / own cell (of 68,929) | Road km cut (of 1,406) | Max depth |
 |---|---|---|---|---|---|
-| 50 mm | 14 s | 0.0 % | 17,719 | 115 | 0.85 m |
-| 120 mm | 22 s | 0.0 % | 30,202 | 407 | 2.15 m |
-| 200 mm | 26 s | 0.0 % | 37,770 | 597 | 2.64 m |
+| 50 mm | 14 s | 0.0 % | 17,719 / 5,334 | 115 | 0.85 m |
+| 120 mm | 22 s | 0.0 % | 30,202 / 13,314 | 407 | 2.15 m |
+| 200 mm | 26 s | 0.0 % | 37,770 / 19,437 | 597 | 2.64 m |
 
 The share of land that floods falls steadily with height: at 120 mm, 56 % of land at 1–2 m is wet, against 1 % above
 8 m. The water collects in pools rather than scattered single cells (942 of 24,566 wet cells are in patches of 4

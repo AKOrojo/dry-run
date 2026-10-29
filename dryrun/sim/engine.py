@@ -181,5 +181,6 @@ def area_stats(run_id: str, place: str) -> dict:
     max_depth = storage.load_depth(run_id, "max_depth.npy")
     ponds = interventions.pond_mask(m.scenario, aoi.grid, storage.load_raster(aoi.aoi_id, "exclude_mask") > 0.5)
     s = exposure.impact(aoi.aoi_id, max_depth, aoi.grid.dx_m * aoi.grid.dy_m, inp.exclude_mask, ponds, region)
-    keys = ("buildings_flooded", "people_exposed", "road_km_impassable", "max_depth_m", "flooded_area_km2")
+    keys = ("buildings_flooded", "buildings_flooded_own_cell", "people_exposed", "road_km_impassable", "max_depth_m",
+            "flooded_area_km2")
     return {"run_id": run_id, "place": place, **{k: s[k] for k in keys}}

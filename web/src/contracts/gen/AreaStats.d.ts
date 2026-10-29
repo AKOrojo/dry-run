@@ -8,6 +8,7 @@
 export type RunId = string;
 export type Place = string;
 export type BuildingsFlooded = number;
+export type BuildingsFloodedOwnCell = number;
 export type PeopleExposed = number;
 export type RoadKmImpassable = number;
 export type MaxDepthM = number;
@@ -20,6 +21,7 @@ export interface AreaStats {
   run_id: RunId;
   place: Place;
   buildings_flooded: BuildingsFlooded;
+  buildings_flooded_own_cell?: BuildingsFloodedOwnCell;
   people_exposed: PeopleExposed;
   road_km_impassable: RoadKmImpassable;
   max_depth_m: MaxDepthM;

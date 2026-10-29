@@ -7,13 +7,19 @@
       "type": "string"
     },
     "buildings_flooded": {
-      "description": "buildings whose max depth (3x3 around footprint) >= 0.15 m",
+      "description": "buildings whose max depth (3x3 around footprint) >= 0.15 m; at 30 m cells that is flood water within about 45 m, so read it as 'water close by'",
       "title": "Buildings Flooded",
       "type": "integer"
     },
     "buildings_flooded_severe": {
       "description": "max depth >= 0.5 m",
       "title": "Buildings Flooded Severe",
+      "type": "integer"
+    },
+    "buildings_flooded_own_cell": {
+      "default": 0,
+      "description": "buildings whose OWN cell's max depth >= 0.15 m: stricter than buildings_flooded (3x3), added in contract 0.4.0 (0 on older runs)",
+      "title": "Buildings Flooded Own Cell",
       "type": "integer"
     },
     "road_km_impassable": {
