@@ -49,7 +49,8 @@ INT_FIELDS = {name for model in (RunStats, RouteResult, AreaStats)
 _RUN_ID = re.compile(r"^r_[0-9a-f]{16}$")
 _ROUTE_ID = re.compile(r"^rt_[0-9a-f]{12}$")
 _FIELD = re.compile(r"^[a-z][a-z0-9_]{0,39}$")  # a RunStats/RouteResult/AreaStats attribute name
-_PLACE = re.compile(r"^[A-Za-z0-9 .,'()\-]{1,80}$")  # "North Estate (synthetic)"; a manifest key, never a path
+# "North Estate (synthetic)", "Heart O’ the Hills": Unicode letters and curly apostrophes occur in real OSM names.
+_PLACE = re.compile(r"^[\w .,'’()\-]{1,80}$")  # a manifest key, never a path
 
 
 def _safe(pattern: re.Pattern[str], value: str, what: str) -> str:

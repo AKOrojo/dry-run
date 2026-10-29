@@ -363,3 +363,13 @@ def test_aois_lists_default_and_preset_aois_that_exist(monkeypatch):
     with TestClient(app) as c:
         rows = c.get("/api/aois").json()
     assert [r["aoi_id"] for r in rows] == [fixtures.AOI_ID] and rows[0]["name"]
+
+
+@pytest.mark.parametrize("place, ok", [
+    ("Heart O’ the Hills Summer Camp for Girls", True),  # real Texas OSM name: curly apostrophe
+    ("Lekki Phase 1", True), ("North Estate (synthetic)", True), ("Ikoyi-Obalende", True),
+    ("../manifest", False), ("a/b", False), ("<script>", False), ("x" * 81, False)])
+def test_verifier_place_names(place, ok):
+    from dryrun.agent.verify import _PLACE
+
+    assert bool(_PLACE.match(place)) is ok
