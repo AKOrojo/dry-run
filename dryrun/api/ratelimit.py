@@ -4,6 +4,7 @@ Team members bypass it with header X-Team-Token: $DRYRUN_ADMIN_TOKEN (rehearsals
 
 from __future__ import annotations
 
+import hmac
 import os
 import time
 from collections import defaultdict, deque
@@ -22,8 +23,14 @@ def client_ip(request: Request) -> str:
     return xff[-1] if xff else (request.client.host if request.client else "?")
 
 
+def _is_team(request: Request) -> bool:
+    """Constant-time compare, so response timing does not leak the token a byte at a time."""
+    given = request.headers.get("x-team-token", "")
+    return bool(_TEAM) and hmac.compare_digest(given.encode(), _TEAM.encode())
+
+
 def limit(request: Request, bucket: str, per_hour: int) -> None:
-    if _TEAM and request.headers.get("x-team-token") == _TEAM:
+    if _is_team(request):
         return
     q, now = _hits[(bucket, client_ip(request))], time.time()
     while q and now - q[0] > 3600:
@@ -38,7 +45,7 @@ _day: dict[str, deque] = defaultdict(deque)
 
 def limit_global(bucket: str, per_day: int, request: Request | None = None) -> None:
     """Per-instance daily cap across ALL visitors (protects one member's Meta credits if a post goes viral)."""
-    if request is not None and _TEAM and request.headers.get("x-team-token") == _TEAM:
+    if request is not None and _is_team(request):
         return
     q, now = _day[bucket], time.time()
     while q and now - q[0] > 86400:

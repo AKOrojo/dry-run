@@ -51,7 +51,17 @@ def _where(kind: str) -> tuple[Path, str, str]:
     raise ValueError(kind)
 
 
+def _safe_rel(rel: str) -> str:
+    """Reject keys that could leave the kind's root: in local mode `..` or an absolute path would be resolved
+    by the filesystem (GCS takes them literally, so prod already fails closed). ValueError -> API 400."""
+    parts = rel.replace("\\", "/").split("/")
+    if not rel or "\0" in rel or rel.startswith("/") or any(p in ("", ".", "..") for p in parts):
+        raise ValueError(f"invalid storage key {rel!r}")
+    return rel
+
+
 def _read_bytes(kind: str, rel: str) -> bytes:
+    rel = _safe_rel(rel)
     local, bucket, prefix = _where(kind)
     if MODE == "local":
         return (local / rel).read_bytes()
@@ -59,6 +69,7 @@ def _read_bytes(kind: str, rel: str) -> bytes:
 
 
 def _write_bytes(kind: str, rel: str, data: bytes, content_type: str) -> None:
+    rel = _safe_rel(rel)
     local, bucket, prefix = _where(kind)
     if MODE == "local":
         p = local / rel
@@ -74,6 +85,7 @@ def _write_bytes(kind: str, rel: str, data: bytes, content_type: str) -> None:
 
 
 def _exists(kind: str, rel: str) -> bool:
+    rel = _safe_rel(rel)
     local, bucket, prefix = _where(kind)
     if MODE == "local":
         return (local / rel).exists()
@@ -173,7 +185,8 @@ def read_upload(rel: str) -> bytes:
 
 
 def public_run_url(run_id: str, rel: str) -> str:
-    return f"{PUBLIC_RUNS_BASE.rstrip('/')}/{run_id}/{rel}"
+    # Not I/O, but a crafted run_id must not point the URL at another object in the public bucket.
+    return f"{PUBLIC_RUNS_BASE.rstrip('/')}/{_safe_rel(f'{run_id}/{rel}')}"
 
 
 def dumps(obj) -> bytes:
