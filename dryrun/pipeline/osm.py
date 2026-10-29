@@ -199,13 +199,20 @@ def buildings_layers(grid: GridSpec, records: Iterable[dict], cap: int = BUILDIN
 
 # --------------------------------------------------------------------------------------- shelters
 def pick_shelters(grid: GridSpec, candidates: Iterable[dict], dem: np.ndarray, land: np.ndarray,
-                  road: nx.Graph) -> dict:
-    """candidates [{name, kind, lon, lat}] -> shelters GeoJSON: inside the grid, on a land cell in the
-    top SHELTER_TOP_FRACTION of land DEM, and within SHELTER_MAX_SNAP_M of a road node."""
+                  road: nx.Graph, river_mask: np.ndarray | None = None,
+                  min_above_river_m: float | None = None) -> dict:
+    """candidates [{name, kind, lon, lat}] -> shelters GeoJSON: inside the grid, on high enough land, and within
+    SHELTER_MAX_SNAP_M of a road node. High enough = the top SHELTER_TOP_FRACTION of land DEM (flat coastal AOIs),
+    or, when river_mask and min_above_river_m are given (river valleys, where the top of the DEM is the hills and
+    every school sits below it), at least min_above_river_m above the DEM of the nearest river cell."""
     land = np.asarray(land, bool) & np.isfinite(dem)
     if not road.number_of_nodes() or not land.any():
         return {"type": "FeatureCollection", "features": []}
     cut = float(np.quantile(dem[land], 1 - SHELTER_TOP_FRACTION))
+    valley = river_mask is not None and min_above_river_m is not None and np.asarray(river_mask).any()
+    if valley:
+        rr, rc = np.nonzero(np.asarray(river_mask) > 0.5)
+        river_z = dem[rr, rc]
     xy = np.array([[d["x"], d["y"]] for _, d in road.nodes(data=True)], float)
     feats, seen = [], set()
     for s in candidates:
@@ -213,7 +220,12 @@ def pick_shelters(grid: GridSpec, candidates: Iterable[dict], dem: np.ndarray, l
         if not in_grid(grid, lon, lat):
             continue
         r, c = (int(v) for v in cell_of(grid, lon, lat))
-        if not land[r, c] or dem[r, c] < cut or (r, c) in seen:
+        if valley:
+            i = int(np.argmin(np.hypot((rr - r) * grid.dy_m, (rc - c) * grid.dx_m)))
+            high = dem[r, c] - river_z[i] >= min_above_river_m
+        else:
+            high = dem[r, c] >= cut
+        if not land[r, c] or not high or (r, c) in seen:
             continue
         snap = np.hypot((xy[:, 0] - lon) * _m_per_deg_lon(lat), (xy[:, 1] - lat) * M_PER_DEG_LAT).min()
         if snap > SHELTER_MAX_SNAP_M:
@@ -573,7 +585,8 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
 def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
           building_csvs: Sequence[str], osm_files: dict[str, str] | None = None,
           building_source: str = "open_buildings", keywords: Sequence[str] | None = None,
-          place_aliases: dict | None = None, place_tags: dict | None = None, corridor_tags: dict | None = None
+          place_aliases: dict | None = None, place_tags: dict | None = None, corridor_tags: dict | None = None,
+          river_mask: np.ndarray | None = None, shelter_min_above_river_m: float | None = None
           ) -> tuple[dict[str, str], dict[str, str], dict]:
     """Read OSM (osm_extract() files, or Overpass when osm_files is None) + Open Buildings, write the vector
     layers for `aoi_id` through storage. Returns (layers, sources, report) for the manifest that
@@ -592,7 +605,8 @@ def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
     w(aoi_id, "buildings_index.json", json.dumps(index).encode(), "application/json")
     w(aoi_id, "buildings.geojson", json.dumps(geo, separators=(",", ":")).encode(), "application/geo+json")
 
-    shelters = pick_shelters(grid, _fetch_shelter_candidates(grid, feats_xml), dem, ~np.asarray(exclude, bool), road)
+    shelters = pick_shelters(grid, _fetch_shelter_candidates(grid, feats_xml), dem, ~np.asarray(exclude, bool), road,
+                             river_mask, shelter_min_above_river_m)
     w(aoi_id, "shelters.geojson", json.dumps(shelters).encode(), "application/geo+json")
 
     places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases, place_tags, corridor_tags))

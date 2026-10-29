@@ -178,3 +178,21 @@ def test_shelters_ignore_nan_dem_and_accept_uint8_masks():
              {"name": "B", "kind": "school", "lon": _ll(20, 5)[0], "lat": _ll(20, 5)[1]}]  # NaN DEM cell
     fc = osm.pick_shelters(GRID, cands, dem, np.ones((36, 36), np.uint8), g)
     assert [f["properties"]["name"].split(" (")[0] for f in fc["features"]] == ["A"]
+
+
+def test_valley_shelters_use_height_above_the_river():
+    dem = np.full((36, 36), 100.0, np.float32)
+    dem[:, 4] = 90.0  # river channel near the west edge
+    dem[:, 16:] = 140.0  # hills: most of the AOI, so the top-half rule only keeps the hillside
+    river = np.zeros((36, 36), bool)
+    river[:, 4] = True
+    land = np.ones((36, 36), bool)
+    g = osm.simple_road_graph(GRID, {1: _ll(5, 2), 2: _ll(5, 14)},
+                              [{"u": 1, "v": 2, "length_m": 400.0, "drive": True, "bridge": False}])
+    cands = [{"name": "Valley School", "kind": "school", "lon": _ll(5, 10)[0], "lat": _ll(5, 10)[1]},  # 10 m up
+             {"name": "Bank Church", "kind": "place_of_worship", "lon": _ll(5, 5)[0], "lat": _ll(5, 5)[1]}]
+    assert osm.pick_shelters(GRID, cands, dem, land, g)["features"] == []  # the coastal rule keeps none
+    names = [f["properties"]["name"].split(" (")[0] for f in
+             osm.pick_shelters(GRID, cands, dem, land, g, river, 8.0)["features"]]
+    assert names == ["Valley School", "Bank Church"]
+    assert osm.pick_shelters(GRID, cands, dem, land, g, river, 12.0)["features"] == []

@@ -186,7 +186,8 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           keywords: Sequence[str] | None = None, place_aliases: dict | None = None,
           building_source: str = "open_buildings", debug_layers: bool = False,
           place_tags: dict | None = None, corridor_tags: dict | None = None,
-          coastal: bool = True, outlet_side: str | None = None, inflows_config: dict | None = None) -> AOIManifest:
+          coastal: bool = True, outlet_side: str | None = None, inflows_config: dict | None = None,
+          shelter_min_above_river_m: float | None = None) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write.
 
     Inland AOIs: coastal=False plus outlet_side ("east", ...): the OSM river (waterway=river|stream from
@@ -283,7 +284,8 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         vector_layers, vector_sources, report = osm.build(
             aoi_id, grid, dem, exclude, building_csvs, osm_files,
             building_source=building_source, keywords=keywords, place_aliases=place_aliases,
-            place_tags=place_tags, corridor_tags=corridor_tags)
+            place_tags=place_tags, corridor_tags=corridor_tags,
+            river_mask=river_mask if river_mask.any() else None, shelter_min_above_river_m=shelter_min_above_river_m)
     else:
         vector_layers = {"roads_graph": "roads.graphml", "shelters": "shelters.geojson",
                          "places": "places.geojson", "buildings": "buildings_index.json",
@@ -387,6 +389,7 @@ def main() -> None:
           keywords=cfg.get("keywords", keywords), place_aliases=cfg.get("place_aliases"),
           building_source=args.building_source, debug_layers=args.debug_layers,
           place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"),
+          shelter_min_above_river_m=cfg.get("shelter_min_above_river_m"),
           coastal=not args.inland, outlet_side=args.outlet_side,
           inflows_config=json.loads(storage.read_local_file(args.inflows_config)) if args.inflows_config else None)
 
