@@ -145,6 +145,18 @@ def aoi_info(aoi_id: str) -> dict:
     return out
 
 
+def canonical_place(aoi_id: str, name: str) -> str:
+    """The places-layer spelling of `name`, matching case and ’/' alike (OSM names keep curly apostrophes;
+    models often type straight ones). Unchanged when nothing matches, so the usual unknown-place error follows."""
+    if "places" not in storage.load_aoi(aoi_id).layers:
+        return name
+    fold = name.replace("’", "'").casefold()
+    for f in json.loads(storage.load_aoi_file(aoi_id, "places"))["features"]:
+        if f["properties"]["name"].replace("’", "'").casefold() == fold:
+            return f["properties"]["name"]
+    return name
+
+
 def _cached(spec: ScenarioSpec) -> bool:
     rid = spec.run_id()
     return storage.run_exists(rid) and storage.load_run(rid).status.value == "done"
@@ -164,6 +176,9 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
     if name == "run_simulation":
         if isinstance(args.get("label"), str):  # model labels: tidy to the contract instead of failing the call
             args["label"] = " ".join(_LABEL_JUNK.sub(" ", args["label"]).split())[:60] or None
+        for iv in args.get("interventions") or []:
+            if isinstance(iv, dict) and isinstance(iv.get("place"), str) and isinstance(args.get("aoi_id"), str):
+                iv["place"] = canonical_place(args["aoi_id"], iv["place"])  # exact spelling = preset run_ids
         spec = ScenarioSpec.model_validate(args)  # validate BEFORE spending budget
         validate(spec)  # unknown AOI / unknown place -> error without spending budget
         if session is not None and not _cached(spec):  # cache hits are instant and free: no budget
@@ -185,7 +200,8 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
             out["warning"] = " ".join(warnings)
         return out
     if name == "get_area_stats":
-        return area_stats(args["run_id"], args["place"])
+        aoi_id = storage.load_run(args["run_id"]).scenario.aoi_id
+        return area_stats(args["run_id"], canonical_place(aoi_id, args["place"]))
     if name == "get_run_stats":
         return _stats(args["run_id"]).model_dump()
     if name == "compare_runs":

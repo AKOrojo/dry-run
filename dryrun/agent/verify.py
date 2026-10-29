@@ -68,8 +68,11 @@ def _truth(claim: Claim) -> tuple[float, bool]:
         from dryrun.sim.engine import area_stats
 
         _, place, field = f.split(":", 2)
+        from dryrun.agent.tools import canonical_place
+
         _safe(_PLACE, place, "place")
         _safe(_FIELD, field, "field")
+        place = canonical_place(storage.load_run(run_id).scenario.aoi_id, place)
         return float(area_stats(run_id, place)[field]), field in INT_FIELDS
     if f.startswith("route:"):
         _, route_id, field = f.split(":", 2)

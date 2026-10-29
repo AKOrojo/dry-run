@@ -7,6 +7,7 @@ import pytest
 os.environ["DRYRUN_STORAGE"] = "local"  # never let tests touch real buckets
 os.environ["DRYRUN_SIM_BACKEND"] = "fake"  # core tests run on the fake; A's solver has its own tests
 
+from dryrun import storage  # noqa: E402
 from dryrun.agent import verify  # noqa: E402
 from dryrun.contracts import (  # noqa: E402
     Brief,
@@ -254,3 +255,25 @@ def test_brief_retry_recovers():
     finally:
         loop.get_provider = orig
     assert "brief" in kinds and "error" not in kinds
+
+
+def test_place_names_match_case_and_apostrophe_alike(monkeypatch):
+    import json
+
+    from dryrun.agent import tools
+
+    exact = tools.dispatch("run_simulation", json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {
+        "total_mm": 50, "duration_h": 1}, "interventions": [{"type": "green", "place": "North Estate (synthetic)"}]}))
+    loose = tools.dispatch("run_simulation", json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {
+        "total_mm": 50, "duration_h": 1}, "interventions": [{"type": "green", "place": "north estate (SYNTHETIC)"}]}))
+    assert loose["run_id"] == exact["run_id"]  # rewritten to the layer's spelling, so presets/cache still hit
+    claim = Claim(text="flooded buildings in the estate", unit="b", source_run_id=exact["run_id"],
+                  field="area:NORTH ESTATE (synthetic):buildings_flooded")
+    assert verify.check(claim).verified
+
+    places = {"features": [{"properties": {"name": "Heart O’ the Hills"}}]}
+    real = storage.load_aoi_file
+    monkeypatch.setattr(storage, "load_aoi_file", lambda a, layer: json.dumps(places).encode()
+                        if layer == "places" else real(a, layer))
+    assert tools.canonical_place(fixtures.AOI_ID, "heart o' the hills") == "Heart O’ the Hills"
+    assert tools.canonical_place(fixtures.AOI_ID, "Nowhere") == "Nowhere"
