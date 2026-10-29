@@ -295,7 +295,7 @@ def test_missing_provider_key_is_an_error_event(monkeypatch):
     monkeypatch.delenv("META_API_KEY", raising=False)
     events = list(loop.run("question", provider_name="meta"))
     assert [e.kind for e in events] == ["error", "done"]
-    assert events[0].data["stage"] == "provider" and "META_API_KEY" in events[0].data["error"]
+    assert events[0].data["stage"] == "provider" and events[0].data["code"] == "llm_not_configured"
 
 
 def test_cache_hits_do_not_spend_run_budget():

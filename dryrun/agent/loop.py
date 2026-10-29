@@ -8,11 +8,15 @@ Yields AgentEvents so the API can stream them to the UI over SSE.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from collections.abc import Iterator
 
+import httpx
+
 from dryrun.agent import tools, verify
+from dryrun.api.errors import classify_llm_error
 from dryrun.contracts import AgentEvent, Brief
 from dryrun.meta.providers import get_provider
 
@@ -21,6 +25,8 @@ MAX_CALLS_PER_TURN = 6
 MAX_TOOL_CALLS = 24
 BRIEF_MAX_TOKENS = 12000
 SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
+
+log = logging.getLogger(__name__)
 
 SYSTEM = """You are Dry Run's scenario planner for flooding in the study area below.
 You can ONLY learn numbers by calling tools. Never estimate, never recall figures.
@@ -84,11 +90,18 @@ def _parse_brief(text: str, p) -> Brief:
     raise ValueError(f"no valid brief JSON found ({brief_err or json_err})")
 
 
+def _error_event(stage: str, exc: BaseException) -> AgentEvent:
+    # Full exception to the server log only; the client gets a stable code and a safe sentence.
+    log.warning("agent %s error: %r", stage, exc)
+    info = classify_llm_error(exc, stage)
+    return AgentEvent(kind="error", data={"stage": stage, **info, "error": info["message"]})
+
+
 def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -> Iterator[AgentEvent]:
     try:
         p = get_provider(provider_name)
     except Exception as exc:  # noqa: BLE001 - e.g. key not configured: tell the UI instead of a dead stream
-        yield AgentEvent(kind="error", data={"stage": "provider", "error": str(exc)})
+        yield _error_event("provider", exc)
         yield AgentEvent(kind="done", data={})
         return
     session = tools.Session()
@@ -104,7 +117,7 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
         try:
             turn = p.chat(msgs, tools=tools.TOOL_SPECS)
         except Exception as exc:  # noqa: BLE001 - provider HTTP errors/timeouts -> UI error event
-            yield AgentEvent(kind="error", data={"stage": "chat", "error": repr(exc)})
+            yield _error_event("chat", exc)
             yield AgentEvent(kind="done", data={})
             return
         if turn.content:
@@ -146,6 +159,7 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
     msgs.append({"role": "user", "content": BRIEF_INSTRUCTIONS})
     schema = {"type": "json_schema", "json_schema": {"name": "brief", "schema": BRIEF_SCHEMA}}
     brief, err = None, None
+    last_exc: Exception | None = None
     for attempt in range(2):  # one retry with the validation error fed back
         if attempt and time.time() > deadline + 60:
             break
@@ -155,10 +169,17 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
             brief = _parse_brief(turn.content or "", p)
             break
         except Exception as exc:  # noqa: BLE001
+            last_exc = exc
             err = f"attempt {attempt + 1}: {exc!r}" if err is None else f"{err}; attempt {attempt + 1}: {exc!r}"
             msgs.append({"role": "user", "content": f"That was not valid. Error: {err}. Reply with the JSON only."})
     if brief is None:
-        yield AgentEvent(kind="error", data={"stage": "brief", "error": err})
+        log.warning("agent brief error: %s", err)
+        if isinstance(last_exc, httpx.HTTPError):
+            yield _error_event("brief", last_exc)
+        else:  # the model answered, but not with a valid brief
+            msg = "The model did not return a valid brief. Try again."
+            yield AgentEvent(kind="error", data={"stage": "brief", "code": "llm_bad_response", "retryable": True,
+                                                 "message": msg, "error": msg})
     else:
         checked, digits = verify.verify_brief(brief)
         yield AgentEvent(kind="brief", data={**checked.model_dump(), "prose_has_digits": digits})

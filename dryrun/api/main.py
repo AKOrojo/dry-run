@@ -21,12 +21,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from dryrun import storage
 from dryrun.api import ratelimit  # noqa: E402
+from dryrun.api.errors import error_body  # noqa: E402
 from dryrun.api.ratelimit import limit  # noqa: E402
 from dryrun.contracts import (
     CONTRACT_VERSION,
@@ -89,7 +93,25 @@ AOI_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 @app.exception_handler(ValueError)
 async def _bad_request(_request: Request, exc: ValueError):
     # Domain errors (unknown place, point off the road network, bad ids) are the caller's fault: 400.
-    return JSONResponse({"detail": str(exc)}, status_code=400)
+    return JSONResponse(error_body(400, str(exc)), status_code=400)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_error(_request: Request, exc: StarletteHTTPException):
+    headers = dict(exc.headers or {})
+    if exc.status_code == 429:
+        headers.setdefault("Retry-After", "60")
+    return JSONResponse(error_body(exc.status_code, exc.detail), status_code=exc.status_code, headers=headers or None)
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid_input(_request: Request, exc: RequestValidationError):
+    errs = exc.errors()
+    first = errs[0] if errs else {}
+    where = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
+    body = error_body(422, errs)
+    body["error"]["message"] = f"invalid request: {where + ' ' if where else ''}{first.get('msg', '')}".strip()
+    return JSONResponse(jsonable_encoder(body), status_code=422)
 
 
 def _check_run(run_id: str) -> None:
