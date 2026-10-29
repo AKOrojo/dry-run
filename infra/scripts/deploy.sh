@@ -45,7 +45,7 @@ gcloud builds submit --project "$PROJECT_ID" --config infra/cloudbuild.yaml \
 
 gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" \
   --service-account "$RUNTIME_SA" --allow-unauthenticated \
-  --cpu 2 --memory 4Gi --concurrency 4 --timeout 900 --cpu-boost \
+  --cpu 2 --memory 4Gi --concurrency 8 --timeout 900 --cpu-boost \
   --min-instances "$MIN" --max-instances 4 \
   --set-env-vars "$ENV_VARS" \
   --set-secrets "META_API_KEY=meta-api-key:latest,BASETEN_API_KEY=baseten-api-key:latest,CESIUM_ION_TOKEN=cesium-ion-token:latest,DRYRUN_ADMIN_TOKEN=admin-token:latest,DRYRUN_JUDGE_TOKEN=judge-token:latest,OPENROUTER_API_KEY=openrouter-api-key:latest"
