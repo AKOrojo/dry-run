@@ -65,6 +65,8 @@ def session(provider_name: str, question: str, real_get) -> dict:
     return {"provider": provider_name, "model": meter.model, "question": question, "tools": tools, "runs": runs,
             "recommended_run_id": brief.get("recommended_run_id") if brief else None,
             "claims": len(claims), "verified": sum(c["verified"] for c in claims),
+            "claim_detail": [{k: c.get(k) for k in ("field", "source_run_id", "value", "model_value", "verified")}
+                             for c in claims],  # enough to diagnose an unverified claim later
             "prose_has_digits": brief.get("prose_has_digits") if brief else None,
             "title": brief.get("title") if brief else None, "errors": errors,
             "seconds": round(time.time() - t0, 1), "model_calls": meter.calls,

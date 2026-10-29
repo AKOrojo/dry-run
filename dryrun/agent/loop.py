@@ -19,6 +19,7 @@ from dryrun.meta.providers import get_provider
 MAX_STEPS = 12
 MAX_CALLS_PER_TURN = 6
 MAX_TOOL_CALLS = 24
+BRIEF_MAX_TOKENS = 12000
 SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
 
 SYSTEM = """You are Dry Run's scenario planner for urban flooding in Lagos.
@@ -145,7 +146,8 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
         if attempt and time.time() > deadline + 60:
             break
         try:
-            turn = p.chat(msgs, response_format=schema if attempt == 0 else None)
+            # Reasoning models spend much of max_tokens thinking; 4000 truncated long briefs mid-JSON.
+            turn = p.chat(msgs, response_format=schema if attempt == 0 else None, max_tokens=BRIEF_MAX_TOKENS)
             brief = _parse_brief(turn.content or "", p)
             break
         except Exception as exc:  # noqa: BLE001
