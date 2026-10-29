@@ -200,6 +200,23 @@ calibrated forecast. Shelters are candidates at least 15 m above the nearest riv
 margin); all stayed dry in the replay. Impact (12 h, river plus 85 mm rain): 1,863 buildings with flood water close by
 (1,063 by own cell), 1,067 people, 115 road km. With the river alone it is 1,743 buildings, so the river dominates.
 
+### The 3D map: model ground vs the terrain it is drawn on
+The solver's DEM uses EGM2008 heights; Cesium World Terrain uses ellipsoid heights. The geoid offset N is +22.0 to
++22.6 m over Lagos and −23.3 to −22.9 m over Texas. `evals/validation/terrain_match.py` decodes the World Terrain mesh
+(level 13) over each AOI and compares it with DEM + N at every vertex (positive means the model ground is higher):
+
+| AOI | Vertices | Median | \|diff\| p50 | \|diff\| p90 |
+|---|---|---|---|---|
+| Lagos | 29,814 | −1.1 m | 2.1 m | 6.1 m |
+| Texas, land | 11,828 | +0.9 m | 5.4 m | 14.6 m |
+| Texas, river cells | 1,653 | +8.1 m | 8.3 m | 13.9 m |
+
+So a 3D water surface at model ground + depth would float or sink by metres against the visible terrain, and along the
+Guadalupe it would sit about 8 m above the drawn river. Depth frames are therefore **draped** on the terrain: each pixel
+shows the model's depth at that place, whatever height the map draws there. Building bases come from the drawn
+terrain, not the DEM. The 8 m in the river channel matches the coarse grid problem above: at 2″ the canyon floor
+averages up toward its walls.
+
 ### Surrogate (screening only)
 `dryrun/surrogate/`: one LightGBM model per stat, trained on a Latin hypercube of real solver runs (rain
 40–250 mm, duration 1–6 h, tide −0.5–1.5 m, drain factor 0.5–3, new drains 0–60 mm/h, green and pond on named
