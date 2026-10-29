@@ -149,3 +149,16 @@ def rain_rate_mm_h(spec: ScenarioSpec, t_s: float) -> float:
     if p == "front_loaded":
         return mean * 2 * (1 - x)  # integrates to mean over [0,1]
     return mean * (2 - 4 * abs(x - 0.5))  # center_peaked triangle, integrates to mean
+
+
+def rain_cum_mm(spec: ScenarioSpec, t_s: float) -> float:
+    """Exact integral of rain_rate_mm_h from 0 to t (mm). The solver adds rain per step as
+    rain_cum_mm(t + dt) - rain_cum_mm(t), so the storm total is exact whatever the step size."""
+    total = spec.storm.total_mm
+    x = min(max(t_s / (spec.storm.duration_h * 3600), 0.0), 1.0)
+    p = spec.storm.pattern.value
+    if p == "uniform":
+        return total * x
+    if p == "front_loaded":
+        return total * (2 * x - x * x)
+    return total * (2 * x * x if x <= 0.5 else 1 - 2 * (1 - x) ** 2)

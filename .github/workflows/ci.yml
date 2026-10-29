@@ -23,6 +23,7 @@ jobs:
       - run: python -c "import dryrun.api.main"   # catches a broken API module
       - run: pytest -q
       - run: PYTHONPATH=. python scripts/smoke.py
+      - run: SMOKE_SIM_BACKEND=solver PYTHONPATH=. python scripts/smoke.py   # Eng A's real backend
       - name: contracts in sync
         run: |
           PYTHONPATH=. python scripts/export_contracts.py

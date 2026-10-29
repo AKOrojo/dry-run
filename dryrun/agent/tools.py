@@ -87,8 +87,20 @@ TOOL_SPECS = [
         "parameters": {"type": "object", "properties": {
             "run_id": {"type": "string"}, "t_s": {"type": "integer"},
             "origin": _LONLAT, "destination": _LONLAT}, "required": ["run_id", "t_s", "origin"]}}},
-    # Added by Eng A on Day 5 when the surrogate exists:
-    # surrogate_sweep -> ranked intervention combos, is_surrogate=True (must confirm with run_simulation)
+    {"type": "function", "function": {
+        "name": "surrogate_sweep",
+        "description": "FAST SCREENING with an ML emulator of the solver (is_surrogate=True): ranks combinations "
+                       "of drain upgrades, green infrastructure and a pond for one storm. Its numbers are "
+                       "predictions with no run_id and CANNOT be cited. Pick a candidate, then confirm it with "
+                       "run_simulation using its `interventions` verbatim and cite that run. Does not use run budget.",
+        "parameters": {"type": "object", "properties": {
+            "aoi_id": {"type": "string"},
+            "total_mm": {"type": "number"}, "duration_h": {"type": "number"},
+            "tide_m": {"type": "number", "description": "boundary water level; omit for the default"},
+            "objective": {"type": "string", "enum": ["buildings_flooded", "buildings_flooded_severe",
+                                                     "people_exposed", "road_km_impassable", "flooded_area_km2"]},
+            "top_k": {"type": "integer", "description": "candidates to return, max 10 (default 5)"}},
+            "required": ["aoi_id", "total_mm", "duration_h"]}}},
 ]
 
 MAX_RUNS_PER_SESSION = 6
@@ -176,4 +188,9 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
         route_id = "rt_" + hashlib.sha256(req.model_dump_json().encode()).hexdigest()[:12]
         storage.write_private(f"routes/{req.run_id}/{route_id}.json", json.dumps(res).encode())
         return {"route_id": route_id, **res}
+    if name == "surrogate_sweep":
+        from dryrun.surrogate.sweep import surrogate_sweep  # Eng A
+
+        keys = ("aoi_id", "total_mm", "duration_h", "tide_m", "objective", "top_k")
+        return surrogate_sweep(**{k: args[k] for k in keys if k in args})
     raise KeyError(f"unknown tool {name}")

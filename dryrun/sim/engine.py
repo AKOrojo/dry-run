@@ -150,7 +150,9 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
     for j in jobs:
         j.result()  # surface upload errors before the manifest says "done"
 
-    stored_end = float(frames[-1][1].sum()) * area
+    # Storage GAINED since t=0. Land starts dry; the solver's boundary cells start (and stay) at the
+    # tide level, which is the sea, not stored flood water. For the fake both terms start at 0.
+    stored_end = float(frames[-1][1].astype(np.float64).sum() - frames[0][1].astype(np.float64).sum()) * area
     rain = ledger["rain_volume_m3"]
     err = (rain - ledger["drained_volume_m3"] - ledger["infiltrated_volume_m3"]
            - ledger["boundary_outflow_m3"] - stored_end)
