@@ -105,6 +105,12 @@ land cells only.
 - **Uniform rain, constant tide, fixed rates:** no storm cell movement, tidal cycle or soil saturation.
 - **Local-inertial physics:** no advection term. It is accurate for slow, deep floodplain flow and runs slightly slow for
   fast fronts (dam-break test below).
+- **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
+  soakaways and no unmapped drains (drain-down check below).
+- **Generous building rule:** a building counts as flooded if any of the 3×3 cells around it reaches 0.15 m, which on a
+  30 m grid means any building within about 45 m of that water. On Lagos at 120 mm / 3 h this counts about 30,200
+  buildings, against about 13,300 using each building's own cell. The rule is the contract's definition; read
+  `buildings_flooded` as "buildings with flood water close by".
 
 ### Verification (synthetic tests, `tests/test_solver.py`)
 | Check | Result |
@@ -115,10 +121,41 @@ land cells only.
 | Interventions | drains, new drains, green and ponds never worsen impacts; a 1.5 m tide worsens them |
 | Speed, 333 × 333 grid, 6 h simulated | 21 s, single thread (gate: < 60 s on 2 vCPU; `FT_PERF=1 pytest tests/test_solver.py`) |
 
+### Lagos (`lagos-lekki-v1`, 540 × 324 cells) on the solver
+3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. Times on a Cloud Run vCPU
+are not yet measured.
+
+| Storm | Wall time | Mass balance | Buildings flooded (of 68,929) | Road km cut (of 1,406) | Max depth |
+|---|---|---|---|---|---|
+| 50 mm | 14 s | 0.0 % | 17,719 | 115 | 0.85 m |
+| 120 mm | 22 s | 0.0 % | 30,202 | 407 | 2.15 m |
+| 200 mm | 26 s | 0.0 % | 37,770 | 597 | 2.64 m |
+
+The share of land that floods falls steadily with height: at 120 mm, 56 % of land at 1–2 m is wet, against 1 % above
+8 m. The water collects in pools rather than scattered single cells (942 of 24,566 wet cells are in patches of 4
+cells or fewer). The 0 m lagoon fringe does not drive the counts (506 of those wet cells).
+
 ### Validation against observations
-- **Sentinel-1 CSI** (`evals/validation/csi.py`): *pending*. It needs the Lagos `obs_flood_extent` scene. CSI =
-  hits / (hits + misses + false alarms) on max extent, with permanent water left out. It will be reported here
-  even if mediocre; if Earth Engine access does not arrive, this line will say it was skipped.
+- **Sentinel-1 CSI: not computed.** Validation was attempted on 3 same-orbit Sentinel-1 RTC pairs between 28 Jun and
+  12 Jul 2026 (Microsoft Planetary Computer; VV < −18 dB with a drop of more than 3 dB). The scenes show no
+  open-water flooding on land at pass time: 0 to 6 cells, and at most 0.12 km² with relaxed thresholds. CSI
+  against an empty observation would score every simulated wet cell as a false alarm and says nothing about the
+  model. Likely reasons: the passes come 1–2 days after the rain while Lagos flash floods drain within hours,
+  C-band misses water between buildings, and ERA5 shows the rain as moderate. `evals/validation/csi.py` is ready for
+  a scene that does show flooding.
+- **Drain-down check** (`evals/validation/drain_down.py`): this check does use the empty observation. It runs the
+  10 Jul 2026 storm (ERA5: 56.7 mm, wettest 6 h 27.6 mm; ERA5 likely understates it) as a 6 h storm out to the
+  12 Jul pass, 48 h later, and compares with that scene.
+
+  | 6 h storm | Wet land at 6 h | Wet land at 48 h | Of which open (no building in 3×3) | S1 observed |
+  |---|---|---|---|---|
+  | 30 mm | 1.72 km² | 0.34 km² | n/a | 0.004 km² |
+  | 57 mm | 6.52 km² | 1.78 km² | 0.17 km² | 0.004 km² (≤ 0.12 relaxed) |
+  | 90 mm | 12.38 km² | 4.13 km² | n/a | 0.004 km² |
+
+  The model holds water too long. More than 90 % of what remains at 48 h lies among buildings, where C-band cannot
+  see it. The visible excess (≈ 0.17 km² against ≤ 0.12 km² observed) is small. This is a known bias, partly
+  unverifiable, and it does not test the peak extent, which drives the impact stats.
 
 ### Surrogate (screening only)
 `dryrun/surrogate/`: one LightGBM model per stat, trained on a Latin hypercube of real solver runs (rain
@@ -127,7 +164,12 @@ places). It is served as plain numpy. `surrogate_sweep` ranks intervention combi
 `is_surrogate=True`. Its numbers have no `run_id`, so the claim verifier cannot accept them, and the agent must
 confirm a candidate with `run_simulation`. Fixture AOI, 300 runs, 5-fold CV: R² 0.95 to 0.97 on all five targets
 (flooded buildings MAE ≈ 21 of a baseline ≈ 200). It ranks well but over-predicts when impacts are small.
-Lagos numbers: pending.
+Lagos (`lagos-lekki-v1`, green on "Lekki Phase 1", pond on "Open land near Ajah"), 300 runs, 5-fold CV: R² 0.95 to 0.96
+on all five targets (flooded buildings MAE ≈ 2,000, about 7 % of a typical 30,000). The pond polygon covers 4 building
+cells, so pond candidates report a small `buildings_in_ponds`. Checked end to end at 120 mm / 3 h: the top three
+candidates all cut flooded buildings from 30,202 to about 11,500 on the solver, so the ranking holds. Absolute errors
+are large when impacts are small, though: it predicted 7,232 buildings where the solver gave 11,453, and 62 road km
+where the solver gave 27. The direction of the error differs between AOIs. Only solver numbers are citable.
 
 ## Provenance
 
