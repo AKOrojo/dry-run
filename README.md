@@ -33,7 +33,7 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 | Meta model | Used for |
 |---|---|
 | Muse Spark 1.3 | Planner agent: tool calls over the simulator, verified briefs; vision depth estimates |
-| Muse Spark Open (via OpenRouter) | "Sovereign mode": same agent on open weights |
+| Muse Spark Open (Baseten; OpenRouter fallback) | "Sovereign mode": same agent on open weights |
 | SAM 3.1 | Flood-water / reference-object masks from citizen photos |
 | Muse Voice Transcribe | Hands-free responder queries, biased to Lagos place names |
 | Muse Image | Before/after illustrations of interventions (labelled AI illustration) |
