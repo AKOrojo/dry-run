@@ -2,6 +2,7 @@
 
   meta     -> Meta Model API, Muse Spark 1.3            (standard mode: user uploads)
   baseten  -> Muse Spark Open, "sovereign mode"         ($10K open-weights bonus)
+  openrouter -> Muse Spark Open via OpenRouter          (evals/parity only, never served)
   fake     -> scripted, no network; used by tests and by Eng B before keys exist
 
 Day-1 TODO (Eng C): confirm base URLs, model ids and tool-call/JSON-schema
@@ -28,6 +29,13 @@ DEFAULTS = {
         "base_url": os.getenv("BASETEN_BASE_URL", "https://inference.baseten.co/v1"),
         "model": os.getenv("BASETEN_MODEL", "meta-models/muse-spark-open-1026"),
         "key_env": "BASETEN_API_KEY",
+    },
+    # Eval only (evals/parity): Muse Spark Open while Baseten access is pending. Not a hackathon inference
+    # partner, so its traffic does not count for the open-weights prize; /api/agent does not accept it.
+    "openrouter": {
+        "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        "model": os.getenv("OPENROUTER_MODEL", "meta/muse-spark-open"),
+        "key_env": "OPENROUTER_API_KEY",
     },
 }
 
