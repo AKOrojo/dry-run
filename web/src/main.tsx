@@ -4,5 +4,6 @@ import App from "./App";
 import "./fonts.css";
 import "./styles/tokens.css";
 import "./styles/bundle.css";
+import "./styles/app.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

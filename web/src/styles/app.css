@@ -1,0 +1,66 @@
+/* App-level styles for the twin UI (docs/design/twin-ui.md). Tokens only: no hex or rgb values here. */
+html, body, #root { margin: 0; height: 100%; }
+body { background: var(--ground); }
+.label { text-transform: uppercase; }
+
+.dr-app { display: grid; grid-template-columns: 1fr 360px; height: 100vh; background: var(--ground); color: var(--ink); }
+.dr-map { position: relative; min-width: 0; min-height: 0; }
+
+/* Docked panel stack */
+.dr-panel { background: var(--surface); border-left: var(--stroke-hairline) solid var(--hairline); overflow-y: auto; min-height: 0; }
+.dr-section { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.dr-section + .dr-section, .dr-footer { border-top: var(--stroke-hairline) solid var(--hairline); }
+.dr-section-title { margin: 0; color: var(--ink-muted); }
+.dr-header h1 { margin: 0; color: var(--ink); }
+.dr-footer { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); color: var(--ink-muted); }
+.dr-muted { color: var(--ink-muted); }
+.dr-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.dr-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.dr-list { margin: 0; padding-left: var(--space-4); }
+.dr-list-plain { margin: 0; padding: 0; list-style: none; }
+.dr-brief-title { margin: 0; }
+.dr-brief-text { margin: 0; }
+.dr-id { word-break: break-all; }
+
+/* Fields */
+.dr-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.dr-field-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.dr-field-label { color: var(--ink-muted); }
+.dr-field select, .dr-field input[type="text"], .dr-field input[type="password"], .dr-field textarea {
+  box-sizing: border-box; width: 100%; background: var(--ground); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 22px;
+  border: var(--stroke-control) solid var(--control-edge); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
+.dr-field textarea { resize: vertical; }
+.dr-field ::placeholder { color: var(--ink-muted); }
+.dr-field select:focus-visible, .dr-field input:focus-visible, .dr-field textarea:focus-visible {
+  outline: var(--stroke-focus) solid var(--focus-ring); outline-offset: 2px; }
+.dr-field input[type="range"] { width: 100%; margin: 0; accent-color: var(--danfo); }
+
+/* Stat tiles (ft-stat layout, narrowed to fit the panel) */
+.dr-stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.dr-stats .ft-stat { min-width: 0; padding: var(--space-3); }
+.dr-stat-unit { color: var(--ink-muted); }
+
+/* Notice */
+.dr-notice { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--surface-raised);
+  border-left: var(--stroke-control) solid var(--hazard); border-radius: var(--radius-md); color: var(--ink); }
+.dr-notice-glyph { color: var(--hazard); }
+
+/* Map overlays */
+.dr-badges { position: absolute; top: var(--space-8); left: var(--space-8); display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.dr-mode-toggle { position: absolute; top: var(--space-8); right: var(--space-8); display: flex; gap: var(--space-1); padding: var(--space-1);
+  background: var(--surface-raised); box-shadow: var(--shadow-float); border-radius: var(--radius-md); }
+.dr-mode-toggle .ft-btn[aria-pressed="true"] { border-color: var(--control-edge); color: var(--ink); }
+.dr-bottom { position: absolute; left: var(--space-8); right: var(--space-8); bottom: var(--space-8); display: flex; flex-direction: column;
+  align-items: flex-start; gap: var(--space-3); pointer-events: none; }
+.dr-bottom > * { pointer-events: auto; box-shadow: var(--shadow-float); }
+.dr-bottom .ft-timeline { align-self: stretch; }
+.ft-track { cursor: pointer; touch-action: none; }
+
+@media (max-width: 900px) {
+  .dr-app { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; min-height: 100vh; }
+  .dr-panel { border-left: 0; border-top: var(--stroke-hairline) solid var(--hairline); overflow-y: visible; }
+  .dr-badges, .dr-mode-toggle { top: var(--space-4); }
+  .dr-badges { left: var(--space-4); }
+  .dr-mode-toggle { right: var(--space-4); }
+  .dr-bottom { left: var(--space-4); right: var(--space-4); bottom: var(--space-4); }
+}
