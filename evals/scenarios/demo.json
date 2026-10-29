@@ -6,6 +6,8 @@
     {"label": "baseline 200mm/3h", "aoi_id": "lagos-lekki-v1", "storm": {"total_mm": 200, "duration_h": 3}},
     {"label": "drains +40%", "aoi_id": "lagos-lekki-v1", "storm": {"total_mm": 120, "duration_h": 3},
      "interventions": [{"type": "drain_upgrade", "capacity_factor": 1.4}]},
+    {"label": "drains +40% in Lekki Phase 1", "aoi_id": "lagos-lekki-v1", "storm": {"total_mm": 120, "duration_h": 3},
+     "interventions": [{"type": "drain_upgrade", "capacity_factor": 1.4, "place": "Lekki Phase 1"}]},
     {"label": "new drains 40 mm/h", "aoi_id": "lagos-lekki-v1", "storm": {"total_mm": 120, "duration_h": 3},
      "interventions": [{"type": "drain_upgrade", "add_mm_h": 40}]},
     {"label": "green Lekki Phase 1", "aoi_id": "lagos-lekki-v1", "storm": {"total_mm": 120, "duration_h": 3},
