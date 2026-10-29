@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, WebSocket
@@ -106,6 +105,7 @@ def observation_mask(obs_id: str):
 
 @router.websocket("/voice")
 async def voice(ws: WebSocket):
+    from dryrun.meta import media
+
     await ws.accept()
-    await ws.send_text(json.dumps({"type": "error", "error": "Eng C: voice relay lands Day 5"}))
-    await ws.close()
+    await media.relay_voice(ws)
