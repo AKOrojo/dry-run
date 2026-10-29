@@ -50,3 +50,34 @@ def test_team_bypass_uses_constant_time_compare(monkeypatch):
     assert not ratelimit._is_team(req("s3cre")) and not ratelimit._is_team(req(None))
     monkeypatch.setattr(ratelimit, "_TEAM", "")
     assert not ratelimit._is_team(req(""))
+
+
+def _req(headers):
+    from starlette.requests import Request
+
+    return Request({"type": "http", "headers": [(k.encode(), v.encode()) for k, v in headers.items()],
+                    "client": ("1.2.3.4", 1)})
+
+
+@pytest.mark.parametrize(("judge", "team", "headers", "ok"), [
+    ("j-key", "t-key", {}, False),
+    ("j-key", "t-key", {"x-judge-key": "wrong"}, False),
+    ("j-key", "t-key", {"x-judge-key": "j-key"}, True),
+    ("j-key", "t-key", {"x-team-token": "t-key"}, True),
+    ("j-key", "t-key", {"x-team-token": "j-key"}, False),  # keys are not interchangeable
+    ("", "", {"x-judge-key": ""}, False),                  # unset judge key: nothing opens the gate
+])
+def test_paid_access_gate(monkeypatch, judge, team, headers, ok):
+    from fastapi import HTTPException
+
+    from dryrun.api import ratelimit
+
+    monkeypatch.setattr(ratelimit, "_JUDGE", judge)
+    monkeypatch.setattr(ratelimit, "_TEAM", team)
+    assert ratelimit.paid_access_configured() == bool(judge)
+    if ok:
+        ratelimit.require_paid_access(_req(headers))
+    else:
+        with pytest.raises(HTTPException) as e:
+            ratelimit.require_paid_access(_req(headers))
+        assert e.value.status_code == 403

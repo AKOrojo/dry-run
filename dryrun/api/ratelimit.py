@@ -1,6 +1,8 @@
 """Tiny per-IP, per-instance rate limiter (owner: Eng D). Protects the public demo URL
 from runaway cost (Meta credits are per person; GCP is capped only by max-instances).
-Team members bypass it with header X-Team-Token: $DRYRUN_ADMIN_TOKEN (rehearsals, recording)."""
+Team members bypass it with header X-Team-Token: $DRYRUN_ADMIN_TOKEN (rehearsals, recording).
+Paid model calls (Meta, Baseten) need a key: the team token, or X-Judge-Key: $DRYRUN_JUDGE_TOKEN. Judges get
+that key through the private submission form, never through the repo (the repo is public)."""
 
 from __future__ import annotations
 
@@ -15,6 +17,9 @@ _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 _TEAM = os.getenv("DRYRUN_ADMIN_TOKEN", "").strip()
 if _TEAM == "unset":  # bootstrap placeholder: no bypass
     _TEAM = ""
+_JUDGE = os.getenv("DRYRUN_JUDGE_TOKEN", "").strip()
+if _JUDGE == "unset":
+    _JUDGE = ""
 
 
 def client_ip(request: Request) -> str:
@@ -27,6 +32,22 @@ def _is_team(request: Request) -> bool:
     """Constant-time compare, so response timing does not leak the token a byte at a time."""
     given = request.headers.get("x-team-token", "")
     return bool(_TEAM) and hmac.compare_digest(given.encode(), _TEAM.encode())
+
+
+def _matches(given: str, token: str) -> bool:
+    return bool(token) and hmac.compare_digest(given.encode(), token.encode())
+
+
+def paid_access_configured() -> bool:
+    """True when a judge key exists, i.e. the UI should offer a key box."""
+    return bool(_JUDGE)
+
+
+def require_paid_access(request: Request) -> None:
+    """403 unless the caller holds the team token or the judge key. Call before any paid model call."""
+    if _is_team(request) or _matches(request.headers.get("x-judge-key", ""), _JUDGE):
+        return
+    raise HTTPException(403, "live model calls need a judge key; the cached demo is open to everyone")
 
 
 def limit(request: Request, bucket: str, per_hour: int) -> None:

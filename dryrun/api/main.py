@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from dryrun import storage
+from dryrun.api import ratelimit  # noqa: E402
 from dryrun.api.ratelimit import limit  # noqa: E402
 from dryrun.contracts import (
     CONTRACT_VERSION,
@@ -141,6 +142,8 @@ def config():
             "default_aoi": os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic"),
             "agent_provider": os.getenv("DRYRUN_AGENT_PROVIDER", "fake"),
             "sovereign_provider_available": bool(_secret("BASETEN_API_KEY")),
+            # Paid providers need X-Judge-Key (or the team token): the UI shows a key box when this is true.
+            "judge_key_required": ratelimit.paid_access_configured(),
             # Cesium ion tokens are public client tokens (restrict allowed URLs in the ion dashboard);
             # serving it at runtime keeps it out of the image and out of Cloud Build secrets.
             "cesium_ion_token": _secret("CESIUM_ION_TOKEN"),
