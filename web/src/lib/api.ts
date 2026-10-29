@@ -40,12 +40,19 @@ const team = (): Record<string, string> => {
 };
 const JSONH = () => ({ "Content-Type": "application/json", ...team() });
 
+// Judges get a key through the private submission form; paid providers (meta, baseten) need it.
+// sessionStorage: the key is gone when the tab closes.
+const JUDGE = "dr_judge_key";
+export const getJudgeKey = () => { try { return sessionStorage.getItem(JUDGE) ?? ""; } catch { return ""; } };
+export const setJudgeKey = (k: string) => { try { k ? sessionStorage.setItem(JUDGE, k) : sessionStorage.removeItem(JUDGE); } catch { /* storage blocked */ } };
+const judge = (): Record<string, string> => { const k = getJudgeKey(); return k ? { "X-Judge-Key": k } : {}; };
+
 async function j<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json() as Promise<T>;
 }
 
-export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string }>);
+export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean }>);
 export const getAOI = (id: string) => fetch(`${API}/api/aoi/${id}`).then(j<AOIManifest>);
 export const simulate = (s: ScenarioSpec) =>
   fetch(`${API}/api/simulate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s) }).then(j<RunManifest>);
@@ -57,8 +64,12 @@ export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${r
 /** POST /api/agent streams Server-Sent Events; EventSource can't POST, so read the stream manually. */
 export async function* askAgent(question: string, provider = "meta"): AsyncGenerator<AgentEvent> {
   const r = await fetch(`${API}/api/agent`, {
-    method: "POST", headers: JSONH(), body: JSON.stringify({ question, provider }),
+    method: "POST", headers: { ...JSONH(), ...judge() }, body: JSON.stringify({ question, provider }),
   });
+  if (!r.ok) {
+    const detail = await r.json().then((b) => b.detail, () => null);
+    throw new Error(typeof detail === "string" ? detail : `${r.status} ${r.statusText}`);
+  }
   if (!r.body) throw new Error("no stream");
   const reader = r.body.getReader();
   const dec = new TextDecoder();

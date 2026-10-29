@@ -71,7 +71,12 @@ def _parse_brief(text: str, p) -> Brief:
 
 
 def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -> Iterator[AgentEvent]:
-    p = get_provider(provider_name)
+    try:
+        p = get_provider(provider_name)
+    except Exception as exc:  # noqa: BLE001 - e.g. key not configured: tell the UI instead of a dead stream
+        yield AgentEvent(kind="error", data={"stage": "provider", "error": str(exc)})
+        yield AgentEvent(kind="done", data={})
+        return
     session = tools.Session()
     aoi_id = aoi_id or os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")
     deadline = time.time() + SESSION_DEADLINE_S

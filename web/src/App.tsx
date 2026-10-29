@@ -10,6 +10,7 @@ import { AgentPanel } from "./components/AgentPanel";
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
   const [provider, setProvider] = useState("fake");
+  const [judgeKeyRequired, setJudgeKeyRequired] = useState(false);
   const [ionToken, setIonToken] = useState("");
   const [runsBase, setRunsBase] = useState("/runs");
   const [run, setRun] = useState<RunManifest>();
@@ -18,7 +19,7 @@ export default function App() {
   const { t_s, playing } = useClock();
 
   useEffect(() => {
-    getConfig().then((h) => { setRunsBase(h.runs_base); setProvider(h.agent_provider); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
+    getConfig().then((h) => { setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
   }, []);
 
   const go = async () => {
@@ -55,7 +56,7 @@ export default function App() {
         <label>Drain capacity: x{drains.toFixed(1)} <input type="range" min={0.5} max={4} step={0.1} value={drains} onChange={(e) => setDrains(+e.target.value)} /></label><br />
         <button onClick={go}>Simulate</button>
         {run?.stats && <pre className="num" style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>{JSON.stringify(run.stats, null, 1)}</pre>}
-        <AgentPanel defaultProvider={provider} onRun={(id) => getRun(id).then((m) => { setRun(m); clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true }); })} />
+        <AgentPanel defaultProvider={provider} judgeKeyRequired={judgeKeyRequired} onRun={(id) => getRun(id).then((m) => { setRun(m); clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true }); })} />
         <footer style={{ fontSize: 11, marginTop: 16, opacity: 0.7 }}>
           Built with Muse Spark Open · © OpenStreetMap contributors · Not an operational warning system
         </footer>

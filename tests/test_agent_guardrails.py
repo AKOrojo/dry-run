@@ -286,3 +286,10 @@ def test_daily_cap_counts_paid_calls_only(client, monkeypatch):
     assert [post(client) for _ in range(5)] == [200] * 5
     key = {"X-Judge-Key": "judge"}
     assert [post(client, key, "meta") for _ in range(3)] == [200, 200, 429]
+
+
+def test_missing_provider_key_is_an_error_event(monkeypatch):
+    monkeypatch.delenv("META_API_KEY", raising=False)
+    events = list(loop.run("question", provider_name="meta"))
+    assert [e.kind for e in events] == ["error", "done"]
+    assert events[0].data["stage"] == "provider" and "META_API_KEY" in events[0].data["error"]
