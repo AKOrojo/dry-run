@@ -313,3 +313,40 @@ def test_parse_brief_reports_the_brief_error_not_json_noise():
     text = '{"title": "t", "summary": "s", "claims": [{"text": "x", "unit": "u", "source_run_id": "r", "field": "f"}]}'
     with pytest.raises(ValueError, match="provider"):
         loop._parse_brief(text, P())
+
+
+@pytest.mark.parametrize("aoi_id, status", [("../etc", 400), ("Bad_ID", 400), ("no-such-aoi", 404)])
+def test_agent_rejects_bad_aoi_before_any_call(client, aoi_id, status):
+    r = client.post("/api/agent", json={"question": "q", "provider": "fake", "aoi_id": aoi_id})
+    assert r.status_code == status
+
+
+def test_agent_passes_aoi_through(monkeypatch):
+    seen = []
+
+    def run(question, provider_name, aoi_id=None):
+        seen.append(aoi_id)
+        yield AgentEvent(kind="done", data={})
+
+    monkeypatch.setattr(loop, "run", run)
+    with TestClient(app) as c:
+        assert c.post("/api/agent", json={"question": "q", "provider": "fake", "aoi_id": fixtures.AOI_ID}).status_code == 200
+        assert c.post("/api/agent", json={"question": "q", "provider": "fake"}).status_code == 200
+    assert seen == [fixtures.AOI_ID, None]
+
+
+def test_aoi_info_exposes_river_inflows_and_event(monkeypatch):
+    from dryrun.agent import tools
+
+    info = tools.aoi_info(fixtures.AOI_ID)
+    assert info["has_river_inflows"] is False and "event" not in info
+
+    m = storage.load_aoi(fixtures.AOI_ID)
+    with_inflows = m.model_copy(update={"layers": {**m.layers, "inflows": "inflows.json"}})
+    event = {"name": "replay", "storm": {"total_mm": 1, "duration_h": 1}, "sim_hours": 1}
+    monkeypatch.setattr(storage, "load_aoi", lambda _id: with_inflows)
+    monkeypatch.setattr(storage, "load_aoi_file", lambda _id, layer:
+                        json.dumps({"event": event}).encode() if layer == "inflows"
+                        else storage.__dict__["_read_bytes"]("data", f"{_id}/{m.layers[layer]}"))
+    info = tools.aoi_info(fixtures.AOI_ID)
+    assert info["has_river_inflows"] is True and info["event"] == event

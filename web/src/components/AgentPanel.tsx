@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { askAgent, AgentEvent, getJudgeKey, setJudgeKey } from "../lib/api";
 
-export function AgentPanel({ onRun, defaultProvider, judgeKeyRequired = false }:
-  { onRun: (runId: string) => void; defaultProvider: string; judgeKeyRequired?: boolean }) {
+export function AgentPanel({ onRun, defaultProvider, aoiId, judgeKeyRequired = false }:
+  { onRun: (runId: string) => void; defaultProvider: string; aoiId?: string; judgeKeyRequired?: boolean }) {
   const [q, setQ] = useState("Does tripling drain capacity keep roads passable in a 120 mm / 3 h storm?");
   const [provider, setProvider] = useState(defaultProvider);
   useEffect(() => setProvider(defaultProvider), [defaultProvider]);
@@ -17,7 +17,7 @@ export function AgentPanel({ onRun, defaultProvider, judgeKeyRequired = false }:
   const ask = async () => {
     setBusy(true); setEvents([]); setErr(null);
     try {
-      for await (const ev of askAgent(q, provider)) {
+      for await (const ev of askAgent(q, provider, aoiId)) {
         setEvents((p) => [...p, ev]);
         if (ev.kind === "run_ready") onRun(ev.data.run_id);
       }

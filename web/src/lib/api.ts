@@ -62,9 +62,9 @@ export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunM
 export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
 
 /** POST /api/agent streams Server-Sent Events; EventSource can't POST, so read the stream manually. */
-export async function* askAgent(question: string, provider = "meta"): AsyncGenerator<AgentEvent> {
+export async function* askAgent(question: string, provider = "meta", aoi_id?: string): AsyncGenerator<AgentEvent> {
   const r = await fetch(`${API}/api/agent`, {
-    method: "POST", headers: { ...JSONH(), ...judge() }, body: JSON.stringify({ question, provider }),
+    method: "POST", headers: { ...JSONH(), ...judge() }, body: JSON.stringify({ question, provider, aoi_id }),
   });
   if (!r.ok) {
     const detail = await r.json().then((b) => b.detail, () => null);
