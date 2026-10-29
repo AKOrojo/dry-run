@@ -243,4 +243,9 @@ def _step_loops(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, 
 def _numba_step():
     import numba
 
-    return numba.njit(cache=True, nogil=True)(_step_loops)
+    try:
+        return numba.njit(cache=True, nogil=True)(_step_loops)
+    except RuntimeError as exc:  # no writable cache dir (read-only /app, no NUMBA_CACHE_DIR): compile every start
+        if "cannot cache" not in str(exc):
+            raise
+        return numba.njit(nogil=True)(_step_loops)

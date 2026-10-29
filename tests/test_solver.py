@@ -113,6 +113,32 @@ def test_high_tide_flows_in_through_boundary_cells_anywhere(kernel):
     assert abs(stored + led["boundary_outflow_m3"]) / stored < 1e-6
 
 
+@pytest.mark.skipif(len(KERNELS) < 2 or os.geteuid() == 0, reason="needs numba and a non-root user")
+def test_numba_runs_without_a_writable_cache(tmp_path):
+    # Production image: /app is read-only for uid 10001. cache=True must not crash the solver there.
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = tmp_path / "ro"
+    shutil.copytree(Path(solver.__file__).parents[1], src / "dryrun",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    for p in sorted(src.rglob("*"), reverse=True) + [src]:
+        p.chmod(p.stat().st_mode & ~0o222)
+    env = {k: v for k, v in os.environ.items() if k != "NUMBA_CACHE_DIR"}
+    nohome = str(src / "nohome")  # inside the read-only tree, so numba cannot create a user cache dir
+    env.update(HOME=nohome, XDG_CACHE_HOME=nohome, PYTHONPATH=str(src),
+               PYTHONDONTWRITEBYTECODE="1")
+    try:
+        r = subprocess.run([sys.executable, "-c", "from dryrun.sim.solver import warmup; warmup()"],
+                           cwd=tmp_path, env=env, capture_output=True, text=True, timeout=300)
+    finally:
+        for p in [src] + list(src.rglob("*")):
+            p.chmod(p.stat().st_mode | 0o200)
+    assert r.returncode == 0, r.stderr[-800:]
+
+
 def test_kernels_agree():
     if len(KERNELS) < 2:
         pytest.skip("numba not installed")
