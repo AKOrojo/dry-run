@@ -50,12 +50,58 @@ def get_area(run_id: str, place: str):
     return area_stats(run_id, place)
 
 
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+
 @router.post("/observe")
 async def observe(request: Request, file: UploadFile = File(...), lon: float = Form(...),
-                  lat: float = Form(...), run_id: str | None = Form(None)):
+                  lat: float = Form(...), run_id: str | None = Form(None),
+                  t_s: int | None = Form(None), source: str = Form("citizen_photo")):
     require_paid_access(request)
     limit(request, "observe", per_hour=20)  # SAM 3.1 + Spark vision cost money
-    raise HTTPException(501, "Eng C: SAM 3.1 observe pipeline lands Day 3-5")
+    import re
+
+    from starlette.concurrency import run_in_threadpool
+
+    from dryrun.meta import observe
+
+    if source not in {"citizen_photo", "drone_video", "satellite_chip"}:
+        raise HTTPException(400, "invalid source")
+    if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        raise HTTPException(400, "invalid coordinates")
+    if run_id is not None and not re.fullmatch(r"r_[0-9a-f]{16}", run_id):
+        raise HTTPException(400, "invalid run_id")
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(415, "unsupported image type")
+    image = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "image too large")
+    import httpx
+
+    try:
+        result = await run_in_threadpool(observe.observe, image, lon, lat, t_s, source, run_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except httpx.HTTPError as exc:  # Meta API down or rejecting: not the caller's fault
+        raise HTTPException(502, "model call failed; try again later") from exc
+    return result.model_dump()
+
+
+@router.get("/observations/{obs_id}/mask.png")
+def observation_mask(obs_id: str):
+    import re
+
+    from fastapi.responses import Response
+
+    from dryrun import storage
+
+    if not re.fullmatch(r"ob_[0-9a-f]{12}", obs_id):
+        raise HTTPException(404, "observation not found")
+    try:
+        png = storage.read_upload(f"observations/{obs_id}/mask.png")
+    except Exception as exc:  # noqa: BLE001 - missing object in local or GCS mode
+        raise HTTPException(404, "observation not found") from exc
+    return Response(png, media_type="image/png")
 
 
 @router.websocket("/voice")
