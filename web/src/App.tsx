@@ -12,6 +12,8 @@ export default function App() {
   const [provider, setProvider] = useState("fake");
   const [judgeKeyRequired, setJudgeKeyRequired] = useState(false);
   const [ionToken, setIonToken] = useState("");
+  const [buildingsUrl, setBuildingsUrl] = useState("");
+  const [buildingsStatus, setBuildingsStatus] = useState("loading…");
   const [runsBase, setRunsBase] = useState("/runs");
   const [run, setRun] = useState<RunManifest>();
   const [rain, setRain] = useState(120);
@@ -19,7 +21,7 @@ export default function App() {
   const { t_s, playing } = useClock();
 
   useEffect(() => {
-    getConfig().then((h) => { setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
+    getConfig().then((h) => { setBuildingsUrl(h.buildings_url); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
   }, []);
 
   const go = async () => {
@@ -40,7 +42,9 @@ export default function App() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", height: "100vh", fontFamily: "var(--font-sans)" }}>
       <div style={{ position: "relative" }}>
-        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} />}
+        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} buildingsUrl={buildingsUrl}
+          buildingDepthsUrl={run?.building_depths ? runFileUrl(runsBase, run.run_id, run.building_depths) : undefined}
+          onBuildingsStatus={setBuildingsStatus} />}
         {run?.backend === "fake" && <div className="badge" style={{ position: "absolute", top: 8, left: 8, background: "#b45309", color: "#fff", padding: "2px 8px" }}>PLACEHOLDER PHYSICS</div>}
         {aoi?.is_synthetic && <div style={{ position: "absolute", top: 8, right: 8, background: "#444", color: "#fff", padding: "2px 8px" }}>SYNTHETIC TERRAIN</div>}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 12, background: "rgba(0,0,0,.6)", color: "#fff" }}>
@@ -52,6 +56,7 @@ export default function App() {
       </div>
       <aside style={{ padding: 12, overflow: "auto", borderLeft: "1px solid #ddd" }}>
         <h3>Scenario</h3>
+        <div style={{ fontSize: 12, marginBottom: 8 }}>Buildings: {buildingsStatus}</div>
         <label>Rain (mm / 3 h): {rain} <input type="range" min={20} max={250} value={rain} onChange={(e) => setRain(+e.target.value)} /></label><br />
         <label>Drain capacity: x{drains.toFixed(1)} <input type="range" min={0.5} max={4} step={0.1} value={drains} onChange={(e) => setDrains(+e.target.value)} /></label><br />
         <button onClick={go}>Simulate</button>
