@@ -183,7 +183,8 @@ def config():
             # Runtime config for the web app (no rebuild needed to switch AOI/provider):
             "default_aoi": os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic"),
             "agent_provider": os.getenv("DRYRUN_AGENT_PROVIDER", "fake"),
-            "sovereign_provider_available": bool(_secret("BASETEN_API_KEY")),
+            # Sovereign mode = Muse Spark Open, via OpenRouter (prod) or Baseten (hackathon partner, pending approval).
+            "sovereign_provider_available": bool(_secret("OPENROUTER_API_KEY") or _secret("BASETEN_API_KEY")),
             # Paid providers need X-Judge-Key (or the team token): the UI shows a key box when this is true.
             "judge_key_required": ratelimit.paid_access_configured(),
             # Cesium ion tokens are public client tokens (restrict allowed URLs in the ion dashboard);

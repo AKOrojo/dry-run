@@ -36,6 +36,7 @@ jobs:
       AGENT_PROVIDER: ${{ vars.AGENT_PROVIDER }}
       DEFAULT_AOI: ${{ vars.DEFAULT_AOI }}
       BUILDINGS_URL: ${{ vars.BUILDINGS_URL }}
+      DEMO: ${{ vars.DEMO }}  # "1" keeps one instance warm (min-instances 1)
     # This job holds cloud credentials, so its actions are pinned to commits, not tags.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

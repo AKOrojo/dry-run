@@ -34,7 +34,9 @@ ENV_VARS+=",DRYRUN_DEFAULT_AOI=${DEFAULT_AOI:-fixture-synthetic},DRYRUN_AGENT_PE
 ENV_VARS+=",DRYRUN_AGENT_PER_DAY=${AGENT_PER_DAY:-300},DRYRUN_BUILDINGS_URL=${BUILDINGS_URL:-}"
 if [[ "${SIM_BACKEND:-fake}" == "fake" || "${AGENT_PROVIDER:-fake}" == "fake" ]]; then
   echo "!! deploying with SIM_BACKEND=${SIM_BACKEND:-fake} AGENT_PROVIDER=${AGENT_PROVIDER:-fake} (placeholder physics/agent)."
-  [[ "${DEMO:-0}" == "1" ]] && { echo "refusing: DEMO=1 must run solver + meta"; exit 1; }
+  # Demo days need real physics. The default agent provider stays fake on purpose: paid providers (meta, openrouter,
+  # baseten) are behind the judge key, so a paid default would 403 every visitor.
+  [[ "${DEMO:-0}" == "1" && "${SIM_BACKEND:-fake}" == "fake" ]] && { echo "refusing: DEMO=1 must run the solver"; exit 1; }
 fi
 
 gcloud builds submit --project "$PROJECT_ID" --config infra/cloudbuild.yaml \
@@ -46,7 +48,7 @@ gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image 
   --cpu 2 --memory 4Gi --concurrency 4 --timeout 900 --cpu-boost \
   --min-instances "$MIN" --max-instances 3 \
   --set-env-vars "$ENV_VARS" \
-  --set-secrets "META_API_KEY=meta-api-key:latest,BASETEN_API_KEY=baseten-api-key:latest,CESIUM_ION_TOKEN=cesium-ion-token:latest,DRYRUN_ADMIN_TOKEN=admin-token:latest,DRYRUN_JUDGE_TOKEN=judge-token:latest"
+  --set-secrets "META_API_KEY=meta-api-key:latest,BASETEN_API_KEY=baseten-api-key:latest,CESIUM_ION_TOKEN=cesium-ion-token:latest,DRYRUN_ADMIN_TOKEN=admin-token:latest,DRYRUN_JUDGE_TOKEN=judge-token:latest,OPENROUTER_API_KEY=openrouter-api-key:latest"
 
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
 echo "Deployed $TAG -> $URL"
