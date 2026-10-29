@@ -10,9 +10,11 @@ buildings      Google Open Buildings v3 (confidence >= 0.8, area >= 25 m2; agree
                buildings_index.json {"ids","row","col"} (serving path, no pandas) AND
                buildings_geojson (props id, height_m; 5-decimal coords; SAME ids; gzip it).
                Heights: Open Buildings 2.5D is Earth-Engine-only; without EE use 6 m for all (say so).
-shelters       schools / places of worship / community centres in the top 20% of the DEM AND within
-               300 m of a road node (routing skips any that are not), labelled "candidate shelter (assumed)".
-places         10-15 named neighbourhoods/corridors/low areas: Polygon only (no MultiPolygon), simplified
+shelters       schools / places of worship / community centres on the higher half of land (SHELTER_TOP_FRACTION)
+               AND within 300 m of a road node, labelled "candidate shelter (assumed)". Lagos is flat, so a fixed
+               height cut is a weak test: routing.evac also skips a shelter whose own cell is flooded at the
+               requested time. (The top-20% cut kept 6 of 30 in Lekki-Ajah and left most origins unroutable.)
+places         up to MAX_PLACES named neighbourhoods/corridors/low areas: Polygon only (no MultiPolygon), simplified
                to <= 20 vertices, props name + kind (neighbourhood|corridor|low_area|open_land). The agent
                targets interventions and area stats by these names; match meta/media.LAGOS_KEYWORDS.
                Include a few `open_land` places so the agent has somewhere sensible to put ponds.
@@ -41,13 +43,15 @@ from dryrun.contracts import GridSpec
 
 MIN_CONFIDENCE = 0.8
 MIN_AREA_M2 = 25.0
-BUILDING_CAP = 60_000          # agreed with B (UI budget); over it the largest footprints are kept
+BUILDING_CAP = 100_000         # UI budget; Lekki-Ajah has 68,929 after the filters (15 MB GeoJSON, under the
+#                                25 MB gzip-to-bucket threshold), so all are kept. Over it the largest are kept.
 DEFAULT_HEIGHT_M = 6.0         # no Earth Engine -> no 2.5D heights; the data card says so
-SHELTER_TOP_FRACTION = 0.20    # shelters must sit in the highest 20% of land
+SHELTER_TOP_FRACTION = 0.50    # static pre-filter; the real test is per run (evac skips flooded shelters)
 SHELTER_MAX_SNAP_M = 300.0     # = routing.evac.MAX_SNAP_M
 SHELTER_LABEL = "candidate shelter (assumed)"
 MAX_PLACE_VERTICES = 20
-MAX_PLACES = 15
+MAX_PLACES = 20               # every name the agent sees is one it can resolve (get_aoi_info lists them)
+MAX_CORRIDORS = 3
 PLACE_RADIUS_M = 1500.0        # point-only neighbourhoods: Voronoi cell clipped to this radius
 CORRIDOR_HALF_WIDTH_M = 150.0
 OPEN_LAND_MIN_M2 = 20_000.0    # 2 ha: big enough for a retention pond
@@ -57,7 +61,8 @@ DRIVE_HIGHWAYS = {
     "motorway", "motorway_link", "trunk", "trunk_link", "primary", "primary_link", "secondary",
     "secondary_link", "tertiary", "tertiary_link", "unclassified", "residential", "living_street", "service",
 }
-SHELTER_TAGS = {"amenity": ["school", "place_of_worship", "community_centre"]}
+SHELTER_TAGS = {"amenity": ["school", "place_of_worship", "community_centre"],
+                "building": ["school", "church", "mosque"]}  # some are mapped only as a building
 OPEN_LAND_TAGS = {"landuse": ["grass", "meadow", "greenfield", "brownfield", "recreation_ground"],
                   "leisure": ["park", "recreation_ground"], "natural": ["grassland", "scrub"]}
 
@@ -430,7 +435,9 @@ def _fetch_shelter_candidates(grid: GridSpec, features_xml: str | None = None) -
     for _, f in gdf.iterrows():
         pt = f.geometry.representative_point()
         name = f.get("name")
-        out.append({"name": name if isinstance(name, str) else None, "kind": f.get("amenity"),
+        kind = f.get("amenity") if isinstance(f.get("amenity"), str) else {"church": "place_of_worship",
+                "mosque": "place_of_worship"}.get(f.get("building"), f.get("building"))
+        out.append({"name": name if isinstance(name, str) else None, "kind": kind,
                     "lon": pt.x, "lat": pt.y})
     return out
 
@@ -474,7 +481,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
     for k, lines in by_name.items():
         g = unary_union(lines).buffer(CORRIDOR_HALF_WIDTH_M * deg).intersection(aoi)
         if not g.is_empty:
-            corridors.append({"name": k, "kind": "corridor", "ring": ring(g)})
+            corridors.append({"name": k, "kind": "corridor", "ring": ring(g), "area": g.area})
 
     land = _features(grid, OPEN_LAND_TAGS, features_xml)
     m2 = M_PER_DEG_LAT * _m_per_deg_lon(lat0)
@@ -498,9 +505,11 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
             label = f"Open land near {near}" + (f" {taken[near]}" if taken[near] > 1 else "")
         open_land.append({"name": label, "kind": "open_land", "ring": ring(g)})
 
-    # Keep room for open land: the agent needs somewhere sensible to put ponds.
-    head = (polys + corridors)[: MAX_PLACES - len(open_land)]
-    return head + open_land
+    # Corridors and open land get reserved slots (the agent needs the expressway and somewhere for ponds);
+    # neighbourhoods fill the rest.
+    corridors.sort(key=lambda p: -p.pop("area"))  # the longest roads first
+    corridors = corridors[:MAX_CORRIDORS]
+    return polys[: MAX_PLACES - len(corridors) - len(open_land)] + corridors + open_land
 
 
 def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,

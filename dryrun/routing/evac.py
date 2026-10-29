@@ -4,6 +4,7 @@ Graph contract (roads_graph layer): simple undirected nx.Graph; nodes have x=lon
 edges have length_m, `cells` = JSON [[row, col], ...] sampled along the geometry at <= 1 cell,
 `drive` and `bridge` flags. An edge is cut when its max depth (permanent water and bridges
 ignored) >= PASSABLE_M, when it crosses a pond, or when it crosses a road_closure area.
+A shelter whose own cell is flooded (>= exposure.FLOODED_M) at the routed frame is not a destination.
 """
 
 from __future__ import annotations
@@ -76,13 +77,17 @@ def route(req: RouteRequest) -> RouteResult:
         targets = {_nearest_node(aoi.aoi_id, *req.destination): None}
     else:
         targets = {}
+        depth = storage.load_depth(m.run_id, frame.depth)
         for f in json.loads(storage.load_aoi_file(aoi.aoi_id, "shelters"))["features"]:
+            p = f["properties"]
+            if "row" in p and depth[int(p["row"]), int(p["col"])] >= exposure.FLOODED_M:
+                continue  # a flooded shelter is no refuge
             try:  # one badly placed shelter must not break every route
                 targets[_nearest_node(aoi.aoi_id, *f["geometry"]["coordinates"])] = f["properties"]["name"]
             except ValueError:
                 continue
-        if not targets:
-            raise ValueError("no shelter is within reach of the road network")
+        if not targets:  # every shelter flooded or off-network: a real answer, not a bad request
+            return RouteResult(run_id=req.run_id, t_s=frame.t_s, reachable=False, edges_removed=len(cut))
 
     dist, paths = nx.single_source_dijkstra(g, src, weight="length_m")  # one pass for all shelters
     reach = [(dist[t], t, n) for t, n in targets.items() if t in dist]
