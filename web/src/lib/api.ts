@@ -55,8 +55,17 @@ async function j<T>(r: Response): Promise<T> {
 export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean }>);
 export const getAOIs = () => fetch(`${API}/api/aois`).then(j<{ aoi_id: string; name: string }[]>);
 export const getAOI = (id: string) => fetch(`${API}/api/aoi/${id}`).then(j<AOIManifest>);
-export const simulate = (s: ScenarioSpec) =>
-  fetch(`${API}/api/simulate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s) }).then(j<RunManifest>);
+export const simulate = async (s: ScenarioSpec) => {
+  const post = () => fetch(`${API}/api/simulate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s) });
+  let r = await post();
+  // Cloud Run answers a burst with a non-JSON 500/503 ("no available instance") while instances cold-start.
+  // Runs are content-addressed, so one retry is idempotent (a cache hit if the first attempt finished).
+  if ((r.status === 500 || r.status === 503) && !r.headers.get("content-type")?.includes("application/json")) {
+    await new Promise((ok) => setTimeout(ok, 5000));
+    r = await post();
+  }
+  return j<RunManifest>(r);
+};
 export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
 
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
