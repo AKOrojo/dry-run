@@ -53,6 +53,8 @@ async function j<T>(r: Response): Promise<T> {
 }
 
 export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean }>);
+export type Replay = { question: string; aoi_id: string; provider: string; model: string; recorded_at: string };
+export const getReplays = () => fetch(`${API}/api/replays`).then(j<Replay[]>);
 export const getAOIs = () => fetch(`${API}/api/aois`).then(j<{ aoi_id: string; name: string }[]>);
 export const getAOI = (id: string) => fetch(`${API}/api/aoi/${id}`).then(j<AOIManifest>);
 export const simulate = async (s: ScenarioSpec) => {

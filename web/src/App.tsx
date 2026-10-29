@@ -72,7 +72,7 @@ export default function App() {
         <label>Drain capacity: x{drains.toFixed(1)} <input type="range" min={0.5} max={4} step={0.1} value={drains} onChange={(e) => setDrains(+e.target.value)} /></label><br />
         <button onClick={go}>Simulate</button>
         {run?.stats && <pre className="num" style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>{JSON.stringify(run.stats, null, 1)}</pre>}
-        <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} judgeKeyRequired={judgeKeyRequired} onRun={(id) => getRun(id).then((m) => { setRun(m); clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true }); })} />
+        <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onRun={(id) => getRun(id).then((m) => { setRun(m); clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true }); })} />
         <footer style={{ fontSize: 11, marginTop: 16, opacity: 0.7 }}>
           Built with Muse Spark Open · © OpenStreetMap contributors · Not an operational warning system
         </footer>

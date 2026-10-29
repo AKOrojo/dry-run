@@ -1,0 +1,1897 @@
+{
+ "recorded_at": "2026-10-29T20:19:08+00:00",
+ "base": "https://dryrun-vcdpde6nnq-uc.a.run.app",
+ "provider": "meta",
+ "model": "muse-spark-1.3",
+ "aoi_id": "texas-guadalupe-v0",
+ "question": "Replay the 4 July 2025 Guadalupe flood: which camps and places along the South Fork flood, how deep, and which shelters stay reachable?",
+ "events": [
+  {
+   "t": 1.99,
+   "kind": "thought",
+   "data": {
+    "text": "Replaying the July 4th Guadalupe flood — mapping camps, depths, and shelter routes."
+   }
+  },
+  {
+   "t": 1.99,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_aoi_info",
+    "arguments": {
+     "aoi_id": "texas-guadalupe-v0"
+    }
+   }
+  },
+  {
+   "t": 2.11,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_aoi_info",
+    "result": {
+     "aoi_id": "texas-guadalupe-v0",
+     "name": "Guadalupe River, Hunt to Kerrville (Texas)",
+     "bounds_wgs84": [
+      -99.42,
+      29.99,
+      -99.15,
+      30.1
+     ],
+     "is_synthetic": false,
+     "has_river_inflows": true,
+     "places": [
+      {
+       "name": "Heart O’ the Hills Summer Camp for Girls",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.36418,
+        30.02312
+       ]
+      },
+      {
+       "name": "Camp Mystic Guadalupe River",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.37143,
+        30.0092
+       ]
+      },
+      {
+       "name": "Camp La Junta for Boys",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.3364,
+        30.06448
+       ]
+      },
+      {
+       "name": "Camp Waldemar",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.3946,
+        30.06324
+       ]
+      },
+      {
+       "name": "Camp Mystic Cypress Lake",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.3714,
+        30.0046
+       ]
+      },
+      {
+       "name": "Hunt",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.33567,
+        30.07017
+       ]
+      },
+      {
+       "name": "Ingram",
+       "kind": "neighbourhood",
+       "centroid": [
+        -99.23724,
+        30.0738
+       ]
+      },
+      {
+       "name": "Guadalupe River",
+       "kind": "corridor",
+       "centroid": [
+        -99.24691,
+        30.06644
+       ]
+      },
+      {
+       "name": "South Fork Guadalupe River",
+       "kind": "corridor",
+       "centroid": [
+        -99.38018,
+        30.01491
+       ]
+      },
+      {
+       "name": "North Fork Guadalupe River",
+       "kind": "corridor",
+       "centroid": [
+        -99.37615,
+        30.06707
+       ]
+      },
+      {
+       "name": "Open land near Heart O’ the Hills Summer Camp for Girls",
+       "kind": "open_land",
+       "centroid": [
+        -99.3496,
+        30.00398
+       ]
+      },
+      {
+       "name": "Open land near Camp Mystic Guadalupe River",
+       "kind": "open_land",
+       "centroid": [
+        -99.40338,
+        30.01001
+       ]
+      },
+      {
+       "name": "Open land near Heart O’ the Hills Summer Camp for Girls 2",
+       "kind": "open_land",
+       "centroid": [
+        -99.33371,
+        30.03252
+       ]
+      },
+      {
+       "name": "Open land near Heart O’ the Hills Summer Camp for Girls 3",
+       "kind": "open_land",
+       "centroid": [
+        -99.35194,
+        30.01642
+       ]
+      }
+     ],
+     "shelters": [
+      {
+       "name": "The Hunt School (candidate shelter (assumed))",
+       "lonlat": [
+        -99.338905,
+        30.069998
+       ]
+      },
+      {
+       "name": "The Church of Jesus Christ of Latter-day Saints (candidate shelter (assumed))",
+       "lonlat": [
+        -99.174301,
+        30.071889
+       ]
+      },
+      {
+       "name": "First Christian Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.177601,
+        30.0723
+       ]
+      },
+      {
+       "name": "CityWest Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.223617,
+        30.072227
+       ]
+      },
+      {
+       "name": "Junction Highway Church of Christ (candidate shelter (assumed))",
+       "lonlat": [
+        -99.203923,
+        30.073271
+       ]
+      },
+      {
+       "name": "St. Paul's Unted Methodist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.171941,
+        30.065776
+       ]
+      },
+      {
+       "name": "Nimitz Elementary School (candidate shelter (assumed))",
+       "lonlat": [
+        -99.151462,
+        30.024459
+       ]
+      },
+      {
+       "name": "Southern Oaks Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.151866,
+        30.02544
+       ]
+      },
+      {
+       "name": "Kingdom Hall of Jehovah's Witnesses (candidate shelter (assumed))",
+       "lonlat": [
+        -99.152022,
+        30.023497
+       ]
+      },
+      {
+       "name": "Fred H. Tally Elementary School (candidate shelter (assumed))",
+       "lonlat": [
+        -99.176729,
+        30.070464
+       ]
+      },
+      {
+       "name": "Starkey Elementary School (candidate shelter (assumed))",
+       "lonlat": [
+        -99.159292,
+        30.06379
+       ]
+      },
+      {
+       "name": "Riverside Church of Christ (candidate shelter (assumed))",
+       "lonlat": [
+        -99.154905,
+        30.068545
+       ]
+      },
+      {
+       "name": "Seventh-Day Adventist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.155795,
+        30.068147
+       ]
+      },
+      {
+       "name": "Ingram Elementary School (candidate shelter (assumed))",
+       "lonlat": [
+        -99.230355,
+        30.075045
+       ]
+      },
+      {
+       "name": "Trinity Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -99.154372,
+        30.062785
+       ]
+      },
+      {
+       "name": "Impact Christian Fellowship (candidate shelter (assumed))",
+       "lonlat": [
+        -99.18194,
+        30.073151
+       ]
+      },
+      {
+       "name": "Live Oak Church of Christ (candidate shelter (assumed))",
+       "lonlat": [
+        -99.151024,
+        30.071174
+       ]
+      },
+      {
+       "name": "First Presbyterian Church of Ingram (candidate shelter (assumed))",
+       "lonlat": [
+        -99.249906,
+        30.074567
+       ]
+      },
+      {
+       "name": "Grace Bible Chapel (candidate shelter (assumed))",
+       "lonlat": [
+        -99.153055,
+        30.029772
+       ]
+      }
+     ],
+     "presets": [
+      {
+       "label": "Guadalupe 4 Jul 2025 replay",
+       "aoi_id": "texas-guadalupe-v0",
+       "storm": {
+        "total_mm": 85,
+        "duration_h": 12
+       },
+       "sim_hours": 12
+      },
+      {
+       "label": "Guadalupe 4 Jul 2025, river only",
+       "aoi_id": "texas-guadalupe-v0",
+       "storm": {
+        "total_mm": 0,
+        "duration_h": 1
+       },
+       "sim_hours": 12
+      }
+     ]
+    }
+   }
+  },
+  {
+   "t": 5.25,
+   "kind": "thought",
+   "data": {
+    "text": "I've pinpointed the camps and corridors — now replaying the storm to gauge flood depths."
+   }
+  },
+  {
+   "t": 5.25,
+   "kind": "tool_call",
+   "data": {
+    "name": "run_simulation",
+    "arguments": {
+     "aoi_id": "texas-guadalupe-v0",
+     "label": "Guadalupe 4 Jul 2025 replay",
+     "sim_hours": 12.0,
+     "storm": {
+      "duration_h": 12,
+      "total_mm": 85
+     }
+    }
+   }
+  },
+  {
+   "t": 5.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "run_simulation",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "status": "done",
+     "backend": "solver",
+     "stats": {
+      "run_id": "r_cfef067dcc52b9c2",
+      "buildings_flooded": 1863,
+      "buildings_flooded_severe": 1637,
+      "buildings_flooded_own_cell": 1063,
+      "road_km_impassable": 114.865,
+      "people_exposed": 1067,
+      "flooded_area_km2": 11.9377,
+      "max_depth_m": 13.109,
+      "peak_t_s": 23400,
+      "rain_volume_m3": 26892507.6,
+      "inflow_volume_m3": 163278626.1,
+      "drained_volume_m3": 3369.2,
+      "infiltrated_volume_m3": 28044822.7,
+      "stored_volume_end_m3": 44994375.3,
+      "boundary_outflow_m3": 117128566.5,
+      "mass_balance_error_pct": -0.0,
+      "buildings_in_ponds": 0,
+      "passability_threshold_m": 0.3,
+      "is_surrogate": false
+     },
+     "error": null
+    }
+   }
+  },
+  {
+   "t": 5.45,
+   "kind": "run_ready",
+   "data": {
+    "run_id": "r_cfef067dcc52b9c2"
+   }
+  },
+  {
+   "t": 9.57,
+   "kind": "thought",
+   "data": {
+    "text": "Baseline replay complete — now checking flood impacts camp by camp."
+   }
+  },
+  {
+   "t": 9.57,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "South Fork Guadalupe River",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 11.13,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "South Fork Guadalupe River",
+     "buildings_flooded": 134,
+     "buildings_flooded_own_cell": 129,
+     "people_exposed": 60,
+     "road_km_impassable": 21.275,
+     "max_depth_m": 12.188,
+     "flooded_area_km2": 1.2431
+    }
+   }
+  },
+  {
+   "t": 11.13,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Camp Mystic Guadalupe River",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 11.32,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Camp Mystic Guadalupe River",
+     "buildings_flooded": 33,
+     "buildings_flooded_own_cell": 30,
+     "people_exposed": 10,
+     "road_km_impassable": 2.765,
+     "max_depth_m": 13.109,
+     "flooded_area_km2": 0.1283
+    }
+   }
+  },
+  {
+   "t": 11.32,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Camp Mystic Cypress Lake",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 11.59,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Camp Mystic Cypress Lake",
+     "buildings_flooded": 17,
+     "buildings_flooded_own_cell": 11,
+     "people_exposed": 0,
+     "road_km_impassable": 0.977,
+     "max_depth_m": 5.531,
+     "flooded_area_km2": 0.0559
+    }
+   }
+  },
+  {
+   "t": 11.59,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Heart O’ the Hills Summer Camp for Girls",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 11.78,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Heart O’ the Hills Summer Camp for Girls",
+     "buildings_flooded": 12,
+     "buildings_flooded_own_cell": 8,
+     "people_exposed": 6,
+     "road_km_impassable": 1.566,
+     "max_depth_m": 9.445,
+     "flooded_area_km2": 0.0395
+    }
+   }
+  },
+  {
+   "t": 11.78,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Camp La Junta for Boys",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 11.97,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Camp La Junta for Boys",
+     "buildings_flooded": 30,
+     "buildings_flooded_own_cell": 13,
+     "people_exposed": 13,
+     "road_km_impassable": 2.749,
+     "max_depth_m": 10.445,
+     "flooded_area_km2": 0.1644
+    }
+   }
+  },
+  {
+   "t": 11.97,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Camp Waldemar",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 12.16,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Camp Waldemar",
+     "buildings_flooded": 26,
+     "buildings_flooded_own_cell": 7,
+     "people_exposed": 8,
+     "road_km_impassable": 5.475,
+     "max_depth_m": 6.941,
+     "flooded_area_km2": 0.2466
+    }
+   }
+  },
+  {
+   "t": 14.21,
+   "kind": "thought",
+   "data": {
+    "text": "South Fork camps show severe flooding — now checking nearby towns and shelter access."
+   }
+  },
+  {
+   "t": 14.21,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Guadalupe River",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 14.41,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Guadalupe River",
+     "buildings_flooded": 300,
+     "buildings_flooded_own_cell": 211,
+     "people_exposed": 229,
+     "road_km_impassable": 31.303,
+     "max_depth_m": 10.625,
+     "flooded_area_km2": 2.7098
+    }
+   }
+  },
+  {
+   "t": 14.41,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "North Fork Guadalupe River",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 14.59,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "North Fork Guadalupe River",
+     "buildings_flooded": 43,
+     "buildings_flooded_own_cell": 31,
+     "people_exposed": 15,
+     "road_km_impassable": 11.11,
+     "max_depth_m": 6.941,
+     "flooded_area_km2": 1.299
+    }
+   }
+  },
+  {
+   "t": 14.59,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Hunt",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 14.78,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Hunt",
+     "buildings_flooded": 187,
+     "buildings_flooded_own_cell": 109,
+     "people_exposed": 103,
+     "road_km_impassable": 13.244,
+     "max_depth_m": 10.445,
+     "flooded_area_km2": 1.4766
+    }
+   }
+  },
+  {
+   "t": 14.78,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Ingram",
+     "run_id": "r_cfef067dcc52b9c2"
+    }
+   }
+  },
+  {
+   "t": 14.94,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_cfef067dcc52b9c2",
+     "place": "Ingram",
+     "buildings_flooded": 265,
+     "buildings_flooded_own_cell": 152,
+     "people_exposed": 164,
+     "road_km_impassable": 9.691,
+     "max_depth_m": 7.988,
+     "flooded_area_km2": 0.957
+    }
+   }
+  },
+  {
+   "t": 18.49,
+   "kind": "thought",
+   "data": {
+    "text": "Main riverside towns also flood hard — now testing if evacuation routes stay open."
+   }
+  },
+  {
+   "t": 18.49,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.37143,
+      30.0092
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 18.77,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_bc78617d1dd8",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": false,
+     "path": [],
+     "length_km": null,
+     "eta_min": null,
+     "edges_removed": 874,
+     "destination_name": null
+    }
+   }
+  },
+  {
+   "t": 18.77,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.36418,
+      30.02312
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 18.92,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_fa0f3f9ff42a",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": false,
+     "path": [],
+     "length_km": null,
+     "eta_min": null,
+     "edges_removed": 874,
+     "destination_name": null
+    }
+   }
+  },
+  {
+   "t": 18.92,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.3364,
+      30.06448
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 19.07,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_3d22dfb68005",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": false,
+     "path": [],
+     "length_km": null,
+     "eta_min": null,
+     "edges_removed": 874,
+     "destination_name": null
+    }
+   }
+  },
+  {
+   "t": 19.07,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.3946,
+      30.06324
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 19.23,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_afdd6dfe632b",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": false,
+     "path": [],
+     "length_km": null,
+     "eta_min": null,
+     "edges_removed": 874,
+     "destination_name": null
+    }
+   }
+  },
+  {
+   "t": 23.08,
+   "kind": "thought",
+   "data": {
+    "text": "No shelter reachable at peak flood — checking whether any escape windows exist earlier."
+   }
+  },
+  {
+   "t": 23.09,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.37143,
+      30.0092
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 0
+    }
+   }
+  },
+  {
+   "t": 23.37,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_b838d7627481",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 0,
+     "reachable": true,
+     "path": [
+      [
+       -99.3713441,
+       30.0094546
+      ],
+      [
+       -99.3717139,
+       30.0097883
+      ],
+      [
+       -99.3722526,
+       30.0100687
+      ],
+      [
+       -99.3745032,
+       30.0114778
+      ],
+      [
+       -99.3744724,
+       30.011875
+      ],
+      [
+       -99.3680417,
+       30.011102
+      ],
+      [
+       -99.3658889,
+       30.0134931
+      ],
+      [
+       -99.365694,
+       30.0139847
+      ],
+      [
+       -99.3653222,
+       30.0166292
+      ],
+      [
+       -99.3653227,
+       30.0172925
+      ],
+      [
+       -99.3651408,
+       30.0182782
+      ],
+      [
+       -99.364931,
+       30.0188754
+      ],
+      [
+       -99.3635732,
+       30.0214308
+      ],
+      [
+       -99.363439,
+       30.0222443
+      ],
+      [
+       -99.3635552,
+       30.024367
+      ],
+      [
+       -99.363348,
+       30.0256251
+      ],
+      [
+       -99.3614659,
+       30.0285977
+      ],
+      [
+       -99.3603675,
+       30.0298945
+      ],
+      [
+       -99.3600539,
+       30.0305494
+      ],
+      [
+       -99.3601731,
+       30.0311461
+      ],
+      [
+       -99.3611001,
+       30.0327536
+      ],
+      [
+       -99.361996,
+       30.034531
+      ],
+      [
+       -99.3620176,
+       30.0348008
+      ],
+      [
+       -99.3618523,
+       30.0383378
+      ],
+      [
+       -99.3618741,
+       30.0385274
+      ],
+      [
+       -99.3618791,
+       30.0386309
+      ],
+      [
+       -99.3614193,
+       30.039795
+      ],
+      [
+       -99.3609059,
+       30.0400457
+      ],
+      [
+       -99.3605742,
+       30.0403285
+      ],
+      [
+       -99.360122,
+       30.041042
+      ],
+      [
+       -99.3593435,
+       30.0416107
+      ],
+      [
+       -99.3584548,
+       30.0421903
+      ],
+      [
+       -99.3572465,
+       30.0428955
+      ],
+      [
+       -99.356607,
+       30.04331
+      ],
+      [
+       -99.355673,
+       30.0438377
+      ],
+      [
+       -99.3528482,
+       30.0450758
+      ],
+      [
+       -99.3511048,
+       30.0458177
+      ],
+      [
+       -99.350515,
+       30.046254
+      ],
+      [
+       -99.348542,
+       30.047768
+      ],
+      [
+       -99.3484171,
+       30.047863
+      ],
+      [
+       -99.3472394,
+       30.0487594
+      ],
+      [
+       -99.3440516,
+       30.051132
+      ],
+      [
+       -99.3432417,
+       30.0523385
+      ],
+      [
+       -99.3431104,
+       30.0539819
+      ],
+      [
+       -99.342784,
+       30.0548151
+      ],
+      [
+       -99.3419159,
+       30.056334
+      ],
+      [
+       -99.3420348,
+       30.058723
+      ],
+      [
+       -99.3420812,
+       30.0597539
+      ],
+      [
+       -99.3420773,
+       30.0606249
+      ],
+      [
+       -99.3420694,
+       30.0606964
+      ],
+      [
+       -99.341928,
+       30.0616559
+      ],
+      [
+       -99.3413045,
+       30.0633422
+      ],
+      [
+       -99.339948,
+       30.064505
+      ],
+      [
+       -99.3388653,
+       30.0653491
+      ],
+      [
+       -99.3383684,
+       30.0657315
+      ],
+      [
+       -99.3370377,
+       30.0669176
+      ],
+      [
+       -99.335538,
+       30.0685632
+      ],
+      [
+       -99.3371051,
+       30.0691042
+      ],
+      [
+       -99.3386404,
+       30.0696357
+      ]
+     ],
+     "length_km": 9.245,
+     "eta_min": 138.7,
+     "edges_removed": 0,
+     "destination_name": "The Hunt School (candidate shelter (assumed))"
+    }
+   }
+  },
+  {
+   "t": 23.37,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.37143,
+      30.0092
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 7200
+    }
+   }
+  },
+  {
+   "t": 23.66,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_d6d0c6374635",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 7200,
+     "reachable": true,
+     "path": [
+      [
+       -99.3713441,
+       30.0094546
+      ],
+      [
+       -99.3717139,
+       30.0097883
+      ],
+      [
+       -99.3722526,
+       30.0100687
+      ],
+      [
+       -99.3745032,
+       30.0114778
+      ],
+      [
+       -99.3744724,
+       30.011875
+      ],
+      [
+       -99.3680417,
+       30.011102
+      ],
+      [
+       -99.3658889,
+       30.0134931
+      ],
+      [
+       -99.365694,
+       30.0139847
+      ],
+      [
+       -99.3653222,
+       30.0166292
+      ],
+      [
+       -99.3653227,
+       30.0172925
+      ],
+      [
+       -99.3651408,
+       30.0182782
+      ],
+      [
+       -99.364931,
+       30.0188754
+      ],
+      [
+       -99.3635732,
+       30.0214308
+      ],
+      [
+       -99.363439,
+       30.0222443
+      ],
+      [
+       -99.3635552,
+       30.024367
+      ],
+      [
+       -99.363348,
+       30.0256251
+      ],
+      [
+       -99.3614659,
+       30.0285977
+      ],
+      [
+       -99.3603675,
+       30.0298945
+      ],
+      [
+       -99.3600539,
+       30.0305494
+      ],
+      [
+       -99.3601731,
+       30.0311461
+      ],
+      [
+       -99.3611001,
+       30.0327536
+      ],
+      [
+       -99.361996,
+       30.034531
+      ],
+      [
+       -99.3620176,
+       30.0348008
+      ],
+      [
+       -99.3618523,
+       30.0383378
+      ],
+      [
+       -99.3618741,
+       30.0385274
+      ],
+      [
+       -99.3618791,
+       30.0386309
+      ],
+      [
+       -99.3614193,
+       30.039795
+      ],
+      [
+       -99.3609059,
+       30.0400457
+      ],
+      [
+       -99.3605742,
+       30.0403285
+      ],
+      [
+       -99.360122,
+       30.041042
+      ],
+      [
+       -99.3593435,
+       30.0416107
+      ],
+      [
+       -99.3584548,
+       30.0421903
+      ],
+      [
+       -99.3572465,
+       30.0428955
+      ],
+      [
+       -99.356607,
+       30.04331
+      ],
+      [
+       -99.355673,
+       30.0438377
+      ],
+      [
+       -99.3528482,
+       30.0450758
+      ],
+      [
+       -99.3511048,
+       30.0458177
+      ],
+      [
+       -99.350515,
+       30.046254
+      ],
+      [
+       -99.348542,
+       30.047768
+      ],
+      [
+       -99.3484171,
+       30.047863
+      ],
+      [
+       -99.3472394,
+       30.0487594
+      ],
+      [
+       -99.3440516,
+       30.051132
+      ],
+      [
+       -99.3432417,
+       30.0523385
+      ],
+      [
+       -99.3431104,
+       30.0539819
+      ],
+      [
+       -99.342784,
+       30.0548151
+      ],
+      [
+       -99.3419159,
+       30.056334
+      ],
+      [
+       -99.3420348,
+       30.058723
+      ],
+      [
+       -99.3420812,
+       30.0597539
+      ],
+      [
+       -99.3420773,
+       30.0606249
+      ],
+      [
+       -99.3420694,
+       30.0606964
+      ],
+      [
+       -99.341928,
+       30.0616559
+      ],
+      [
+       -99.3413045,
+       30.0633422
+      ],
+      [
+       -99.339948,
+       30.064505
+      ],
+      [
+       -99.3388653,
+       30.0653491
+      ],
+      [
+       -99.3383684,
+       30.0657315
+      ],
+      [
+       -99.3370377,
+       30.0669176
+      ],
+      [
+       -99.335538,
+       30.0685632
+      ],
+      [
+       -99.3371051,
+       30.0691042
+      ],
+      [
+       -99.3386404,
+       30.0696357
+      ]
+     ],
+     "length_km": 9.245,
+     "eta_min": 138.7,
+     "edges_removed": 60,
+     "destination_name": "The Hunt School (candidate shelter (assumed))"
+    }
+   }
+  },
+  {
+   "t": 23.66,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.33567,
+      30.07017
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 23.83,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_5464f54c177f",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": true,
+     "path": [
+      [
+       -99.3366,
+       30.070508
+      ],
+      [
+       -99.3380345,
+       30.0710498
+      ],
+      [
+       -99.3386404,
+       30.0696357
+      ]
+     ],
+     "length_km": 0.319,
+     "eta_min": 4.8,
+     "edges_removed": 874,
+     "destination_name": "The Hunt School (candidate shelter (assumed))"
+    }
+   }
+  },
+  {
+   "t": 23.83,
+   "kind": "tool_call",
+   "data": {
+    "name": "compute_route",
+    "arguments": {
+     "origin": [
+      -99.23724,
+      30.0738
+     ],
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400
+    }
+   }
+  },
+  {
+   "t": 24.03,
+   "kind": "tool_result",
+   "data": {
+    "name": "compute_route",
+    "result": {
+     "route_id": "rt_891eadf119e0",
+     "run_id": "r_cfef067dcc52b9c2",
+     "t_s": 23400,
+     "reachable": true,
+     "path": [
+      [
+       -99.237285,
+       30.074317
+      ],
+      [
+       -99.2363629,
+       30.0736925
+      ],
+      [
+       -99.235878,
+       30.073671
+      ],
+      [
+       -99.23531,
+       30.073645
+      ],
+      [
+       -99.2351393,
+       30.0736373
+      ],
+      [
+       -99.2346151,
+       30.0736137
+      ],
+      [
+       -99.2344156,
+       30.0736047
+      ],
+      [
+       -99.2338842,
+       30.0735778
+      ],
+      [
+       -99.2337749,
+       30.0735712
+      ],
+      [
+       -99.233706,
+       30.073567
+      ],
+      [
+       -99.233489,
+       30.0735538
+      ],
+      [
+       -99.232775,
+       30.073514
+      ],
+      [
+       -99.232417,
+       30.073497
+      ],
+      [
+       -99.231709,
+       30.075311
+      ],
+      [
+       -99.231634,
+       30.07572
+      ],
+      [
+       -99.23143,
+       30.075681
+      ],
+      [
+       -99.2306574,
+       30.0752316
+      ],
+      [
+       -99.2304773,
+       30.0751767
+      ]
+     ],
+     "length_km": 0.889,
+     "eta_min": 13.3,
+     "edges_removed": 874,
+     "destination_name": "Ingram Elementary School (candidate shelter (assumed))"
+    }
+   }
+  },
+  {
+   "t": 34.7,
+   "kind": "thought",
+   "data": {
+    "text": "Replay run for **4 Jul 2025 Guadalupe** completed:\n\n**Run `r_cfef067dcc52b9c2`** - `85 mm / 12h + gauged river inflows`, `sim_hours 12`\n> `has_river_inflows = true` - inflows are built into every run.\n\nOverall:\n* `buildings_flooded: 1863`, `severe: 1637`, `own_cell: 1063`\n* `people_exposed: 1067`\n* `road_km_impassable: 114.865 km` at 0.3m threshold\n* `flooded_area_km2: 11.9377`, `max_depth_m: 13.109`\n* `peak_t_s: 23400` = 6.5h after storm start\n* `rain_volume_m3: 26892507.6` vs `inflow_volume_m3: 163278626.1` - inflow dominates ~6x rain. Planning model, not a forecast.\n\n### South Fork - camps and corridors\n\nAll South Fork places flood severely:\n\n**South Fork Guadalupe River corridor:**\n* `buildings_flooded: 134`, `own_cell: 129`, `people: 60`\n* `road_km_impassable: 21.275`, `flooded_area_km2: 1.2431`\n* `max_depth_m: 12.188`\n\n**Camp Mystic Guadalupe River - centroid [-99.37143,30.0092]:**\n* `buildings_flooded: 33`, `own_cell: 30`, `people: 10`\n* `road_km_impassable: 2.765`, `flooded_area_km2: 0.1283`\n* `max_depth_m: 13.109` - deepest point in study area\n\n**Camp Mystic Cypress Lake:**\n* `buildings_flooded: 17`, `own_cell: 11`, `people: 0`\n* `road_km_impassable: 0.977`, `flooded_area_km2: 0.0559`\n* `max_depth_m: 5.531`\n\n**Heart O' the Hills Summer Camp for Girls:**\n* `buildings_flooded: 12`, `own_cell: 8`, `people: 6`\n* `road_km_impassable: 1.566`, `flooded_area_km2: 0.0395`\n* `max_depth_m: 9.445`\n\nOther camps in AOI:\n\n**Camp La Junta for Boys:**\n* `33? No: 30 flooded, 13 own_cell, 13 people, 2.749 km road, max 10.445 m, 0.1644 km2`\n\n**Camp Waldemar:**\n* `26 flooded, 7 own_cell, 8 people, 5.475 km road, max 6.941 m, 0.2466 km2`\n\nContext corridors / towns in same run:\n* **Guadalupe River:** `300 flooded, 211 own_cell, 229 people, 31.303 km road, max 10.625 m, 2.7098 km2`\n* **North Fork Guadalupe River:** `43 flooded, 31 own_cell, 15 people, 11.11 km road, max 6.941 m, 1.299 km2`\n* **Hunt:** `187 flooded, 109 own_cell, 103 people, 13.244 km road, max 10.445 m, 1.4766 km2`\n* **Ingram:** `265 flooded, 152 own_cell, 164 people, 9.691 km road, max 7.988 m, 0.957 km2`\n\n> `buildings_flooded` = footprint touches flood, `own_cell` = building cell itself wet.\n\n### Shelters reachable?\n\nTested at peak `t_s=23400` in same run `r_cfef067dcc52b9c2`:\n\nFrom South Fork camps - **NOT reachable to any shelter at peak:**\n* `rt_bc78617d1dd8` - Camp Mystic Guadalupe River -> `reachable:false`, `edges_removed:874`\n* `rt_fa0f3f9ff42a` - Heart O' the Hills -> `reachable:false`\n* `rt_3d22dfb68005` - Camp La Junta -> `reachable:false`\n* `rt_afdd6dfe632b` - Camp Waldemar -> `reachable:false`\n\nEarly window from Mystic existed, then closed:\n* `rt_b838d7627481` - `t_s=0`, Mystic -> **The Hunt School (candidate shelter (assumed))** `reachable:true, 9.245 km, 138.7 min`\n* `rt_d6d0c6374635` - `t_s=7200` (2h), same path still `reachable:true, 9.245 km, 138.7 min, edges_removed:60`\n* By `t_s=23400` same origin unreachable.\n\nTown centres retain very local access at peak:\n* `rt_5464f54c177f` - Hunt centroid -> **The Hunt School** `reachable:true, 0.319 km, 4.8 min`\n* `rt_891eadf119e0` - Ingram centroid -> **Ingram Elementary School** `reachable:true, 0.889 km, 13.3 min`\n\nInterpretation: in this replay all named camps along the South Fork and both Forks/main stem flood with multi-metre maxima and km of impassable road. At peak flow the South Fork camps are isolated from the shelter network, while Hunt and Ingram retain short routes to their nearest assumed shelters. Early evacuation before peak was the only modelled window from Camp Mystic to Hunt School.\n"
+   }
+  },
+  {
+   "t": 67.31,
+   "kind": "brief",
+   "data": {
+    "title": "Guadalupe South Fork camps flood replay with depths and shelter reachability",
+    "summary": "Replay of the historic Guadalupe flood shows extreme river driven flooding along the South Fork corridor and through Hunt toward Ingram, with deep water at all riverside camps and many buildings exposed, plus long stretches of impassable road. At peak water camp evacuation paths to shelters are cut, while early in the event a path north to the Hunt shelter is open, and town centres near Hunt and Ingram retain short local access to nearby shelters.",
+    "claims": [
+     {
+      "text": "buildings with flood water close by across study area in replay",
+      "value": 1863.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building across study area in replay",
+      "value": 1063.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth across study area in replay",
+      "value": 13.109,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "impassable road length across study area in replay",
+      "value": 114.865,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "road_km_impassable",
+      "verified": true
+     },
+     {
+      "text": "flooded area extent across study area in replay",
+      "value": 11.938,
+      "model_value": null,
+      "unit": "sq km",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "flooded_area_km2",
+      "verified": true
+     },
+     {
+      "text": "people exposed across study area in replay",
+      "value": 1067.0,
+      "model_value": null,
+      "unit": "people",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "people_exposed",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by along South Fork corridor",
+      "value": 134.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:South Fork Guadalupe River:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building along South Fork corridor",
+      "value": 129.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:South Fork Guadalupe River:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth along South Fork corridor",
+      "value": 12.188,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:South Fork Guadalupe River:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "impassable road length along South Fork corridor",
+      "value": 21.275,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:South Fork Guadalupe River:road_km_impassable",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Camp Mystic Guadalupe River",
+      "value": 33.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Guadalupe River:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Camp Mystic Guadalupe River",
+      "value": 30.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Guadalupe River:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth at Camp Mystic Guadalupe River",
+      "value": 13.109,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Guadalupe River:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "impassable road length at Camp Mystic Guadalupe River",
+      "value": 2.765,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Guadalupe River:road_km_impassable",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Camp Mystic Cypress Lake",
+      "value": 17.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Cypress Lake:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Camp Mystic Cypress Lake",
+      "value": 11.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Cypress Lake:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth at Camp Mystic Cypress Lake",
+      "value": 5.531,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Mystic Cypress Lake:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Heart camp for girls",
+      "value": 12.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Heart camp for girls",
+      "value": 8.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth at Heart camp for girls",
+      "value": 9.445,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Camp La Junta for boys",
+      "value": 30.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp La Junta for Boys:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Camp La Junta for boys",
+      "value": 13.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp La Junta for Boys:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth at Camp La Junta for boys",
+      "value": 10.445,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp La Junta for Boys:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Camp Waldemar",
+      "value": 26.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Waldemar:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Camp Waldemar",
+      "value": 7.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Waldemar:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth at Camp Waldemar",
+      "value": 6.941,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Camp Waldemar:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Hunt",
+      "value": 187.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Hunt:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Hunt",
+      "value": 109.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Hunt:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by at Ingram",
+      "value": 265.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Ingram:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building at Ingram",
+      "value": 152.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Ingram:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by along Guadalupe River corridor",
+      "value": 300.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Guadalupe River:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building along Guadalupe River corridor",
+      "value": 211.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "area:Guadalupe River:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "evacuation travel time from Camp Mystic to Hunt shelter at start",
+      "value": 138.7,
+      "model_value": null,
+      "unit": "min",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_b838d7627481:eta_min",
+      "verified": true
+     },
+     {
+      "text": "evacuation travel time from Camp Mystic to Hunt shelter early in event",
+      "value": 138.7,
+      "model_value": null,
+      "unit": "min",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_d6d0c6374635:eta_min",
+      "verified": true
+     },
+     {
+      "text": "evacuation travel time from Hunt town centre to Hunt shelter at peak",
+      "value": 4.8,
+      "model_value": null,
+      "unit": "min",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_5464f54c177f:eta_min",
+      "verified": true
+     },
+     {
+      "text": "evacuation travel time from Ingram town centre to Ingram shelter at peak",
+      "value": 13.3,
+      "model_value": null,
+      "unit": "min",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_891eadf119e0:eta_min",
+      "verified": true
+     },
+     {
+      "text": "blocked edges for evacuation attempt from Camp Mystic at peak",
+      "value": 874.0,
+      "model_value": null,
+      "unit": "edges",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_bc78617d1dd8:edges_removed",
+      "verified": true
+     },
+     {
+      "text": "blocked edges for evacuation attempt from Heart camp at peak",
+      "value": 874.0,
+      "model_value": null,
+      "unit": "edges",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_fa0f3f9ff42a:edges_removed",
+      "verified": true
+     },
+     {
+      "text": "blocked edges for evacuation attempt from La Junta camp at peak",
+      "value": 874.0,
+      "model_value": null,
+      "unit": "edges",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_3d22dfb68005:edges_removed",
+      "verified": true
+     },
+     {
+      "text": "blocked edges for evacuation attempt from Waldemar camp at peak",
+      "value": 874.0,
+      "model_value": null,
+      "unit": "edges",
+      "source_run_id": "r_cfef067dcc52b9c2",
+      "field": "route:rt_afdd6dfe632b:edges_removed",
+      "verified": true
+     }
+    ],
+    "recommended_run_id": "r_cfef067dcc52b9c2",
+    "model": "muse-spark-1.3",
+    "provider": "meta",
+    "prose_has_digits": false
+   }
+  },
+  {
+   "t": 67.31,
+   "kind": "done",
+   "data": {}
+  }
+ ]
+}

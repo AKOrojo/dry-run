@@ -373,3 +373,35 @@ def test_verifier_place_names(place, ok):
     from dryrun.agent.verify import _PLACE
 
     assert bool(_PLACE.match(place)) is ok
+
+
+REC = {"question": "Replay me", "aoi_id": fixtures.AOI_ID, "provider": "meta", "model": "muse-spark-1.3",
+       "recorded_at": "2026-10-29T20:00:00+00:00",
+       "events": [{"t": 1.0, "kind": "tool_call", "data": {"name": "get_aoi_info"}},
+                  {"t": 60.0, "kind": "brief", "data": {"title": "t", "claims": []}},
+                  {"t": 60.5, "kind": "done", "data": {}}]}
+
+
+def test_replay_is_labelled_and_shortens_waits():
+    from dryrun.agent import replay
+
+    slept = []
+    evs = list(replay.stream(REC, sleep=slept.append))
+    assert evs[0].kind == "thought" and evs[0].data["replay"] and "not a live model call" in evs[0].data["text"]
+    assert [e.kind for e in evs[1:]] == ["tool_call", "brief", "done"]
+    assert slept == [1.0, replay.MAX_GAP_S, 0.5]
+
+
+def test_replay_needs_no_judge_key_and_only_serves_recordings(monkeypatch):
+    from dryrun.agent import replay
+
+    monkeypatch.setattr(ratelimit, "_JUDGE", "judge")
+    monkeypatch.setattr(replay, "recordings", lambda: [REC])
+    monkeypatch.setattr(replay.time, "sleep", lambda s: None)
+    with TestClient(app) as c:
+        ok = c.post("/api/agent", json={"question": "  replay   ME ", "provider": "replay"})
+        missing = c.post("/api/agent", json={"question": "something else", "provider": "replay"})
+        listed = c.get("/api/replays").json()
+    assert ok.status_code == 200 and '"replay":true' in ok.text and '"kind":"done"' in ok.text
+    assert missing.status_code == 404
+    assert listed == [{k: REC[k] for k in ("question", "aoi_id", "provider", "model", "recorded_at")}]

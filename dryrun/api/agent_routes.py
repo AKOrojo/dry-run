@@ -15,20 +15,26 @@ router = APIRouter(prefix="/api")
 
 class AgentRequest(BaseModel):
     question: str = Field(max_length=1000)
-    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | openrouter | fake
+    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | openrouter | fake | replay
     aoi_id: str | None = None  # default: DRYRUN_DEFAULT_AOI
 
 
 @router.post("/agent")
 def agent(req: AgentRequest, request: Request):
+    from dryrun.agent import replay
     from dryrun.agent.loop import run
     from dryrun.api.main import _check_aoi
 
     if req.aoi_id is not None:
         _check_aoi(req.aoi_id)  # 400 malformed, 404 unknown, before any paid call
-    if req.provider not in {"meta", "baseten", "openrouter", "fake"}:
-        raise HTTPException(400, "provider must be meta | baseten | openrouter | fake")
-    paid = req.provider != "fake"  # meta, baseten and openrouter bill the team's credits
+    if req.provider not in {"meta", "baseten", "openrouter", "fake", "replay"}:
+        raise HTTPException(400, "provider must be meta | baseten | openrouter | fake | replay")
+    paid = req.provider not in {"fake", "replay"}  # meta, baseten and openrouter bill the team's credits
+    rec = None
+    if req.provider == "replay":
+        rec = replay.find(req.question)
+        if rec is None:
+            raise HTTPException(404, "no recorded session for this question (GET /api/replays lists them)")
     if paid:
         require_paid_access(request)
     limit(request, "agent", per_hour=int(os.getenv("DRYRUN_AGENT_PER_HOUR", "12")))
@@ -36,11 +42,20 @@ def agent(req: AgentRequest, request: Request):
         limit_global("agent", per_day=int(os.getenv("DRYRUN_AGENT_PER_DAY", "300")), request=request)
 
     def sse():
-        for ev in run(req.question, req.provider, req.aoi_id):
+        events = replay.stream(rec) if rec else run(req.question, req.provider, req.aoi_id)
+        for ev in events:
             yield f"data: {ev.model_dump_json()}\n\n"
 
     return StreamingResponse(sse(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.get("/replays")
+def replays():
+    """Recorded live sessions available as the labelled replay fallback."""
+    from dryrun.agent import replay
+
+    return [{k: r[k] for k in ("question", "aoi_id", "provider", "model", "recorded_at")} for r in replay.recordings()]
 
 
 @router.get("/aois")

@@ -33,7 +33,7 @@ dev = ["meta-sam-parser==0.1.0", "pytest>=8", "ruff==0.16.9", "pydantic==2.13.5"
 include = ["dryrun*"]
 
 [tool.setuptools.package-data]
-dryrun = ["presets/*.json"]
+dryrun = ["presets/*.json", "presets/replays/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
