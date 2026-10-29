@@ -119,6 +119,46 @@ def test_verifier_fails_closed():
     assert digits
 
 
+def test_verifier_rejects_ids_that_escape_storage():
+    """`field` and `source_run_id` are model-authored and three lookups paste them into a storage
+    key. Before the id patterns in verify.py, a crafted `route:` field read an arbitrary JSON file
+    and the verifier stamped its number verified=True -- the one component whose job is to make
+    numbers trustworthy, laundering an attacker's. Prompt injection reaches this: questions come
+    from the public demo URL. GCS keeps ".." literal so prod failed closed, but local mode (every
+    laptop, `make api`) did not. Keep this red."""
+    from dryrun import storage
+
+    m = run_scenario(spec())
+    loot = storage.LOCAL_DATA.parent / "loot.json"
+    loot.write_text('{"eta_min": 1337.0}')
+    # The traversal only resolves through directories that EXIST -- a bogus run id makes the OS
+    # raise ENOENT first, which looks like the attack failed when it has not been tried.
+    (storage.LOCAL_DATA / "_private" / "routes" / m.run_id).mkdir(parents=True, exist_ok=True)
+    # routes/<run>/<route_id>.json is rooted at data/_private, so four levels lands on loot.json.
+    escape = "route:" + "../" * 4 + "loot:eta_min"
+    mk = lambda **kw: Claim(**{"text": "t", "unit": "b", "source_run_id": m.run_id,  # noqa: E731
+                               "field": "buildings_flooded", **kw})
+    bad = [mk(field=escape), mk(field="route:../../_uploads/x:eta_min"),
+           mk(source_run_id="../../" + m.run_id), mk(field=f"delta:people_exposed:../{m.run_id}"),
+           mk(field="__class__")]
+    checked = [verify.check(c) for c in bad]
+    assert [c.verified for c in checked] == [False] * len(bad)
+    assert all(c.value is None for c in checked)  # never surface a value we could not source
+    assert verify.check(mk()).verified  # and the ordinary path still works
+
+
+def test_int_fields_tracks_the_contract():
+    """A field that is an int in the contract but missing from INT_FIELDS is compared with 2% float
+    tolerance, so the model can be wrong and still verify -- and nothing raises to tell you. The
+    hand-written list had already drifted this way (`t_s` missing, `edges_cut` listed but
+    unreachable). Eng A freezes the stat set Thursday; this fails if it stops tracking."""
+    from dryrun.contracts import AreaStats, RouteResult, RunStats
+
+    declared = {n for m in (RunStats, RouteResult, AreaStats)
+                for n, f in m.model_fields.items() if f.annotation is int}
+    assert verify.INT_FIELDS == declared and "t_s" in declared
+
+
 def test_odd_duration_mass_balance():
     m = run_scenario(spec().model_copy(update={"sim_hours": 2.5, "output_interval_min": 60}))
     assert m.frames[-1].t_s == 9000 and abs(m.stats.mass_balance_error_pct) < 1.0
