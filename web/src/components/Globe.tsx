@@ -57,7 +57,10 @@ export function Globe({ aoi, frameUrl, ionToken, buildingsUrl, buildingDepthsUrl
       // Without an ion token fall back to OSM tiles (attribution shown by Cesium credits).
       ...(token ? {} : { baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })) }),
     });
-    v.camera.flyTo({ destination: rect, duration: 0 });
+    // Start oblique (30 deg, 3.5 km out): viewed straight down, the ~5 m buildings look flat.
+    v.camera.lookAt(Cesium.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2, 0),
+      new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 3500));
+    v.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);  // release the lock so the user can pan freely
     viewer.current = v;
     return () => { layer.current = undefined; viewer.current = undefined; if (!v.isDestroyed()) v.destroy(); };
   }, [aoi.aoi_id, token]);
