@@ -14,7 +14,7 @@ from dryrun import storage  # noqa: E402
 from dryrun.agent import loop  # noqa: E402
 from dryrun.api import ratelimit  # noqa: E402
 from dryrun.api.main import app  # noqa: E402
-from dryrun.contracts import AgentEvent  # noqa: E402
+from dryrun.contracts import AgentEvent, ScenarioSpec  # noqa: E402
 from dryrun.meta.providers import ToolCall, Turn  # noqa: E402
 from dryrun.pipeline import fixtures  # noqa: E402
 
@@ -217,3 +217,41 @@ def test_api_empty_token_does_not_bypass(client):
 
 def test_api_rejects_provider(client):
     assert post(client, provider="evil") == 400
+
+
+def sim_args(label, total_mm=40):
+    return json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {"total_mm": total_mm, "duration_h": 1}, "label": label})
+
+
+@pytest.mark.parametrize("label", ["baseline 80mm/3h", "drain +40% area-wide", "drains ×3 (Lekki Phase 1)"])
+def test_label_accepts_engineering_labels(label):
+    assert tools_dispatch("run_simulation", sim_args(label))["status"] == "done"
+
+
+@pytest.mark.parametrize("label", ["see https://evil.example", "<img src=x onerror=alert(1)>", "x" * 61])
+def test_contract_label_rejects_schemes_markup_and_long_text(label):
+    # Persisted to the public runs bucket. Bare domains still pass; nothing renders labels as HTML.
+    with pytest.raises(ValueError):
+        ScenarioSpec(aoi_id=fixtures.AOI_ID, storm={"total_mm": 40, "duration_h": 1}, label=label)
+
+
+@pytest.mark.parametrize(("total_mm", "label", "stored"), [
+    (301, "Baseline: 120 mm", "Baseline 120 mm"),
+    (302, "Drains & ponds — Ajah", "Drains ponds Ajah"),
+    (303, "<b>x</b> https://evil.example", "b x /b https //evil.example"),
+    (304, "y" * 80, "y" * 60),
+    (305, ":::", None),
+])
+def test_agent_labels_are_tidied_not_rejected(total_mm, label, stored):
+    # label is not part of run_id, so a distinct storm per case avoids a cache hit carrying another label
+    run_id = tools_dispatch("run_simulation", sim_args(label, total_mm))["run_id"]
+    assert storage.load_run(run_id).scenario.label == stored
+
+
+def test_api_simulate_rejects_bad_label(client):
+    spec = {"aoi_id": fixtures.AOI_ID, "storm": {"total_mm": 40, "duration_h": 1}, "label": "visit https://x.io"}
+    assert client.post("/api/simulate", json=spec).status_code == 422
+
+
+def tools_dispatch(name, args):
+    return loop.tools.dispatch(name, args, loop.tools.Session())

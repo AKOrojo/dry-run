@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from dryrun import storage
 from dryrun.contracts import COMPARE_FIELDS, CompareResult, RouteRequest, RunStats, ScenarioSpec
@@ -104,6 +105,7 @@ TOOL_SPECS = [
 ]
 
 MAX_RUNS_PER_SESSION = 6
+_LABEL_JUNK = re.compile(r"[^\w .,+%()/×-]")
 
 
 class Session:
@@ -151,6 +153,8 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
     if name == "get_aoi_info":
         return aoi_info(args["aoi_id"])
     if name == "run_simulation":
+        if isinstance(args.get("label"), str):  # model labels: tidy to the contract instead of failing the call
+            args["label"] = " ".join(_LABEL_JUNK.sub(" ", args["label"]).split())[:60] or None
         spec = ScenarioSpec.model_validate(args)  # validate BEFORE spending budget
         validate(spec)  # unknown AOI / unknown place -> error without spending budget
         if session is not None:

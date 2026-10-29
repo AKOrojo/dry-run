@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.3.0"
+CONTRACT_VERSION = "0.3.1"
 
 
 class _Base(BaseModel):
@@ -165,7 +165,9 @@ class ScenarioSpec(_Base):
     interventions: list[Intervention] = Field(default_factory=list)
     sim_hours: float = Field(gt=0, le=12, default=6)
     output_interval_min: int = Field(ge=5, le=60, default=10)
-    label: str | None = Field(None, description="human label; NOT part of run_id")
+    # Stored in the PUBLIC runs bucket and reachable from public input: short, no URLs or markup.
+    label: str | None = Field(None, max_length=60, pattern=r"^[\w .,+%()/×-]*$",
+                              description="human label; NOT part of run_id")
 
     def run_id(self) -> str:
         """Deterministic id => identical scenarios share cached results.
