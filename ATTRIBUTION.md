@@ -9,6 +9,7 @@ once the data is actually in the pipeline and the required credit line is visibl
 |---|---|---|---|
 | Synthetic fixtures (`dryrun.pipeline.fixtures`) | default AOI, demo runs | ours | badged "Synthetic terrain" in the UI |
 | Muse Spark Open | sovereign-mode agent | Muse Model License | "Built with Muse Spark Open" (in the app footer) |
+| Bing Maps Aerial, via Cesium ion (default ion imagery asset) | basemap imagery on the globe | Cesium ion terms; Microsoft Bing Maps terms | Cesium's on-screen credit display (ion and Microsoft logos); never hide `viewer.creditDisplay` |
 
 No third-party dataset is committed to this repo. Third-party data lives only in the GCS data bucket.
 
@@ -37,7 +38,9 @@ before the data lands. Add the credit line to the UI in the same commit as the d
 | Source | Use | Licence / terms | Notes |
 |---|---|---|---|
 | Sentinel-1 (Copernicus), via Microsoft Planetary Computer | validation flood extent (30 Jun 2026 event) | RTC: CC BY 4.0; GRD: Copernicus legal notice | "Contains modified Copernicus Sentinel data [year]" |
-| Cesium ion / basemap imagery | basemap | Community tier is non-commercial only; ion token restricted by URL | open question: the demo may be commercial-adjacent |
+| Cesium ion (Community tier) | serves the basemap above and terrain below; ion token restricted by URL | Community tier is non-commercial only | open question for the owner: the demo may be commercial-adjacent |
+| Cesium World Terrain (ion asset 1) | 3D terrain under the globe (Eng B's globe PR) | Cesium ion terms | "Cesium World Terrain" via the on-screen credit display; move to In use when that PR is live |
+| Google Photorealistic 3D Tiles (ion asset 2275207) | optional photoreal context (stretch) | Google Map Tiles API terms | Google logo + data attributions must stay on screen (credit display); CSP already allows tile.googleapis.com |
 
 ## Excluded
 

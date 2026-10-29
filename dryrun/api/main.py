@@ -147,6 +147,11 @@ _CESIUM = "https://api.cesium.com https://assets.ion.cesium.com https://*.cesium
 # which is the default state of a fresh deploy -- so this is the basemap the demo actually shows,
 # not an optional extra. Omitting it costs 45 blocked requests and a black globe.
 _BASEMAP = "https://tile.openstreetmap.org"
+# With a token, Cesium ion's default base layer is Bing Aerial: metadata from dev.virtualearth.net, tiles from
+# ecn.t*.tiles.virtualearth.net. Without these the ground renders black under the buildings (seen on rev 00031).
+_BING = "https://dev.virtualearth.net https://*.virtualearth.net"
+# Google Photorealistic 3D Tiles (ion asset 2275207, stretch goal): ion hands out tile.googleapis.com URLs.
+_GOOGLE_3D = "https://tile.googleapis.com"
 # 'unsafe-eval' is here because CesiumJS requires it, not because it is acceptable. Its widget
 # layer evaluates strings as JavaScript, and without it the bundle throws EvalError during module
 # init and the page renders completely blank -- measured in a real browser, not assumed. That
@@ -161,8 +166,8 @@ CSP = "; ".join(" ".join(part.split()) for part in [
     "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
-    f"img-src 'self' data: blob: {_runs_origin} {_CESIUM} {_BASEMAP}",
-    f"connect-src 'self' {_runs_origin} {_CESIUM} {_BASEMAP}",
+    f"img-src 'self' data: blob: {_runs_origin} {_CESIUM} {_BASEMAP} {_BING} {_GOOGLE_3D}",
+    f"connect-src 'self' {_runs_origin} {_CESIUM} {_BASEMAP} {_BING} {_GOOGLE_3D}",
     "font-src 'self' data:",
     "object-src 'none'",
     "base-uri 'self'",
