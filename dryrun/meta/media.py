@@ -16,7 +16,7 @@ Image (Muse Image edits; owner Eng B, Eng C reviews): street photo + "add bioswa
 LAGOS_KEYWORDS = [
     "Lekki", "Lekki Phase 1", "Ajah", "Sangotedo", "Chevron", "Admiralty Way", "Ikota", "Osapa",
     "Agungi", "Jakande", "Ikate", "Lekki-Epe Expressway", "Abraham Adesanya", "Badore", "Ado Road",
-    "Lagos Lagoon", "Victoria Island",
+    "Lagos Lagoon", "Victoria Island", "Victoria Garden City", "Ojomu", "Lekki Peninsula II", "Chisco",
 ]
 
 ASR_MODEL = "muse-voice-transcribe-1.0"
