@@ -7,6 +7,7 @@ the A/B difference the UI shows comes from the solver, not from a fudge factor.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -18,6 +19,14 @@ from dryrun.contracts import (
     ScenarioSpec,
     TideLevel,
 )
+
+
+@dataclass(frozen=True)
+class Inflow:
+    """River inflow at a set of cells (flat indices row*nx+col), e.g. a USGS gauge hydrograph."""
+
+    cells: np.ndarray  # 1-D int64 flat indices; the volume is spread evenly over them
+    discharge_m3s: Callable[[float], float]  # instantaneous Q at t seconds since the run start, >= 0
 
 
 @dataclass
@@ -32,6 +41,7 @@ class SolverInputs:
     dy_m: float = 30.0
     exclude_mask: np.ndarray | None = None  # bool: permanent water + pond cells (exposure ignores them)
     intervention_cells: list[int] | None = None  # cells touched per intervention (0 => warn)
+    inflows: list[Inflow] | None = None  # river inflow sources (Texas preset); None = none
 
 
 def polygon_mask(grid: GridSpec, polygon: list[tuple[float, float]]) -> np.ndarray:

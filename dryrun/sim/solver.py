@@ -56,8 +56,8 @@ DEFAULT_TIDE_M = -0.5  # same default as the fake backend (assumption, see model
 def simulate(inp: SolverInputs, spec: ScenarioSpec, cell_m: float):
     """Return (frames: list[(t_s, depth_m float32 [ny,nx])], ledger: dict[str, float]).
 
-    ledger keys: rain_volume_m3, drained_volume_m3, infiltrated_volume_m3, boundary_outflow_m3
-                 (boundary_outflow is NET: negative if a high tide pushes water INTO the domain)
+    ledger keys: rain_volume_m3, drained_volume_m3, infiltrated_volume_m3, boundary_outflow_m3,
+                 inflow_volume_m3 (boundary_outflow is NET: negative if a high tide pushes water INTO the domain)
     CONTRACT: frames[0] is t=0; frames[-1] is ALWAYS the final state at t_end, even if t_end is
     not a multiple of output_interval (engine computes mass balance from it).
     Physics uses inp.dx_m / inp.dy_m (lon/lat grid, cells ~30 m); cell_m is unused.
@@ -99,8 +99,16 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
     qy = np.zeros((ny + 1, nx))  # y-face i sits between rows i-1 and i (positive = southward)
     work = np.zeros((ny, nx))
     step = _numba_step() if _use_numba(kernel) else _numpy_step
+    inflows = inp.inflows or []
+    for src in inflows:
+        c = np.asarray(src.cells)
+        if c.size == 0 or c.min() < 0 or c.max() >= ny * nx:
+            raise ValueError("inflow cells must be non-empty flat indices inside the grid")
+        if bnd.flat[c].any():
+            raise ValueError("inflow cells must not be boundary cells")
 
-    led = dict(rain_volume_m3=0.0, drained_volume_m3=0.0, infiltrated_volume_m3=0.0, boundary_outflow_m3=0.0)
+    led = dict(rain_volume_m3=0.0, drained_volume_m3=0.0, infiltrated_volume_m3=0.0, boundary_outflow_m3=0.0,
+               inflow_volume_m3=0.0)
     frames: list[tuple[float, np.ndarray]] = [(0, h.astype(np.float32))]
     t, hmax = 0.0, float(h.max())
     for t_out in out_times:
@@ -109,6 +117,11 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
             if t + dt >= t_out - 1e-6:  # land exactly on the output time
                 dt = t_out - t
             r = rain_m(t, t + dt) if rain_m is not None else 0.0
+            for src in inflows:  # trapezoid volume over the step, spread evenly over the source cells
+                vol = 0.5 * (src.discharge_m3s(t) + src.discharge_m3s(t + dt)) * dt
+                np.add.at(h.reshape(-1), src.cells, vol / (area * len(src.cells)))
+                led["inflow_volume_m3"] += vol
+                hmax = max(hmax, float(h.flat[src.cells].max()))
             hmax, d_inf, d_drn, d_out = step(h, qx, qy, z, n, inf, snk, land, bnd, target, work,
                                              dt, dx, dy, r)
             led["rain_volume_m3"] += r * land_cells * area

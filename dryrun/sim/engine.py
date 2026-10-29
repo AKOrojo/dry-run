@@ -154,11 +154,12 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
     # tide level, which is the sea, not stored flood water. For the fake both terms start at 0.
     stored_end = float(frames[-1][1].astype(np.float64).sum() - frames[0][1].astype(np.float64).sum()) * area
     rain = ledger["rain_volume_m3"]
-    err = (rain - ledger["drained_volume_m3"] - ledger["infiltrated_volume_m3"]
+    supplied = rain + ledger.get("inflow_volume_m3", 0.0)  # the fake backend has no inflow key
+    err = (supplied - ledger["drained_volume_m3"] - ledger["infiltrated_volume_m3"]
            - ledger["boundary_outflow_m3"] - stored_end)
     stats = RunStats(
         run_id=run_id, peak_t_s=peak_t, stored_volume_end_m3=round(stored_end, 1),
-        mass_balance_error_pct=round(100 * err / rain, 4) if rain else 0.0,
+        mass_balance_error_pct=round(100 * err / supplied, 4) if supplied else 0.0,
         **{k: round(v, 1) for k, v in ledger.items()},
         **exposure.impact(spec.aoi_id, max_depth, area, excl, ponds),
     )

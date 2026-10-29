@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.4.1"
+CONTRACT_VERSION = "0.5.0"
 
 
 class _Base(BaseModel):
@@ -217,12 +217,14 @@ class RunStats(_Base):
     max_depth_m: float
     peak_t_s: int = Field(description="time of maximum flooded area")
     rain_volume_m3: float
+    inflow_volume_m3: float = Field(0.0, description="river inflow entering the domain (gauge hydrograph); added in "
+                                    "contract 0.5.0 (0 on older runs and on AOIs without inflows)")
     drained_volume_m3: float
     infiltrated_volume_m3: float
     stored_volume_end_m3: float
     boundary_outflow_m3: float = Field(description="water leaving through the lagoon/edge boundary")
     mass_balance_error_pct: float = Field(
-        description="100*(rain - drained - infiltrated - outflow - stored_end) / rain; "
+        description="100*(rain + inflow - drained - infiltrated - outflow - stored_end) / (rain + inflow); "
         "solver sanity check, |err| should be < 1%"
     )
     buildings_in_ponds: int = Field(0, description="buildings inside pond polygons (displaced, not 'saved')")

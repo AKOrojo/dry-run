@@ -114,6 +114,10 @@ export type MaxDepthM = number;
  */
 export type PeakTS = number;
 export type RainVolumeM3 = number;
+/**
+ * river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)
+ */
+export type InflowVolumeM3 = number;
 export type DrainedVolumeM3 = number;
 export type InfiltratedVolumeM3 = number;
 export type StoredVolumeEndM3 = number;
@@ -122,7 +126,7 @@ export type StoredVolumeEndM3 = number;
  */
 export type BoundaryOutflowM3 = number;
 /**
- * 100*(rain - drained - infiltrated - outflow - stored_end) / rain; solver sanity check, |err| should be < 1%
+ * 100*(rain + inflow - drained - infiltrated - outflow - stored_end) / (rain + inflow); solver sanity check, |err| should be < 1%
  */
 export type MassBalanceErrorPct = number;
 /**
@@ -234,6 +238,7 @@ export interface RunStats {
   max_depth_m: MaxDepthM;
   peak_t_s: PeakTS;
   rain_volume_m3: RainVolumeM3;
+  inflow_volume_m3?: InflowVolumeM3;
   drained_volume_m3: DrainedVolumeM3;
   infiltrated_volume_m3: InfiltratedVolumeM3;
   stored_volume_end_m3: StoredVolumeEndM3;

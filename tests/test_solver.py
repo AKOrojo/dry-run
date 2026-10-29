@@ -24,7 +24,7 @@ from dryrun.contracts import (  # noqa: E402
 )
 from dryrun.pipeline import fixtures  # noqa: E402
 from dryrun.sim import solver  # noqa: E402
-from dryrun.sim.interventions import SolverInputs, rain_cum_mm, rain_rate_mm_h  # noqa: E402
+from dryrun.sim.interventions import Inflow, SolverInputs, rain_cum_mm, rain_rate_mm_h  # noqa: E402
 
 try:
     import numba  # noqa: F401
@@ -182,6 +182,54 @@ def engine(tmp_path_factory):
     storage.clear_caches()
 
 
+def river(inflows=None, bnd=None):
+    """40 x 80 closed box sloping 2 m -> 0 m along x, inflow on column 1 (a river entering at the west edge)."""
+    inp = flat(40, 80, np.tile(np.linspace(2.0, 0.0, 80), (40, 1)), n=0.035, bnd=bnd)
+    inp.inflows = inflows
+    return inp
+
+
+def pulse(t):
+    return 20.0 if t < 1800 else 0.0  # m3/s for 30 min: 36,000 m3
+
+
+WEST = np.arange(18, 23) * 80 + 1  # rows 18-22, column 1
+
+
+@pytest.mark.parametrize("kernel", KERNELS)
+def test_inflow_is_conserved_and_flows_downhill(kernel):
+    frames, led = solver.integrate(river([Inflow(WEST, pulse)]), [3600], kernel=kernel)
+    d = frames[-1][1].astype(np.float64)
+    assert abs(led["inflow_volume_m3"] - 36_000) / 36_000 < 0.005  # trapezoid error only at the 1800 s step
+    assert abs(d.sum() * 900 - led["inflow_volume_m3"]) / led["inflow_volume_m3"] < 1e-5
+    cols = d.sum(axis=0)
+    assert (cols * np.arange(80)).sum() / cols.sum() > 10 and d.min() >= 0  # the water moved downhill, away
+
+
+def test_inflow_kernels_agree():
+    if len(KERNELS) < 2:
+        pytest.skip("numba not installed")
+    (fa, _), (fb, _) = (solver.integrate(river([Inflow(WEST, pulse)]), [3600], kernel=k) for k in KERNELS)
+    assert np.allclose(fa[-1][1], fb[-1][1], atol=1e-6)
+
+
+@pytest.mark.parametrize("kernel", KERNELS)
+def test_no_inflow_is_bit_identical(kernel):
+    rain = lambda a, b: 0.04 * (b - a) / 3600  # noqa: E731
+    (fa, la), (fb, lb) = (solver.integrate(river(i), [1800, 3600], rain, kernel=kernel) for i in (None, []))
+    assert all(np.array_equal(a, b) for (_, a), (_, b) in zip(fa, fb))
+    assert la == lb and la["inflow_volume_m3"] == 0.0
+
+
+def test_inflow_rejects_boundary_and_empty_cells():
+    bnd = np.zeros((40, 80), bool)
+    bnd[:, 1] = True
+    with pytest.raises(ValueError):
+        solver.integrate(river([Inflow(WEST, pulse)], bnd=bnd), [60])
+    with pytest.raises(ValueError):
+        solver.integrate(river([Inflow(np.array([], np.int64), pulse)]), [60])
+
+
 def run(engine, *ivs, **kw):
     m = engine.run_scenario(ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=kw.pop("storm", STORM),
                                          interventions=list(ivs), **kw))
@@ -193,7 +241,7 @@ def test_fixture_mass_balance_and_frames(engine):
     m = run(engine)
     assert abs(m.stats.mass_balance_error_pct) < 1.0
     assert m.frames[0].t_s == 0 and m.frames[-1].t_s == 6 * 3600 and len(m.frames) == 37
-    assert m.stats.rain_volume_m3 > 0 and m.stats.boundary_outflow_m3 > 0
+    assert m.stats.rain_volume_m3 > 0 and m.stats.boundary_outflow_m3 > 0 and m.stats.inflow_volume_m3 == 0
     assert 0.3 < m.stats.max_depth_m < 3  # pits pond tens of cm to ~1 m, not tens of metres
 
 

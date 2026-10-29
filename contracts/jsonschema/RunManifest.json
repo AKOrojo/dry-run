@@ -321,6 +321,12 @@
           "title": "Rain Volume M3",
           "type": "number"
         },
+        "inflow_volume_m3": {
+          "default": 0.0,
+          "description": "river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)",
+          "title": "Inflow Volume M3",
+          "type": "number"
+        },
         "drained_volume_m3": {
           "title": "Drained Volume M3",
           "type": "number"
@@ -339,7 +345,7 @@
           "type": "number"
         },
         "mass_balance_error_pct": {
-          "description": "100*(rain - drained - infiltrated - outflow - stored_end) / rain; solver sanity check, |err| should be < 1%",
+          "description": "100*(rain + inflow - drained - infiltrated - outflow - stored_end) / (rain + inflow); solver sanity check, |err| should be < 1%",
           "title": "Mass Balance Error Pct",
           "type": "number"
         },
@@ -394,7 +400,7 @@
       "additionalProperties": false,
       "properties": {
         "contract_version": {
-          "default": "0.4.1",
+          "default": "0.5.0",
           "title": "Contract Version",
           "type": "string"
         },
@@ -587,7 +593,7 @@
   "description": "gs://<runs-bucket>/runs/<run_id>/manifest.json",
   "properties": {
     "contract_version": {
-      "default": "0.4.1",
+      "default": "0.5.0",
       "title": "Contract Version",
       "type": "string"
     },
