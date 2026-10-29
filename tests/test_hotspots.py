@@ -49,6 +49,7 @@ def test_geocode(aoi, tmp_path):
     mask = coded['test road']['mask']
     assert mask[19:22, 19:27].all()
     assert mask.sum() == 24
+    np.testing.assert_array_equal(coded['test road']['road_mask'], mask)
     disc = coded['Village']['mask']
     assert disc[60, 65] and not disc[60, 49]
     assert coded['Village']['how'] == 'osm_node_disc'
@@ -81,3 +82,65 @@ def test_score(aoi):
     assert result['lift'] == 0.25 / result['base_rate']
     assert result['random_disc_percentile'] == hs.score(run_id, coded)['random_disc_percentile']
     assert result['random_disc_percentile'] == 100
+
+
+def test_severity_and_p90():
+    depth = np.array([[0, 0.15, 0.30], [0.50, 0.80, 9]])
+    land = np.array([[True, True, True], [True, True, False]])
+    values = [depth[0], depth[1, :2]]
+    null = [[np.array([0, 0.1])], [np.array([0.3, 0.5])], [np.array([0.5, 0.8])]]
+    fractions, p90s, result = hs._statistics(values, null, depth[land], hs.DEPTH_LEVELS_M)
+    assert fractions == [{'0.15': 2 / 3, '0.3': 1 / 3, '0.5': 0},
+                         {'0.15': 1, '0.3': 1, '0.5': 1}]
+    assert p90s == pytest.approx([0.27, 0.77])
+    for level, base in [('0.15', 4 / 5), ('0.3', 3 / 5), ('0.5', 2 / 5)]:
+        summary = result['severity'][level]
+        assert summary['base_rate'] == base
+        assert summary['lift'] == pytest.approx(np.mean([v[level] for v in fractions]) / base)
+    assert result['severity']['0.5']['hit_rate'] == 0.5
+    assert result['mean_hotspot_p90_depth_m'] == pytest.approx(0.52)
+    assert result['p90_percentile'] == pytest.approx(200 / 3)
+    assert hs._percentile(0.5, [0, 0.5, 1]) == pytest.approx(100 / 3)
+    assert hs._statistics(values, null, depth[land], hs.DEPTH_LEVELS_M)[2] == result
+
+
+def test_road_null():
+    pool = np.array([2, 7, 11, 19])
+    samples = hs._road_samples(pool, [2, 3])
+    assert len(samples) == hs.NULL_SAMPLES
+    again = hs._road_samples(pool, [2, 3])
+    for sample, repeat in zip(samples, again):
+        for indices, repeated, count in zip(sample, repeat, [2, 3]):
+            assert len(indices) == len(np.unique(indices)) == count
+            assert np.isin(indices, pool).all()
+            np.testing.assert_array_equal(indices, repeated)
+    assert hs._road_samples(np.array([], int), [2]) == []
+
+
+def test_score_land_and_roads(monkeypatch):
+    from types import SimpleNamespace
+
+    from dryrun.sim import exposure
+
+    depth = np.array([[0.15, 0.30, 0.50], [0, 8, 9]])
+    exclude = np.array([[0, 0, 0], [0, 1, 0]])
+    boundary = np.array([[0, 0, 0], [0, 0, 1]])
+    monkeypatch.setattr(storage, 'load_aoi', lambda *args: SimpleNamespace(grid=None))
+    monkeypatch.setattr(storage, 'load_depth', lambda *args: depth)
+    monkeypatch.setattr(storage, 'load_run', lambda *args: SimpleNamespace(scenario=SimpleNamespace(aoi_id='test')))
+    monkeypatch.setattr(storage, 'load_raster', lambda _, layer: exclude if layer == 'exclude_mask' else boundary)
+    monkeypatch.setattr(hs, '_grid', lambda _: np.meshgrid(np.arange(3), np.arange(2)))
+    monkeypatch.setattr(hs, '_disc', lambda *args: np.ones(depth.shape, bool))
+    monkeypatch.setattr(exposure, 'edge_arrays', lambda _: SimpleNamespace(flat=np.array([0, 0, 2, 4, 5])))
+    coded = hs.Geocoded()
+    road = np.array([[True, False, True], [False, False, False]])
+    coded['road'] = dict(mask=np.ones(depth.shape, bool), road_mask=road, kind='road', cells=6, how='test', matched='road')
+    result = hs.score('test', coded)
+    assert result['severity']['0.15']['base_rate'] == 3 / 4
+    assert result['severity']['0.3']['base_rate'] == 2 / 4
+    assert result['severity']['0.5']['base_rate'] == 1 / 4
+    assert result['hotspots']['road']['severity_cells'] == 4
+    assert result['hotspots']['road']['p90_depth_m'] == pytest.approx(0.44)
+    assert result['road']['hotspots']['road']['cells'] == 2
+    assert result['road']['severity']['0.3']['base_rate'] == 0.5
+    assert result['road']['p90_percentile'] == 0  # Equal two-cell samples tie the observation.
