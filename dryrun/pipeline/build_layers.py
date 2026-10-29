@@ -153,7 +153,8 @@ def waterway_cells(grid: GridSpec, lines_by_kind: dict[str, list[list[tuple[floa
 def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           building_csvs=(), name: str | None = None, full: bool = False,
           keywords: Sequence[str] | None = None, place_aliases: dict | None = None,
-          building_source: str = "open_buildings", debug_layers: bool = False) -> AOIManifest:
+          building_source: str = "open_buildings", debug_layers: bool = False,
+          place_tags: dict | None = None, corridor_tags: dict | None = None) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write."""
     if storage._exists("data", f"{aoi_id}/manifest.json"):
         raise ValueError("AOI ids are immutable; publish a new id")
@@ -236,7 +237,8 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
     if full:
         vector_layers, vector_sources, report = osm.build(
             aoi_id, grid, dem, exclude, building_csvs, osm_files,
-            building_source=building_source, keywords=keywords, place_aliases=place_aliases)
+            building_source=building_source, keywords=keywords, place_aliases=place_aliases,
+            place_tags=place_tags, corridor_tags=corridor_tags)
     else:
         vector_layers = {"roads_graph": "roads.graphml", "shelters": "shelters.geojson",
                          "places": "places.geojson", "buildings": "buildings_index.json",
@@ -312,14 +314,18 @@ def main() -> None:
     parser.add_argument("--keywords-file")
     parser.add_argument("--building-source", choices=("open_buildings", "ms"), default="open_buildings")
     parser.add_argument("--debug-layers", action="store_true")
+    parser.add_argument("--place-config", help="JSON: {keywords, place_aliases, place_tags, corridor_tags}")
     args = parser.parse_args()
     osm_files = {k: v for k, v in (("features", args.osm_features), ("roads", args.osm_roads)) if v}
     keywords = None
     if args.keywords_file:
         keywords = [line.strip() for line in storage.read_local_file(args.keywords_file).decode().splitlines()
                     if line.strip()]
+    cfg = json.loads(storage.read_local_file(args.place_config)) if args.place_config else {}
     build(args.aoi_id, args.raw, osm_files or None, args.buildings, args.name, args.full,
-          keywords=keywords, building_source=args.building_source, debug_layers=args.debug_layers)
+          keywords=cfg.get("keywords", keywords), place_aliases=cfg.get("place_aliases"),
+          building_source=args.building_source, debug_layers=args.debug_layers,
+          place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"))
 
 
 if __name__ == "__main__":

@@ -492,8 +492,15 @@ def _fetch_shelter_candidates(grid: GridSpec, features_xml: str | None = None) -
     return out
 
 
+# Which OSM features can name a neighbourhood or a corridor. Defaults are Lagos's; another AOI passes its own
+# (Kerr County: hamlets, summer camps, rivers as corridors).
+PLACE_TAGS = {"place": ["suburb", "neighbourhood", "quarter", "village", "town"]}
+CORRIDOR_TAGS = {"highway": True}
+
+
 def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xml: str | None = None,
-                            place_aliases: dict | None = None) -> list[dict]:
+                            place_aliases: dict | None = None, place_tags: dict | None = None,
+                            corridor_tags: dict | None = None) -> list[dict]:
     """Neighbourhoods (polygons first, then Voronoi cells of named points), corridors (named roads
     buffered), then the largest open land. Priority order = output order."""
     from shapely.geometry import Point, box
@@ -509,7 +516,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
             geom = max(geom.geoms, key=lambda g: g.area)
         return list(geom.exterior.coords) if geom.geom_type == "Polygon" else []
 
-    hoods = _features(grid, {"place": ["suburb", "neighbourhood", "quarter", "village", "town"]}, features_xml)
+    hoods = _features(grid, place_tags or PLACE_TAGS, features_xml)
     for _, f in hoods.iterrows():
         k = match_keyword(f.get("name"), keywords, place_aliases)
         if not k:
@@ -523,7 +530,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
     for k, r in point_places(grid, {k: v for k, v in pts.items() if k not in have}).items():
         polys.append({"name": k, "kind": "neighbourhood", "ring": r})
 
-    roads = _features(grid, {"highway": True}, features_xml)
+    roads = _features(grid, corridor_tags or CORRIDOR_TAGS, features_xml)
     by_name: dict[str, list] = {}
     for _, f in roads.iterrows():
         k = match_keyword(f.get("name"), keywords, place_aliases)
@@ -566,7 +573,7 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
 def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
           building_csvs: Sequence[str], osm_files: dict[str, str] | None = None,
           building_source: str = "open_buildings", keywords: Sequence[str] | None = None,
-          place_aliases: dict | None = None
+          place_aliases: dict | None = None, place_tags: dict | None = None, corridor_tags: dict | None = None
           ) -> tuple[dict[str, str], dict[str, str], dict]:
     """Read OSM (osm_extract() files, or Overpass when osm_files is None) + Open Buildings, write the vector
     layers for `aoi_id` through storage. Returns (layers, sources, report) for the manifest that
@@ -588,7 +595,7 @@ def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
     shelters = pick_shelters(grid, _fetch_shelter_candidates(grid, feats_xml), dem, ~np.asarray(exclude, bool), road)
     w(aoi_id, "shelters.geojson", json.dumps(shelters).encode(), "application/geo+json")
 
-    places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases))
+    places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases, place_tags, corridor_tags))
     w(aoi_id, "places.geojson", json.dumps(places).encode(), "application/geo+json")
 
     osm = "© OpenStreetMap contributors, ODbL 1.0"

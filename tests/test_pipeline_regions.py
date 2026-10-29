@@ -130,7 +130,7 @@ def test_ms_build_source_and_places(ms_inputs, monkeypatch):
     monkeypatch.setattr(osm, "_fetch_shelter_candidates", lambda *a: [])
     keywords, aliases = ["Kerrville"], {"Kerr Ville": "Kerrville"}
 
-    def places(actual_grid, actual_keywords, xml, actual_aliases):
+    def places(actual_grid, actual_keywords, xml, actual_aliases, place_tags=None, corridor_tags=None):
         assert actual_grid == grid and actual_keywords == keywords and actual_aliases == aliases
         return []
 
