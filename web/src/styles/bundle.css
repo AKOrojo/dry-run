@@ -1,0 +1,75 @@
+
+/* Dry Run components. Every value is a token: change tokens.json, not this file. */
+.ft-root, .ft-root * { box-sizing: border-box; }
+.ft-num { font-variant-numeric: tabular-nums; }
+.ft-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; padding: var(--space-3); background: var(--surface); }
+.ft-col { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); background: var(--surface); color: var(--ink); font-family: var(--font-sans); }
+
+/* Button */
+.ft-btn { font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 600; padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md); border: var(--stroke-control) solid var(--control-edge); background: transparent; color: var(--ink); cursor: pointer; }
+.ft-btn:focus-visible { outline: var(--stroke-focus) solid var(--focus-ring); outline-offset: 2px; }
+.ft-btn-primary { background: var(--danfo); color: var(--on-danfo); border-color: var(--danfo-edge); }
+.ft-btn-ghost { border-color: transparent; color: var(--ink-muted); }
+.ft-btn-ghost:hover { color: var(--ink); }
+.ft-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* ProvenanceBadge */
+.ft-badge { display: inline-flex; align-items: center; gap: var(--space-1); font-family: var(--font-mono); font-size: 11px; line-height: 16px;
+  font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm);
+  border: var(--stroke-control) solid var(--control-edge); color: var(--ink); background: var(--surface-raised); }
+.ft-badge-observed { border-color: var(--observed); color: var(--observed); }
+.ft-badge-ai { border-style: dashed; }
+.ft-badge-placeholder { background: var(--danfo); color: var(--on-danfo); border-color: var(--danfo-edge); }
+.ft-badge-synthetic { color: var(--ink-muted); }
+
+/* ClaimItem */
+.ft-claim { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-2); align-items: baseline; padding: var(--space-2) 0;
+  border-bottom: var(--stroke-hairline) solid var(--hairline); font-family: var(--font-sans); color: var(--ink); }
+.ft-claim-mark { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.ft-claim-ok .ft-claim-mark { color: var(--verified); }
+.ft-claim-bad .ft-claim-mark { color: var(--hazard); }
+.ft-claim-bad .ft-claim-text { color: var(--ink-muted); }
+.ft-claim-text { font-size: 15px; line-height: 22px; }
+.ft-claim-value { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ft-claim-audit { grid-column: 2 / 4; font-variant-numeric: tabular-nums; font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+
+/* StatDelta */
+.ft-stat { display: inline-flex; flex-direction: column; gap: var(--space-1); min-width: 180px; padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised); border-radius: var(--radius-md); color: var(--ink); font-family: var(--font-sans); }
+.ft-stat-label { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.ft-stat-delta { font-family: var(--font-sans); font-size: 28px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ft-stat-better .ft-stat-delta { color: var(--verified); }
+.ft-stat-worse .ft-stat-delta { color: var(--hazard); }
+.ft-stat-span { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 18px; color: var(--ink-muted); }
+
+/* DepthLegend */
+.ft-legend { display: inline-flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--surface-raised);
+  border-radius: var(--radius-md); color: var(--ink); font-family: var(--font-sans); }
+.ft-legend-bins { display: flex; border: var(--stroke-hairline) solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+.ft-legend-bin { width: 44px; height: 14px; }
+.ft-legend-ticks { display: flex; font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-size: 12px; line-height: 16px; color: var(--ink-muted); }
+.ft-legend-ticks span { width: 44px; }
+.ft-legend-note { font-size: 12px; line-height: 16px; color: var(--ink-muted); max-width: 300px; }
+.ft-d1 { background: var(--depth-1); } .ft-d2 { background: var(--depth-2); } .ft-d3 { background: var(--depth-3); }
+.ft-d4 { background: var(--depth-4); } .ft-d5 { background: var(--depth-5); } .ft-d6 { background: var(--depth-6); }
+
+/* TimelineBar */
+.ft-timeline { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised); border-radius: var(--radius-md); color: var(--ink); font-family: var(--font-sans); }
+.ft-track { position: relative; height: 8px; border-radius: var(--radius-pill); background: var(--ground); border: var(--stroke-control) solid var(--control-edge); }
+.ft-track-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-pill); background: var(--depth-3); }
+.ft-playhead { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: var(--radius-pill);
+  background: var(--danfo); border: 2px solid var(--danfo-edge); }
+.ft-marker { position: absolute; top: -10px; width: 2px; height: 28px; margin-left: -1px; background: var(--hazard); }
+.ft-marker-label { position: absolute; top: -28px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--hazard); font-weight: 600; }
+.ft-clock { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 18px; font-weight: 500; min-width: 72px; text-align: right; }
+
+/* InterventionChip */
+.ft-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border: var(--stroke-control) solid var(--control-edge); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink);
+  font-family: var(--font-sans); font-size: 15px; line-height: 22px; }
+.ft-chip-swatch { width: 14px; height: 14px; border-radius: var(--radius-sm); background: transparent; border: 2px solid var(--danfo); }
+.ft-chip-type { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.ft-chip-none { border-style: dashed; }
+.ft-chip-none .ft-chip-warn { color: var(--hazard); font-size: 12px; line-height: 16px; font-weight: 600; }

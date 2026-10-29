@@ -47,8 +47,28 @@ export const getJudgeKey = () => { try { return sessionStorage.getItem(JUDGE) ??
 export const setJudgeKey = (k: string) => { try { k ? sessionStorage.setItem(JUDGE, k) : sessionStorage.removeItem(JUDGE); } catch { /* storage blocked */ } };
 const judge = (): Record<string, string> => { const k = getJudgeKey(); return k ? { "X-Judge-Key": k } : {}; };
 
+/** A failed request, carrying the server's error envelope: {"detail", "error": {code, message, retryable}}. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string, readonly retryable: boolean,
+              readonly retryAfterS?: number) { super(message); }
+}
+
+async function apiError(r: Response): Promise<ApiError> {
+  const ra = Number(r.headers.get("retry-after")) || undefined;
+  if (!r.headers.get("content-type")?.includes("application/json")) {
+    // Cloud Run's own "no available instance" page, not our app.
+    const busy = r.status === 500 || r.status === 503;
+    return new ApiError(busy ? "The server is busy. Try again." : r.statusText || "The request failed.",
+      r.status, busy ? "unavailable" : "server_error", true, ra);
+  }
+  const b = await r.json().catch(() => ({}));
+  const e = b?.error ?? {};
+  const msg = e.message ?? (typeof b?.detail === "string" ? b.detail : "The request failed.");
+  return new ApiError(msg, r.status, e.code ?? "server_error", e.retryable ?? r.status >= 500, ra);
+}
+
 async function j<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  if (!r.ok) throw await apiError(r);
   return r.json() as Promise<T>;
 }
 
@@ -78,10 +98,7 @@ export async function* askAgent(question: string, provider = "meta", aoi_id?: st
   const r = await fetch(`${API}/api/agent`, {
     method: "POST", headers: { ...JSONH(), ...judge() }, body: JSON.stringify({ question, provider, aoi_id }),
   });
-  if (!r.ok) {
-    const detail = await r.json().then((b) => b.detail, () => null);
-    throw new Error(typeof detail === "string" ? detail : `${r.status} ${r.statusText}`);
-  }
+  if (!r.ok) throw await apiError(r);
   if (!r.body) throw new Error("no stream");
   const reader = r.body.getReader();
   const dec = new TextDecoder();
