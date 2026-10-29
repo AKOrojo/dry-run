@@ -169,6 +169,37 @@ cells or fewer). The 0 m lagoon fringe does not drive the counts (506 of those w
   roads, the 90th-percentile depth is deeper than on 90 / 91.5 / 95 % of 200 random road samples at 50 / 80 / 120 mm.
   Six roads is a small sample, so this is suggestive, not conclusive.
 
+### Texas Guadalupe (`texas-guadalupe-v0`): 4 Jul 2025 replay
+An inland river AOI from Hunt to Kerrville, including Camp Mystic, on a 2″ grid (486 × 198, ~55 × 61 m). A 1″
+grid would force ~1.6 s steps in 15 m deep water, at about 5 min per run; 2″ runs in ~12 s. The river enters as
+**USGS gauge inflows** (`pipeline/inflows.py`, `evals/scenarios/texas_inflows.json`) from 06:00 UTC: the North
+Fork (08165300), Johnson Creek (08166000), and the **South Fork, which is ungauged** and is estimated as Hunt
+(08165500) minus North Fork. Gauges downstream of an entry are read earlier by river distance ÷ 2.85 m/s (the
+observed Hunt → Kerrville travel). The South Fork carried the main pulse (peak ≈ 8,200 m³/s), so the most important
+input is also the least certain one. Rain on the valley is the scenario storm; IMERG Final gives 85 mm over the 12 h.
+
+Inland layer rules (`build_layers`, behind `outlet_side`): no sea boundary; the river leaves through a free-outflow
+outlet on the east edge; river cells are carved so each runs downhill to the outlet (at 2″ the canyon averages into
+10–28 m ridges across the bed) and get Manning n 0.035 (natural channel) instead of tree cover's 0.1. None of these
+values was fitted to the gauges.
+
+**Timing check** (`evals/validation/gauge_timing.py`): the flood front, i.e. the first time the model depth reaches
+half its maximum, against the first time the observed discharge reaches half its peak. Model crests are broad and
+flat, so peak times are not compared.
+
+| Gauge | Model front (UTC) | Observed | Error |
+|---|---|---|---|
+| Guadalupe at Hunt | 09:20 | 09:41 | −22 min |
+| Guadalupe at Kerrville | 10:45 | 11:14 | −29 min |
+| Hunt → Kerrville travel | 85 min | 93 min | −9 % |
+
+Mass balance 0.0 %. **Depths run high:** the model's maximum is 12–14 m at the gauges, against observed stage rises
+of ≥ 9.1 m at Hunt (the gauge failed at the crest) and 11.3 m at Kerrville. Likely causes are the 2″ grid narrowing
+the effective channel and floodplain storage being under-represented. The replay is a plausible reconstruction, not a
+calibrated forecast. Shelters are candidates at least 15 m above the nearest river cell (observed rise 11.3 m plus
+margin); all stayed dry in the replay. Impact (12 h, river plus 85 mm rain): 1,863 buildings with flood water close by
+(1,063 by own cell), 1,067 people, 115 road km. With the river alone it is 1,743 buildings, so the river dominates.
+
 ### Surrogate (screening only)
 `dryrun/surrogate/`: one LightGBM model per stat, trained on a Latin hypercube of real solver runs (rain
 40–250 mm, duration 1–6 h, tide −0.5–1.5 m, drain factor 0.5–3, new drains 0–60 mm/h, green and pond on named
