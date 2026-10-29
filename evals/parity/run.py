@@ -33,11 +33,12 @@ QUESTIONS = [
 
 
 class Metered:
-    """Wraps a provider to total tokens across one session."""
+    """Wraps a provider to total tokens and keep response ids (the traffic log) across one session."""
 
     def __init__(self, inner):
         self.inner, self.name, self.model = inner, inner.name, inner.model
         self.prompt_tokens = self.completion_tokens = self.calls = 0
+        self.response_ids = []
 
     def chat(self, *a, **kw):
         turn = self.inner.chat(*a, **kw)
@@ -45,6 +46,8 @@ class Metered:
         self.prompt_tokens += u.get("prompt_tokens", 0)
         self.completion_tokens += u.get("completion_tokens", 0)
         self.calls += 1
+        if (turn.raw or {}).get("id"):
+            self.response_ids.append(turn.raw["id"])
         return turn
 
 
@@ -70,7 +73,8 @@ def session(provider_name: str, question: str, real_get) -> dict:
             "prose_has_digits": brief.get("prose_has_digits") if brief else None,
             "title": brief.get("title") if brief else None, "errors": errors,
             "seconds": round(time.time() - t0, 1), "model_calls": meter.calls,
-            "prompt_tokens": meter.prompt_tokens, "completion_tokens": meter.completion_tokens}
+            "prompt_tokens": meter.prompt_tokens, "completion_tokens": meter.completion_tokens,
+            "response_ids": meter.response_ids}
 
 
 def main() -> None:
