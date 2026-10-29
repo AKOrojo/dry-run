@@ -156,12 +156,13 @@ def test_deadline_mid_turn(monkeypatch):
 
 
 def test_run_budget(monkeypatch):
-    prov = ScriptedProvider(tool="run_simulation", stop_after=7)
+    n = loop.tools.MAX_RUNS_PER_SESSION
+    prov = ScriptedProvider(tool="run_simulation", stop_after=n + 1)
     events = run_provider(monkeypatch, prov)
     results = [e.data["result"] for e in events if e.kind == "tool_result"]
-    assert len(results) == 7
-    assert all(r["status"] == "done" for r in results[:6])
-    assert "run budget" in results[6]["error"]
+    assert len(results) == n + 1
+    assert all(r["status"] == "done" for r in results[:n])
+    assert "run budget" in results[n]["error"]
 
 
 def test_provider_exception(monkeypatch):
@@ -293,3 +294,12 @@ def test_missing_provider_key_is_an_error_event(monkeypatch):
     events = list(loop.run("question", provider_name="meta"))
     assert [e.kind for e in events] == ["error", "done"]
     assert events[0].data["stage"] == "provider" and "META_API_KEY" in events[0].data["error"]
+
+
+def test_cache_hits_do_not_spend_run_budget():
+    session = loop.tools.Session()
+    args = sim_args("cached twice", total_mm=410)
+    first = loop.tools.dispatch("run_simulation", args, session)
+    for _ in range(loop.tools.MAX_RUNS_PER_SESSION + 2):
+        assert loop.tools.dispatch("run_simulation", args, session)["run_id"] == first["run_id"]
+    assert session.runs == 1

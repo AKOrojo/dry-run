@@ -56,6 +56,8 @@ _SCENARIO = {
     "required": ["aoi_id", "storm"],
 }
 
+MAX_RUNS_PER_SESSION = 4  # warm prod solver runs take ~35 s; 4 + model turns fit SESSION_DEADLINE_S
+
 TOOL_SPECS = [
     {"type": "function", "function": {
         "name": "get_aoi_info",
@@ -65,7 +67,8 @@ TOOL_SPECS = [
     {"type": "function", "function": {
         "name": "run_simulation",
         "description": "Run the flood solver for a scenario. Returns run_id and impact stats. "
-                       "Cached: identical scenarios return instantly. Budget: max 6 runs per session.",
+                       f"Cached: identical scenarios return instantly. Budget: max {MAX_RUNS_PER_SESSION} runs per session; "
+                       "screen combinations with surrogate_sweep first.",
         "parameters": _SCENARIO}},
     {"type": "function", "function": {
         "name": "get_run_stats", "description": "Fetch impact stats for an existing run_id.",
@@ -104,7 +107,6 @@ TOOL_SPECS = [
             "required": ["aoi_id", "total_mm", "duration_h"]}}},
 ]
 
-MAX_RUNS_PER_SESSION = 6
 _LABEL_JUNK = re.compile(r"[^\w .,+%()/×-]")
 
 
@@ -141,6 +143,11 @@ def aoi_info(aoi_id: str) -> dict:
     return out
 
 
+def _cached(spec: ScenarioSpec) -> bool:
+    rid = spec.run_id()
+    return storage.run_exists(rid) and storage.load_run(rid).status.value == "done"
+
+
 def _stats(run_id: str) -> RunStats:
     m = storage.load_run(run_id)
     if m.stats is None:
@@ -157,7 +164,7 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
             args["label"] = " ".join(_LABEL_JUNK.sub(" ", args["label"]).split())[:60] or None
         spec = ScenarioSpec.model_validate(args)  # validate BEFORE spending budget
         validate(spec)  # unknown AOI / unknown place -> error without spending budget
-        if session is not None:
+        if session is not None and not _cached(spec):  # cache hits are instant and free: no budget
             if session.runs >= MAX_RUNS_PER_SESSION:
                 return {"error": f"run budget of {MAX_RUNS_PER_SESSION} reached; answer with existing runs"}
             session.runs += 1
