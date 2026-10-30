@@ -7,7 +7,7 @@ import { setFocus } from "../lib/focus";
 import { useExtras } from "../lib/extras";
 import { clock, useClock } from "../lib/clock";
 import { fmtT } from "./ds";
-import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT } from "./rev5";
+import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
 type TS = NonNullable<RunManifest["timeseries"]>;
@@ -27,7 +27,7 @@ function deriveEvents(ts: TS, rainStopS: number, server: RunEvents | null): Ev[]
     // Server events carry exact times and places; snap the chart marker to the nearest frame.
     server.events.forEach((e) => {
       const m = SERVER_EVENT[e.kind];
-      if (m && e.t_s != null) add(m.kind, m.label, nearest(ts.t_s, e.t_s), { t: e.t_s, point: e.point, place: e.place });
+      if (m && e.t_s != null) add(m.kind, serverEventLabel(e), nearest(ts.t_s, e.t_s), { t: e.t_s, point: e.point, place: e.place });
     });
   } else {
     const cut = ts.edges_cut.findIndex((c) => c > 0);

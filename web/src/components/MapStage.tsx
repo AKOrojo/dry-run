@@ -11,7 +11,7 @@ import { API, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
 import type { AOIManifest, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
 import { setFocus, useFocus } from "../lib/focus";
-import { EVENT_ICON, SERVER_EVENT } from "./rev5";
+import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { setInspect, setPinnedSeries } from "../lib/inspect";
 import { addWaypoint, removeWaypoint, useWaypoints } from "../lib/waypoints";
@@ -694,7 +694,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
           if (!e.point || !m) return null;
           return (
             <Anchored key={`${e.kind}-${k}`} anchors={anchors} scene={scene} lon={e.point[0]} lat={e.point[1]} dy={-22}>
-              <EventMarker color={EVENT_ICON[m.kind].color} name={m.label} sub={`${fmtT(e.t_s)}${e.place ? ` · ${e.place}` : ""}`} muted={e.t_s > tS} />
+              <EventMarker color={EVENT_ICON[m.kind].color} name={serverEventLabel(e)} sub={`${fmtT(e.t_s)}${e.place ? ` · ${e.place}` : ""}`} muted={e.t_s > tS} />
             </Anchored>
           );
         })}
