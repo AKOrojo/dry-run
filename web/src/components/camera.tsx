@@ -12,7 +12,6 @@ export const FREE_MAX_H = 8000;
 export const FLY_MIN_AGL = 300;
 export const FLY_MAX_AGL = 3000;
 const PITCH_MIN = rad(-90), PITCH_MAX = rad(10);
-const FLY_BASE_MPS = 60;
 const FLY_PITCH = rad(-25);
 const FLY_PITCH_LO = PITCH_MIN - FLY_PITCH, FLY_PITCH_HI = PITCH_MAX - FLY_PITCH;
 
@@ -131,7 +130,13 @@ export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean
   }, [viewer, active]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export type FlyHud = { s: number; len: number; playing: boolean; speed: 1 | 2 | 4; hAgl: number };
+/** Ground speeds for fly along, metres per second (30 m/s ≈ 110 km/h). */
+export const FLY_SPEEDS = [30, 60, 120] as const;
+export type FlySpeed = typeof FLY_SPEEDS[number];
+export type FlyHud = { s: number; len: number; playing: boolean; speed: FlySpeed; hAgl: number; at: LonLat };
+
+/** Route length in metres along the ground. */
+export const routeLength = (r: LonLat[]) => r.slice(1).reduce((m, p, i) => m + segLen(r[i], p), 0);
 
 const segLen = (a: LonLat, b: LonLat) => {
   const lat = rad((a[1] + b[1]) / 2);
@@ -145,13 +150,14 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
     for (let i = 1; i < route.length; i++) cum.push(cum[i - 1] + segLen(route[i - 1], route[i]));
     return { cum, len: cum[cum.length - 1] ?? 0 };
   }, [route]);
-  const st = useRef({ s: 0, playing: false, speed: 1 as 1 | 2 | 4, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
-  const [hud, setHud] = useState<FlyHud>({ s: 0, len: path.len, playing: false, speed: 1, hAgl: FLY_MIN_AGL });
+  const st = useRef({ s: 0, playing: false, speed: 60 as FlySpeed, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
+  const [hud, setHud] = useState<FlyHud>({ s: 0, len: path.len, playing: false, speed: 60, hAgl: FLY_MIN_AGL, at: route[0] ?? [0, 0] });
   const sync = useCallback(() => {
     const v = st.current;
-    setHud({ s: v.s, len: path.len, playing: v.playing, speed: v.speed, hAgl: v.hAgl });
+    setHud({ s: v.s, len: path.len, playing: v.playing, speed: v.speed, hAgl: v.hAgl, at: atRef.current(v.s) });
   }, [path.len]);
 
+  const atRef = useRef<(s: number) => LonLat>(() => route[0] ?? [0, 0]);
   const at = useCallback((s: number): LonLat => {
     const { cum } = path;
     if (route.length < 2) return route[0] ?? [0, 0];
@@ -161,13 +167,14 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
     const f = clamp((d - cum[i - 1]) / (cum[i] - cum[i - 1] || 1), 0, 1);
     return [route[i - 1][0] + (route[i][0] - route[i - 1][0]) * f, route[i - 1][1] + (route[i][1] - route[i - 1][1]) * f];
   }, [path, route]);
+  atRef.current = at;
 
   const keys = useHeldKeys(active, FLY_KEYS);
   useControllerLock(viewer, active);
 
   useEffect(() => {
     if (!active) { st.current.playing = false; return; }
-    Object.assign(st.current, { s: 0, playing: path.len > 0, speed: 1, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
+    Object.assign(st.current, { s: 0, playing: false, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
     sync();
   }, [active, path.len, sync]);
 
@@ -197,7 +204,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       v.hAgl = clamp(v.hAgl + ((k.has("e") ? 1 : 0) - (k.has("q") ? 1 : 0)) * 200 * dt, FLY_MIN_AGL, FLY_MAX_AGL);
       let ended = false;
       if (v.playing) {
-        v.s += FLY_BASE_MPS * v.speed * dt;
+        v.s += v.speed * dt;
         if (v.s >= path.len) { v.s = path.len; v.playing = false; ended = true; }
       }
       const p = at(v.s);
@@ -220,8 +227,9 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
 
   return {
     hud,
-    toggle: () => { const v = st.current; if (!v.playing && v.s >= path.len) v.s = 0; v.playing = !v.playing; sync(); },
-    setSpeed: (n: 1 | 2 | 4) => { st.current.speed = n; sync(); },
+    /** Start or stop the flight; starting at the end restarts from the beginning. */
+    play: (on: boolean) => { const v = st.current; if (on && v.s >= path.len) v.s = 0; v.playing = on && path.len > 0; sync(); },
+    setSpeed: (n: FlySpeed) => { st.current.speed = n; sync(); },
     seek: (s: number) => { st.current.s = clamp(s, 0, path.len); sync(); },
   };
 }

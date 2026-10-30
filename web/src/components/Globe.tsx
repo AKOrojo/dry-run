@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
-import { useLayers } from "../lib/layers";
+import { setBasemap, useLayers } from "../lib/layers";
 
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 // Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
 // with "The Resource is already being fetched" (React's dev double effect, quick basemap toggles).
 let googleQueue: Promise<unknown> = Promise.resolve();
+/** Cesium ion asset "Google Maps 2D Satellite" (added to the account from the ion Asset Depot). */
+const GOOGLE_2D_SATELLITE = 3830182;
 const cssColor = (name: string) =>
   Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const buildingColor = (depth: number) => {
@@ -46,6 +48,9 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   // Token comes from /api/config at runtime (dev: VITE_CESIUM_ION_TOKEN overrides).
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN || ionToken;
   if (token) Cesium.Ion.defaultAccessToken = token;
+  // Dev only: the ion token is URL-restricted to the live site, so local runs can route ion through a
+  // referer-setting proxy (VITE_ION_SERVER, e.g. /ion/ proxied by vite.live.config.ts).
+  if (import.meta.env.DEV && import.meta.env.VITE_ION_SERVER) Cesium.Ion.defaultServer = new URL(import.meta.env.VITE_ION_SERVER, window.location.href).href;
   const el = useRef<HTMLDivElement>(null);
   const viewer = useRef<Cesium.Viewer>();
   const terrainRef = useRef<Cesium.Terrain>();
@@ -54,6 +59,17 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   /** Water on the photoreal mesh: one textured ground primitive classifying the 3D tiles, its image set to the current frame. */
   const drape = useRef<{ prim: Cesium.GroundPrimitive; url?: string }>();
   const photoreal = useRef<Cesium.Cesium3DTileset>();
+  const photorealBuildings = useRef(false);
+  /** Metres to raise our buildings so they stand on the photoreal mesh instead of under it (0 on aerial). */
+  const meshLift = useRef(0);
+  const applyLift = () => {
+    const p = buildings.current?.primitive;
+    if (!p || p.isDestroyed()) return;
+    const [cw, cs, ce, cn] = aoi.grid.bounds_wgs84;
+    const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(Cesium.Cartesian3.fromDegrees((cw + ce) / 2, (cs + cn) / 2), new Cesium.Cartesian3());
+    p.modelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.multiplyByScalar(up, meshLift.current, up));
+  };
+  photorealBuildings.current = !!aoi.photoreal_buildings;
   const tSRef = useRef(tS);
   tSRef.current = tS;
   const layerState = useLayers();
@@ -67,15 +83,18 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   const recolour = () => {
     const current = buildings.current;
     if (!current || current.primitive.isDestroyed() || !current.primitive.ready) return;
-    current.primitive.show = layerRef.current.buildings.on;
+    // Over Google's mesh, our boxes only make sense where the mesh has real buildings (only flooded ones are drawn
+    // there); where it is 2.5D (Lagos, Texas) its blobs swallow them, so the Aerial basemap carries our 3D houses.
+    current.primitive.show = layerRef.current.buildings.on && (layerRef.current.basemap !== "photoreal" || photorealBuildings.current);
     // Opaque buildings cast and take shadows; only a faded layer needs the translucent pass.
+    // Over the photoreal mesh the globe is translucent; opaque buildings then lose the depth test, so draw them in the translucent pass.
     const translucent = layerRef.current.buildings.opacity < 1 || layerRef.current.basemap === "photoreal";
     if ((current.primitive.appearance as Cesium.PerInstanceColorAppearance).translucent !== translucent) {
       current.primitive.appearance = new Cesium.PerInstanceColorAppearance({ flat: false, translucent });
     }
     for (const id of current.ids) {
       const depth = depths.current.get(id) ?? 0;
-      const dryHidden = layerRef.current.basemap === "photoreal" && !(depth >= 0.15);
+      const dryHidden = layerRef.current.basemap === "photoreal" && photorealBuildings.current && !(depth >= 0.15);
       const color = buildingColor(depth).withAlpha(dryHidden ? 0 : layerRef.current.buildings.opacity);
       const attributes = current.primitive.getGeometryInstanceAttributes(id);
       if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
@@ -102,7 +121,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     // Render settings from the design prototype: soft 4k shadows, a lower sun, sharper terrain and
     // full device resolution (the browser-recommended scale renders at CSS pixels and blurs on HiDPI).
     v.shadowMap.softShadows = true;
-    v.shadowMap.size = 4096;
+    v.shadowMap.size = 2048;
     v.shadowMap.darkness = 0.45;
     v.useBrowserRecommendedResolution = false;
     v.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
@@ -177,7 +196,9 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
         if (!(v.terrainProvider instanceof Cesium.EllipsoidTerrainProvider)) {
           const cartos = parsed.map((b) => Cesium.Cartographic.fromDegrees(
             b.points.reduce((a, p) => a + p[0], 0) / b.points.length, b.points.reduce((a, p) => a + p[1], 0) / b.points.length));
-          const sampled = await Cesium.sampleTerrainMostDetailed(v.terrainProvider, cartos);
+          // Level 12 (~30 m posts) matches the model grid, exists everywhere (World Terrain has no level 14 over
+          // Lagos), and needs far fewer tiles than most-detailed.
+          const sampled = await Cesium.sampleTerrain(v.terrainProvider, 12, cartos);
           sampled.forEach((c, i) => { if (Number.isFinite(c.height)) ground[i] = c.height; });
         }
       } catch { /* Keep ground at 0. */ }
@@ -201,6 +222,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
         if (cancelled || v.isDestroyed() || !primitive || primitive.isDestroyed()) return;
         if (!primitive.ready) { timer = setTimeout(ready, 50); return; }
         recolour();
+        applyLift();
         setBuildingStatus(ids.size.toLocaleString());
       };
       ready();
@@ -276,6 +298,43 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
 
   useEffect(showNearest, [tS, layerState.water.on, layerState.water.opacity]);
 
+  // Default basemap per area: Google 3D where it has real buildings, otherwise our 3D houses on aerial imagery.
+  useEffect(() => { setBasemap(aoi.photoreal_buildings ? "photoreal" : "aerial"); }, [aoi.aoi_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aerial imagery: Google Maps 2D Satellite from ion when the account has it (sharp over Lagos), else ion's Bing.
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || v.isDestroyed() || !token) return;
+    let cancelled = false;
+    let added: Cesium.ImageryLayer | undefined;
+    Cesium.IonImageryProvider.fromAssetId(GOOGLE_2D_SATELLITE).then(async (p) => {
+      if (cancelled || v.isDestroyed()) return;
+      // Only switch once a real tile over the area loads (the ion proxy can rate-limit with 429).
+      const centre = Cesium.Cartographic.fromDegrees((w + e) / 2, (s + n) / 2);
+      const xy = p.tilingScheme.positionToTileXY(centre, 15);
+      const probe = xy ? p.requestImage(xy.x, xy.y, 15) : undefined;
+      if (!probe) return;
+      await probe;
+      if (cancelled || v.isDestroyed()) return;
+      const old = v.imageryLayers.get(0);
+      added = v.imageryLayers.addImageryProvider(p, 0);
+      added.show = old.show; added.alpha = old.alpha; added.saturation = old.saturation; added.brightness = old.brightness;
+      v.imageryLayers.remove(old, true);
+      // Fall back to Bing if tiles start failing later (quota or rate limit).
+      let failures = 0;
+      p.errorEvent.addEventListener(() => {
+        if (++failures !== 8 || cancelled || v.isDestroyed() || !added) return;
+        Cesium.IonImageryProvider.fromAssetId(2).then((bing) => {
+          if (cancelled || v.isDestroyed() || !added) return;
+          const back = v.imageryLayers.addImageryProvider(bing, 0);
+          back.show = added.show; back.alpha = added.alpha; back.saturation = added.saturation; back.brightness = added.brightness;
+          v.imageryLayers.remove(added, true); added = undefined;
+        }).catch(() => {});
+      });
+    }).catch(() => { /* Not in this ion account, or rate-limited: keep Bing. */ });
+    return () => { cancelled = true; };
+  }, [aoi.aoi_id, token]);
+
   // Photoreal basemap: Google 3D tiles through ion. The globe stays loaded (fully transparent) so terrain
   // heights and picking keep working; water is a textured ground primitive classifying the tiles (imagery layers on the tileset did not render).
   useEffect(() => {
@@ -284,12 +343,12 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     let cancelled = false;
     let tiles: Cesium.Cesium3DTileset | undefined;
     const g = v.scene.globe;
-    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: 8 }));
+    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: 16 }));
     googleQueue = load.then(() => undefined, () => undefined);
     load.then((t) => {
       if (cancelled || v.isDestroyed()) { t.destroy(); return; }
       tiles = t;
-      t.shadows = Cesium.ShadowMode.ENABLED;
+      t.shadows = Cesium.ShadowMode.CAST_ONLY;  // receiving its own shadows gives moiré acne on the mesh
       v.scene.primitives.add(t);
       photoreal.current = t;
       if (import.meta.env.DEV) (window as unknown as { __tiles?: Cesium.Cesium3DTileset }).__tiles = t;
@@ -302,15 +361,44 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       v.scene.groundPrimitives.add(prim);
       drape.current = { prim };
       showNearest();
-      g.translucency.enabled = true;
-      g.translucency.frontFaceAlpha = 0;
-      g.translucency.backFaceAlpha = 0;
-      g.showGroundAtmosphere = false;
+      // Google's mesh ground and World Terrain disagree by metres (tens in Lagos); our buildings sit on terrain
+      // heights, so lift them by the median mesh-minus-terrain offset over a grid of probes.
+      const liftToMesh = async () => {
+        const probes: Cesium.Cartographic[] = [];
+        for (let i = 1; i < 7; i++) for (let j = 1; j < 7; j++) probes.push(Cesium.Cartographic.fromDegrees(w + ((e - w) * i) / 7, s + ((n - s) * j) / 7));
+        try {
+          const own = buildings.current?.primitive;
+          // Probe Google's mesh alone: the transparent globe is still pickable and would answer with its own height.
+          const terrain = probes.map((c) => g.getHeight(c));
+          g.show = false;
+          let mesh: (Cesium.Cartographic | undefined)[];
+          try { mesh = await v.scene.sampleHeightMostDetailed(probes.map((c) => c.clone()), own ? [own] : []); } finally { if (!v.isDestroyed()) g.show = true; }
+          if (cancelled || v.isDestroyed()) return;
+          const diffs = mesh.map((c, k) => (c && Number.isFinite(c.height) ? c.height - (terrain[k] ?? NaN) : NaN)).filter(Number.isFinite).sort((a, b) => a - b);
+          meshLift.current = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0;
+          if (import.meta.env.DEV) console.warn(`photoreal lift ${meshLift.current.toFixed(1)} m from ${diffs.length} probes`);
+          applyLift();
+        } catch (err) { console.warn("Could not measure the photoreal ground offset; buildings stay on terrain:", err instanceof Error ? err.message : err); }
+      };
+      // Keep the aerial globe visible until the first Google tiles are in, so the map never goes blank.
+      const hideGlobe = () => {
+        if (cancelled || v.isDestroyed()) return;
+        g.translucency.enabled = true;
+        g.translucency.frontFaceAlpha = 0;
+        g.translucency.backFaceAlpha = 0;
+        g.showGroundAtmosphere = false;
+        // The hidden globe only serves heights and picking: no imagery downloads, coarser terrain.
+        if (v.imageryLayers.length) v.imageryLayers.get(0).show = false;
+        g.maximumScreenSpaceError = 4;
+      };
+      const off = t.initialTilesLoaded.addEventListener(() => { off(); hideGlobe(); liftToMesh(); });
       recolour();
     }).catch((e) => console.warn("Photoreal 3D tiles unavailable, staying on aerial imagery:", e instanceof Error ? e.message : e));
     return () => {
       cancelled = true;
       photoreal.current = undefined;
+      meshLift.current = 0;
+      applyLift();
       const d = drape.current;
       drape.current = undefined;
       if (d && !v.isDestroyed()) v.scene.groundPrimitives.remove(d.prim);
@@ -318,6 +406,8 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       if (!v.isDestroyed()) {
         g.translucency.enabled = false;
         g.showGroundAtmosphere = true;
+        g.maximumScreenSpaceError = 1.5;
+        if (v.imageryLayers.length) v.imageryLayers.get(0).show = layerRef.current.imagery.on;
         if (tiles) v.scene.primitives.remove(tiles);
       }
       recolour();
@@ -330,13 +420,13 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     if (!v || v.isDestroyed() || !v.imageryLayers.length) return;
     const base = v.imageryLayers.get(0);
     const { imagery, imageryMode } = layerState;
-    base.show = imagery.on;
+    base.show = imagery.on && !v.scene.globe.translucency.enabled;  // hidden under photoreal tiles: don't download
     base.alpha = imagery.opacity;
     base.saturation = imageryMode === "greyscale" ? 0 : 1;
     base.brightness = imageryMode === "greyscale" ? 0.9 : 1;
   }, [layerState.imagery.on, layerState.imagery.opacity, layerState.imageryMode, aoi.aoi_id, token]);
 
-  useEffect(recolour, [layerState.buildings.on, layerState.buildings.opacity]);
+  useEffect(recolour, [layerState.buildings.on, layerState.buildings.opacity, layerState.basemap]);
 
   // Single-frame path, used when no preloaded frames are given.
   useEffect(() => {

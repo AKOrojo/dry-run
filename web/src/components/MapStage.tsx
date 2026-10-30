@@ -18,7 +18,9 @@ import { addWaypoint, removeWaypoint, useWaypoints } from "../lib/waypoints";
 import { clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
 import type { LonLat } from "../lib/flyroute";
 import { useFlyAlong, useFreeCamera } from "./camera";
-import type { FlyHud } from "./camera";
+import { FLY_SPEEDS, routeLength } from "./camera";
+import type { FlyHud, FlySpeed } from "./camera";
+import { clock } from "../lib/clock";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -229,31 +231,89 @@ function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, o
 
 const fmtLen = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
 
-function FlyHudCard({ hud, cellM, onToggle, onSpeed, onSeek }: {
-  hud: FlyHud; cellM: number; onToggle: () => void; onSpeed: (n: 1 | 2 | 4) => void; onSeek: (s: number) => void;
-}) {
+export type FloodLink = "hold" | "play" | "span";
+const LINKS: { key: FloodLink; label: string; title: string }[] = [
+  { key: "hold", label: "Hold", title: "Water stays at the timeline's current time" },
+  { key: "play", label: "Play with flight", title: "The flood timeline plays while you fly and pauses with the flight" },
+  { key: "span", label: "Across route", title: "The whole run is spread over the route: start of the route = T+00:00, end = end of the run" },
+];
+const SPEED_NAME: Record<FlySpeed, string> = { 30: "Slow", 60: "Normal", 120: "Fast" };
+const fmtDur = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const primaryBtn: CSSProperties = {
+  height: 28, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", font: "inherit", fontWeight: 600,
+  background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)",
+  border: "1px solid var(--danfo-edge)", borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)",
+};
+const textBtn: CSSProperties = { height: 28, padding: "0 8px", background: "transparent", border: 0, color: "var(--ink-muted)", font: "inherit", cursor: "pointer" };
+const hudShell: CSSProperties = {
+  position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 640,
+  background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
+  whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto",
+};
+
+function waterBelow(ser: PointSeries, tS: number): string {
+  if (ser.permanent_water) return "Lagoon / open water below";
+  let i = 0;
+  ser.t_s.forEach((t, k) => { if (Math.abs(t - tS) < Math.abs(ser.t_s[i] - tS)) i = k; });
+  const d = ser.depth_m[i] ?? 0;
+  return d >= 0.05 ? `${d.toFixed(2)} m of water below` : "Dry below";
+}
+
+/** Shown once a route is drawn: how long it is, and the way into fly along. */
+function RouteReadyCard({ len, speed, onFly, onRedraw, onClear, onClose }: { len: number; speed: FlySpeed; onFly: () => void; onRedraw: () => void; onClear: () => void; onClose: () => void }) {
   return (
-    <div style={{ position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 420,
-      background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
-      whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 12px", borderBottom: "1px solid var(--hairline)" }}>
+    <div role="dialog" aria-label="Route ready" style={{ ...hudShell, width: 440 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 6px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
+        <Path size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
+        <span style={{ fontWeight: 600 }}>Route ready</span>
+        <span style={{ color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{fmtLen(len)} · about {fmtDur(len / speed)} at {SPEED_NAME[speed].toLowerCase()} speed</span>
+        <button type="button" aria-label="Close" onClick={onClose} style={{ ...textBtn, marginLeft: "auto", width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--surface)" }}>
+        <span style={{ fontSize: 12, color: "var(--ink-muted)", whiteSpace: "normal" }}>The camera flies the route 300 m up. Works before, during and after a simulation.</span>
+        <button type="button" onClick={onRedraw} style={textBtn}>Redraw</button>
+        <button type="button" onClick={onClear} style={textBtn}>Clear</button>
+        <button type="button" onClick={onFly} style={primaryBtn}><Drone size={14} weight="bold" />Fly along</button>
+      </div>
+    </div>
+  );
+}
+
+function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed, onSeek, onLink, onExit }: {
+  hud: FlyHud; cellM: number; link: FloodLink; canLink: boolean; status: string; below: string | null;
+  onPlay: (on: boolean) => void; onSpeed: (n: FlySpeed) => void; onSeek: (s: number) => void; onLink: (l: FloodLink) => void; onExit: () => void;
+}) {
+  const left = Math.max(0, hud.len - hud.s) / hud.speed;
+  return (
+    <div role="region" aria-label="Fly along" style={hudShell}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 6px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
         <Drone size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
         <span style={{ fontWeight: 600 }}>Fly along</span>
+        <span style={{ color: "var(--ink-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</span>
         <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>
+        <button type="button" aria-label="Exit fly along" title="Exit (Esc)" onClick={onExit} style={{ ...textBtn, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)" }}>
-        <button type="button" aria-label={hud.playing ? "Pause" : "Play"} title={hud.playing ? "Pause" : "Play"} onClick={onToggle}
+        <button type="button" aria-label={hud.playing ? "Pause" : "Play"} title={hud.playing ? "Pause (Space)" : "Play (Space)"} onClick={() => onPlay(!hud.playing)}
           style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
             background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
           {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
         </button>
-        <div style={{ ...groupStyle, height: 28, gap: 2 }}>
-          {([1, 2, 4] as const).map((n) => <button key={n} type="button" aria-pressed={hud.speed === n} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 22), cursor: "pointer" }}>{n}x</button>)}
-        </div>
         <input type="range" aria-label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)}
           onChange={(e) => onSeek(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: "var(--danfo)" }} />
-        <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)}</span>
-        <span style={{ fontSize: 12, ...FIG }} title="Height above ground">{Math.round(hud.hAgl)} m</span>
+        <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>
+        <span style={{ fontSize: 12, ...FIG }} title="Height above ground (scroll or E / Q)">{Math.round(hud.hAgl)} m up</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 12px 8px", background: "var(--surface)", fontSize: 12, color: "var(--ink-muted)" }}>
+        Speed
+        <div style={{ ...groupStyle, height: 26, gap: 2 }}>
+          {FLY_SPEEDS.map((n) => <button key={n} type="button" aria-pressed={hud.speed === n} title={`${n} m/s, ${Math.round(n * 3.6)} km/h`} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 20), cursor: "pointer" }}>{SPEED_NAME[n]}</button>)}
+        </div>
+        Flood
+        <div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }} title={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}>
+          {LINKS.map((l) => <button key={l.key} type="button" disabled={!canLink} aria-pressed={link === l.key} title={l.title} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button>)}
+        </div>
+        {below && <span style={{ marginLeft: "auto", color: "var(--ink)", ...FIG }}>{below}</span>}
       </div>
     </div>
   );
@@ -438,6 +498,49 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   const fly = useFlyAlong(viewer, mode === "fly", route);
   const flyPlayingRef = useRef(false);
   flyPlayingRef.current = mode === "fly" && fly.hud.playing;
+  // Fly along and the flood clock: Hold leaves the timeline alone, Play with flight plays and pauses it with the
+  // flight, Across route maps route progress onto the whole run. Before a run (or while one computes) only Hold applies.
+  const [routeReady, setRouteReady] = useState(false);
+  const pendingPlay = useRef(false);
+  useEffect(() => {  // entering fly along from the route card or the view switch starts the flight
+    if (mode === "fly" && pendingPlay.current) { pendingPlay.current = false; flyPlay(true); }
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {  // Space plays and pauses the flight
+    if (mode !== "fly") return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== " " || (t && /INPUT|TEXTAREA|SELECT|BUTTON/.test(t.tagName))) return;
+      e.preventDefault(); flyPlay(!fly.hud.playing);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  const [link, setLink] = useState<FloodLink>("hold");
+  const runDone = run?.status === "done" && !!frames?.length;
+  const effLink: FloodLink = runDone ? link : "hold";
+  const flyPlay = (on: boolean) => {
+    fly.play(on);
+    if (effLink === "play") clock.set({ playing: on });
+  };
+  useEffect(() => {  // the flight reached the end (or was left): stop a linked timeline with it
+    if (!fly.hud.playing && effLink === "play") clock.set({ playing: false });
+  }, [fly.hud.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (mode !== "fly" || effLink !== "span" || fly.hud.len <= 0) return;
+    clock.set({ playing: false, t_s: (fly.hud.s / fly.hud.len) * clock.get().max_s });
+  }, [mode, effLink, fly.hud.s, fly.hud.len]);
+  // Water below the camera: the point series at the camera's ground position, refetched every ~60 m.
+  const [belowSeries, setBelowSeries] = useState<PointSeries | null>(null);
+  const belowAt = useRef<LonLat | null>(null);
+  useEffect(() => {
+    if (mode !== "fly" || !runDone || !run) { setBelowSeries(null); belowAt.current = null; return; }
+    const [lon, lat] = fly.hud.at, prev = belowAt.current;
+    if (prev && Math.hypot((lon - prev[0]) * 111320 * Math.cos((lat * Math.PI) / 180), (lat - prev[1]) * 110540) < 60) return;
+    belowAt.current = [lon, lat];
+    let live = true;
+    getPointSeries(run.run_id, lon, lat).then((ser) => { if (live) setBelowSeries(ser); }).catch(() => {});
+    return () => { live = false; };
+  }, [mode, runDone, run, fly.hud.at]);
   useFreeCamera(viewer, mode === "free", setFreeSpeed);
 
   // ----- camera state -----
@@ -649,7 +752,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   const pickMode = (v: ViewName) => {
     setRouteMenu(false);
     if (v === "Free") { setHover(null); setMode("free"); return; }
-    if (v === "Fly along") { if (route.length >= 2) { setHover(null); setMode("fly"); } return; }
+    if (v === "Fly along") { startFly(); return; }
     if (modeRef.current !== "orbit") backToOrbit();
     pickView(v);
   };
@@ -658,8 +761,12 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     if (modeRef.current !== "orbit") backToOrbit();
     setDrawPts([]); setDrawing(true);
   };
+  const startFly = () => {
+    if (route.length < 2) return;
+    setHover(null); setRouteReady(false); pendingPlay.current = true; setMode("fly");
+  };
   const finishDraw = (pts: LonLat[]) => {
-    if (pts.length >= 2) setFlyRoute(pts);
+    if (pts.length >= 2) { setFlyRoute(pts); setRouteReady(true); }
     setDrawing(false); setDrawPts([]);
   };
 
@@ -951,7 +1058,15 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
             Move speed {freeSpeed.toFixed(freeSpeed < 1 ? 2 : 1)}× · scroll to change
           </span>
         )}
-        {mode === "fly" && <FlyHudCard hud={fly.hud} cellM={cellM} onToggle={fly.toggle} onSpeed={fly.setSpeed} onSeek={fly.seek} />}
+        {mode === "fly" && <FlyHudCard hud={fly.hud} cellM={cellM} link={effLink} canLink={runDone} onLink={setLink}
+          status={!run ? "No simulation yet: terrain and buildings only" : run.status === "failed" ? "Simulation failed: no water shown"
+            : !runDone ? "Simulating… water appears when it finishes" : `Flood at ${fmtT(tS)}${clock.get().playing ? ", playing" : ""}`}
+          below={belowSeries ? waterBelow(belowSeries, tS) : null}
+          onPlay={flyPlay} onSpeed={fly.setSpeed} onSeek={fly.seek} onExit={backToOrbit} />}
+        {mode !== "fly" && routeReady && !drawing && route.length >= 2 && (
+          <RouteReadyCard len={routeLength(route)} speed={fly.hud.speed} onFly={startFly} onRedraw={() => { setRouteReady(false); startDraw(); }}
+            onClear={() => { clearFlyRoute(); setRouteReady(false); }} onClose={() => setRouteReady(false)} />
+        )}
 
         {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
 

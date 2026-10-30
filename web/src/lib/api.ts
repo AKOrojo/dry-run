@@ -29,6 +29,8 @@ export type RunManifest = {
 };
 export type AOIManifest = {
   aoi_id: string; name: string; is_synthetic: boolean; layers?: Record<string, string>; sources?: Record<string, string>;
+  /** True where Google Photorealistic 3D has real buildings; the twin then draws only flooded ones over the mesh. */
+  photoreal_buildings?: boolean;
   grid: { bounds_wgs84: [number, number, number, number]; nx: number; ny: number; cell_size_m: number };
 };
 export type AgentEvent = { kind: "thought" | "tool_call" | "tool_result" | "run_ready" | "brief" | "error" | "done"; data: any };
