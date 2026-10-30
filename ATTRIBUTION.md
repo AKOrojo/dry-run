@@ -10,6 +10,7 @@ once the data is actually in the pipeline and the required credit line is visibl
 | Synthetic fixtures (`dryrun.pipeline.fixtures`) | default AOI, demo runs | ours | badged "Synthetic terrain" in the UI |
 | Muse Spark Open | sovereign-mode agent | Muse Model License | "Built with Muse Spark Open" (in the app footer) |
 | Bing Maps Aerial, via Cesium ion (default ion imagery asset) | basemap imagery on the globe | Cesium ion terms; Microsoft Bing Maps terms | Cesium's on-screen credit display (ion and Microsoft logos); never hide `viewer.creditDisplay` |
+| Google Maps 2D Satellite (ion asset 3830182) | aerial imagery for areas that open on Aerial with our 3D houses (Lagos, #89); falls back to Bing Aerial when ion refuses it (e.g. 429) | Google Map Tiles API terms, via Cesium ion | Google logo and imagery attributions in Cesium's on-screen credit display; never hide or restyle `viewer.creditDisplay` |
 | Google Photorealistic 3D Tiles (ion asset 2275207) | default 3D basemap (#82, live 2026-10-29); the Bing globe stays as the alternative basemap | Google Map Tiles API terms | Google logo and data attributions in Cesium's on-screen credit display; never hide or restyle `viewer.creditDisplay` |
 | Cesium World Terrain (ion asset 1) | 3D terrain under the globe and building bases (#82) | Cesium ion terms | "Cesium World Terrain" in the on-screen credit display |
 
