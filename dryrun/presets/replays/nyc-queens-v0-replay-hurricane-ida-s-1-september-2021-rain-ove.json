@@ -1,0 +1,1878 @@
+{
+ "recorded_at": "2026-10-30T14:19:08+00:00",
+ "base": "https://dryrun-vcdpde6nnq-uc.a.run.app",
+ "provider": "meta",
+ "model": "muse-spark-1.3",
+ "aoi_id": "nyc-queens-v0",
+ "question": "Replay Hurricane Ida's 1 September 2021 rain over Queens: which neighbourhoods flood, how deep, and would doubling sewer capacity have helped?",
+ "events": [
+  {
+   "t": 1.98,
+   "kind": "thought",
+   "data": {
+    "text": "Replaying Ida's deluge over Queens — mapping who flooded and testing doubled sewers."
+   }
+  },
+  {
+   "t": 1.98,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_aoi_info",
+    "arguments": {
+     "aoi_id": "nyc-queens-v0"
+    }
+   }
+  },
+  {
+   "t": 2.1,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_aoi_info",
+    "result": {
+     "aoi_id": "nyc-queens-v0",
+     "name": "Queens, New York (Ida 2021)",
+     "bounds_wgs84": [
+      -73.905,
+      40.72,
+      -73.84592592592593,
+      40.765
+     ],
+     "is_synthetic": false,
+     "has_river_inflows": false,
+     "places": [
+      {
+       "name": "Forest Hills",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.85162,
+        40.72854
+       ]
+      },
+      {
+       "name": "Middle Village",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.88016,
+        40.726
+       ]
+      },
+      {
+       "name": "Rego Park",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.86197,
+        40.72745
+       ]
+      },
+      {
+       "name": "LeFrak City",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.86188,
+        40.7367
+       ]
+      },
+      {
+       "name": "East Elmhurst",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.86124,
+        40.75856
+       ]
+      },
+      {
+       "name": "Corona",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.85987,
+        40.74279
+       ]
+      },
+      {
+       "name": "Jackson Heights",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.88818,
+        40.75539
+       ]
+      },
+      {
+       "name": "Elmhurst",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.87857,
+        40.73148
+       ]
+      },
+      {
+       "name": "Woodside",
+       "kind": "neighbourhood",
+       "centroid": [
+        -73.89839,
+        40.74032
+       ]
+      },
+      {
+       "name": "Queens Boulevard",
+       "kind": "corridor",
+       "centroid": [
+        -73.87144,
+        40.73232
+       ]
+      },
+      {
+       "name": "Long Island Expressway",
+       "kind": "corridor",
+       "centroid": [
+        -73.87858,
+        40.73066
+       ]
+      },
+      {
+       "name": "Northern Boulevard",
+       "kind": "corridor",
+       "centroid": [
+        -73.86199,
+        40.75783
+       ]
+      },
+      {
+       "name": "Juniper Valley Park (open land)",
+       "kind": "open_land",
+       "centroid": [
+        -73.87811,
+        40.72107
+       ]
+      },
+      {
+       "name": "Elmhurst Park (open land)",
+       "kind": "open_land",
+       "centroid": [
+        -73.88521,
+        40.73019
+       ]
+      },
+      {
+       "name": "Saint Michael's Playground (open land)",
+       "kind": "open_land",
+       "centroid": [
+        -73.90039,
+        40.75886
+       ]
+      },
+      {
+       "name": "Open land near East Elmhurst",
+       "kind": "open_land",
+       "centroid": [
+        -73.85272,
+        40.75511
+       ]
+      }
+     ],
+     "shelters": [
+      {
+       "name": "Our Lady of Hope School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88667,
+        40.720987
+       ]
+      },
+      {
+       "name": "Alpha Missionary Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.869936,
+        40.75864
+       ]
+      },
+      {
+       "name": "Church of the Resurrection (candidate shelter (assumed))",
+       "lonlat": [
+        -73.868169,
+        40.759398
+       ]
+      },
+      {
+       "name": "Korean Methodist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873284,
+        40.758855
+       ]
+      },
+      {
+       "name": "Seventh Day Adventist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871552,
+        40.755375
+       ]
+      },
+      {
+       "name": "Leverich Memorial Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866209,
+        40.7597
+       ]
+      },
+      {
+       "name": "New Hope Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.863254,
+        40.757898
+       ]
+      },
+      {
+       "name": "Bethany Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.872435,
+        40.742086
+       ]
+      },
+      {
+       "name": "Iglesia Pentecostal Unida (candidate shelter (assumed))",
+       "lonlat": [
+        -73.872778,
+        40.743056
+       ]
+      },
+      {
+       "name": "Plaza College (candidate shelter (assumed))",
+       "lonlat": [
+        -73.891389,
+        40.749167
+       ]
+      },
+      {
+       "name": "All Nation Bible Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.880144,
+        40.725837
+       ]
+      },
+      {
+       "name": "Allan Kardec Spiritist Center (candidate shelter (assumed))",
+       "lonlat": [
+        -73.891667,
+        40.746667
+       ]
+      },
+      {
+       "name": "Christian Universal Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866055,
+        40.757398
+       ]
+      },
+      {
+       "name": "Church of God (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866328,
+        40.75692
+       ]
+      },
+      {
+       "name": "Community Church of Elmhurst (candidate shelter (assumed))",
+       "lonlat": [
+        -73.880285,
+        40.725774
+       ]
+      },
+      {
+       "name": "Corona Christian Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.864677,
+        40.75333
+       ]
+      },
+      {
+       "name": "Faith Presbyterian Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.891111,
+        40.728611
+       ]
+      },
+      {
+       "name": "Getsemani Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.87823,
+        40.744795
+       ]
+      },
+      {
+       "name": "Grace Chinese Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873631,
+        40.742784
+       ]
+      },
+      {
+       "name": "Iglesia Christiana Lirio (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866111,
+        40.757774
+       ]
+      },
+      {
+       "name": "International Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866111,
+        40.757778
+       ]
+      },
+      {
+       "name": "Commonpoint Queens Central Queens (candidate shelter (assumed))",
+       "lonlat": [
+        -73.847201,
+        40.728676
+       ]
+      },
+      {
+       "name": "Renaissance Charter School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.885165,
+        40.749951
+       ]
+      },
+      {
+       "name": "Masjid al Taufiq (candidate shelter (assumed))",
+       "lonlat": [
+        -73.879318,
+        40.746885
+       ]
+      },
+      {
+       "name": "Bukharian Jewish Community Center (candidate shelter (assumed))",
+       "lonlat": [
+        -73.846559,
+        40.721346
+       ]
+      },
+      {
+       "name": "Saint Adalbert Catholic Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.882926,
+        40.732349
+       ]
+      },
+      {
+       "name": "Trinity Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873582,
+        40.720092
+       ]
+      },
+      {
+       "name": "New Beginnings Church of God (candidate shelter (assumed))",
+       "lonlat": [
+        -73.870733,
+        40.762026
+       ]
+      },
+      {
+       "name": "ACE Institute of Technology (candidate shelter (assumed))",
+       "lonlat": [
+        -73.89048,
+        40.745812
+       ]
+      },
+      {
+       "name": "Siloe French SDA Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.86724,
+        40.757307
+       ]
+      },
+      {
+       "name": "Iglesia Cristiana (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871033,
+        40.756905
+       ]
+      },
+      {
+       "name": "Majid (candidate shelter (assumed))",
+       "lonlat": [
+        -73.904066,
+        40.755296
+       ]
+      },
+      {
+       "name": "United Sherpa Association (candidate shelter (assumed))",
+       "lonlat": [
+        -73.889977,
+        40.745192
+       ]
+      },
+      {
+       "name": "Colectivo Intercultural TRANSgrediendo (candidate shelter (assumed))",
+       "lonlat": [
+        -73.882807,
+        40.747986
+       ]
+      },
+      {
+       "name": "Unnamed place of worship (candidate shelter (assumed))",
+       "lonlat": [
+        -73.897177,
+        40.742882
+       ]
+      },
+      {
+       "name": "Jerusalem Wesleyan Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871555,
+        40.753974
+       ]
+      },
+      {
+       "name": "Unnamed place of worship (candidate shelter (assumed))",
+       "lonlat": [
+        -73.89551,
+        40.743056
+       ]
+      },
+      {
+       "name": "Sephardic Jewish Congregation (candidate shelter (assumed))",
+       "lonlat": [
+        -73.85233,
+        40.725496
+       ]
+      },
+      {
+       "name": "Islamic Center of Jackson Heights (candidate shelter (assumed))",
+       "lonlat": [
+        -73.894078,
+        40.746407
+       ]
+      },
+      {
+       "name": "Iglesia Cristiana Pentecostal Tiempos De Avivamiento (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874496,
+        40.742065
+       ]
+      },
+      {
+       "name": "Elmhurst Christian Gospel Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874296,
+        40.742218
+       ]
+      },
+      {
+       "name": "Congregation Beth Boruchai Ohavei Torah (candidate shelter (assumed))",
+       "lonlat": [
+        -73.864844,
+        40.725886
+       ]
+      },
+      {
+       "name": "Sure Foundation Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.899314,
+        40.745894
+       ]
+      },
+      {
+       "name": "Om Shakti Temple (candidate shelter (assumed))",
+       "lonlat": [
+        -73.893273,
+        40.745861
+       ]
+      },
+      {
+       "name": "Iglesia Universal New York (candidate shelter (assumed))",
+       "lonlat": [
+        -73.896848,
+        40.746523
+       ]
+      },
+      {
+       "name": "Pan American International High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871509,
+        40.74335
+       ]
+      },
+      {
+       "name": "Civic Leadership Academy (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871013,
+        40.743488
+       ]
+      },
+      {
+       "name": "Voyages Preparatory High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871923,
+        40.743226
+       ]
+      },
+      {
+       "name": "Unnamed place of worship (candidate shelter (assumed))",
+       "lonlat": [
+        -73.888419,
+        40.743612
+       ]
+      },
+      {
+       "name": "Resurrection Ascension Catholic Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871882,
+        40.728147
+       ]
+      },
+      {
+       "name": "International High School for Health Sciences (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873993,
+        40.74098
+       ]
+      },
+      {
+       "name": "Ohr Natan (candidate shelter (assumed))",
+       "lonlat": [
+        -73.855303,
+        40.727229
+       ]
+      },
+      {
+       "name": "Corona Congregational Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.865624,
+        40.755492
+       ]
+      },
+      {
+       "name": "Saint Mark's Episcopal Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88551,
+        40.754
+       ]
+      },
+      {
+       "name": "Atonement Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.881071,
+        40.759998
+       ]
+      },
+      {
+       "name": "Congregation Tifereth Israel (candidate shelter (assumed))",
+       "lonlat": [
+        -73.880515,
+        40.758643
+       ]
+      },
+      {
+       "name": "Our Saviour Early Childhood - Main Campus (candidate shelter (assumed))",
+       "lonlat": [
+        -73.865485,
+        40.720814
+       ]
+      },
+      {
+       "name": "Our Saviour Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.863592,
+        40.72768
+       ]
+      },
+      {
+       "name": "Congregation  Beth Jacob (candidate shelter (assumed))",
+       "lonlat": [
+        -73.856455,
+        40.72673
+       ]
+      },
+      {
+       "name": "Montessouri School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.855579,
+        40.72386
+       ]
+      },
+      {
+       "name": "Forest Hills Jewish Center (candidate shelter (assumed))",
+       "lonlat": [
+        -73.847498,
+        40.721619
+       ]
+      },
+      {
+       "name": "Queens Jewish Center And Talmud Torah (candidate shelter (assumed))",
+       "lonlat": [
+        -73.847849,
+        40.730194
+       ]
+      },
+      {
+       "name": "P.S. 222Q - Fire Fighter Christopher A. Santora School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.879992,
+        40.750443
+       ]
+      },
+      {
+       "name": "Jackson Heights United Methodist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88526,
+        40.751494
+       ]
+      },
+      {
+       "name": "Saint Joan of Arc Roman Catholic Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88395,
+        40.75154
+       ]
+      },
+      {
+       "name": "Saint Joan of Arc School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.884367,
+        40.751275
+       ]
+      },
+      {
+       "name": "Blessed Sacrament Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874289,
+        40.753246
+       ]
+      },
+      {
+       "name": "P.S. 69Q - The Jackson Heights School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.888485,
+        40.748912
+       ]
+      },
+      {
+       "name": "Jewish Center of Forest Hills West (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873721,
+        40.721623
+       ]
+      },
+      {
+       "name": "Our Lady of Hope (candidate shelter (assumed))",
+       "lonlat": [
+        -73.885774,
+        40.721512
+       ]
+      },
+      {
+       "name": "Maspeth United Methodist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.897631,
+        40.723518
+       ]
+      },
+      {
+       "name": "Saint Stanislaus Kostka Roman Catholic Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.904236,
+        40.722736
+       ]
+      },
+      {
+       "name": "St. John Chrysostom Orthodox Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.893649,
+        40.740609
+       ]
+      },
+      {
+       "name": "Rainbow Christian Preschool & Kindergarten (candidate shelter (assumed))",
+       "lonlat": [
+        -73.892545,
+        40.742528
+       ]
+      },
+      {
+       "name": "Saint Jacobus Evangelical Lutheran Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.892434,
+        40.742259
+       ]
+      },
+      {
+       "name": "Winfield Reformed Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.898477,
+        40.742879
+       ]
+      },
+      {
+       "name": "Pentecostal Missionary Church of Christ (4th Watch) (candidate shelter (assumed))",
+       "lonlat": [
+        -73.895947,
+        40.745655
+       ]
+      },
+      {
+       "name": "The Church of Jesus Christ of Latter-day Saints (candidate shelter (assumed))",
+       "lonlat": [
+        -73.902828,
+        40.743851
+       ]
+      },
+      {
+       "name": "Congregation Tifereth Israel (candidate shelter (assumed))",
+       "lonlat": [
+        -73.852959,
+        40.742107
+       ]
+      },
+      {
+       "name": "Geeta Temple Mandir (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871913,
+        40.74267
+       ]
+      },
+      {
+       "name": "Tabernaculo de Jesucristo (candidate shelter (assumed))",
+       "lonlat": [
+        -73.872969,
+        40.742743
+       ]
+      },
+      {
+       "name": "Korean Presbyterian Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.875261,
+        40.740952
+       ]
+      },
+      {
+       "name": "Iglesia Evangelica Cristo (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874954,
+        40.741054
+       ]
+      },
+      {
+       "name": "Korean Evangelical Church of New York (candidate shelter (assumed))",
+       "lonlat": [
+        -73.875552,
+        40.740708
+       ]
+      },
+      {
+       "name": "Satya Narayan Mandir (candidate shelter (assumed))",
+       "lonlat": [
+        -73.889111,
+        40.743619
+       ]
+      },
+      {
+       "name": "Saint Mary's Romanian Orthodox Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.891078,
+        40.742653
+       ]
+      },
+      {
+       "name": "Seventh Day Adventist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.89182,
+        40.743192
+       ]
+      },
+      {
+       "name": "New York Seventh Day Adventist Chinese Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.888988,
+        40.745294
+       ]
+      },
+      {
+       "name": "Jewish Center of Jackson Heights (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88923,
+        40.74899
+       ]
+      },
+      {
+       "name": "Saints Constantine & Helen Greek Orthodox Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.893412,
+        40.747109
+       ]
+      },
+      {
+       "name": "Elmhurst Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.877809,
+        40.743355
+       ]
+      },
+      {
+       "name": "School of Transfiguration (candidate shelter (assumed))",
+       "lonlat": [
+        -73.86778,
+        40.750462
+       ]
+      },
+      {
+       "name": "Centro Biblico (candidate shelter (assumed))",
+       "lonlat": [
+        -73.868241,
+        40.752095
+       ]
+      },
+      {
+       "name": "Transfiguration of Christ Greek Orthodox Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.867613,
+        40.7501
+       ]
+      },
+      {
+       "name": "Antioch Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.865446,
+        40.757408
+       ]
+      },
+      {
+       "name": "Mision Cristiana Discipulos De Cristo De Corona (candidate shelter (assumed))",
+       "lonlat": [
+        -73.864697,
+        40.753385
+       ]
+      },
+      {
+       "name": "Faith Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.862856,
+        40.753922
+       ]
+      },
+      {
+       "name": "Seventh Day Adventist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.865001,
+        40.753795
+       ]
+      },
+      {
+       "name": "Galilee Gospel Chapel (candidate shelter (assumed))",
+       "lonlat": [
+        -73.865827,
+        40.754779
+       ]
+      },
+      {
+       "name": "Our Lady of Sorrows Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.863591,
+        40.753951
+       ]
+      },
+      {
+       "name": "Young Nak Presbyterian Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.86205,
+        40.75697
+       ]
+      },
+      {
+       "name": "Good Shepherd Church of God (candidate shelter (assumed))",
+       "lonlat": [
+        -73.870468,
+        40.752245
+       ]
+      },
+      {
+       "name": "Iglesia Evangelica Pentecoste (candidate shelter (assumed))",
+       "lonlat": [
+        -73.869807,
+        40.75233
+       ]
+      },
+      {
+       "name": "St Mark African Methodist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.872405,
+        40.756604
+       ]
+      },
+      {
+       "name": "Mount Olivet Gospel Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.870854,
+        40.756138
+       ]
+      },
+      {
+       "name": "New York Dhammaram Temple (candidate shelter (assumed))",
+       "lonlat": [
+        -73.870879,
+        40.75582
+       ]
+      },
+      {
+       "name": "Luso Brazilian Seventh Day Adventist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871456,
+        40.75544
+       ]
+      },
+      {
+       "name": "Adonai Christian Center (candidate shelter (assumed))",
+       "lonlat": [
+        -73.869238,
+        40.757476
+       ]
+      },
+      {
+       "name": "Day Star Church of Christ (candidate shelter (assumed))",
+       "lonlat": [
+        -73.869607,
+        40.756969
+       ]
+      },
+      {
+       "name": "Shaw African Methodist Episcopal Zion Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.86785,
+        40.755833
+       ]
+      },
+      {
+       "name": "Friendship Church of Christ (candidate shelter (assumed))",
+       "lonlat": [
+        -73.864237,
+        40.757882
+       ]
+      },
+      {
+       "name": "New Covenant Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.864494,
+        40.760898
+       ]
+      },
+      {
+       "name": "First Baptist Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.868912,
+        40.761482
+       ]
+      },
+      {
+       "name": "Saint Gabriel's Roman Catholic Church (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871483,
+        40.761728
+       ]
+      },
+      {
+       "name": "Garden School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.888495,
+        40.754412
+       ]
+      },
+      {
+       "name": "I.S. 145Q - Joseph Pulitzer Magnet School of Innovation and Applied Learning (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88758,
+        40.754772
+       ]
+      },
+      {
+       "name": "Newtown High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874126,
+        40.740832
+       ]
+      },
+      {
+       "name": "P.S. 19Q - Marino P. Jeantet School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.866552,
+        40.748594
+       ]
+      },
+      {
+       "name": "P.S. 12Q- The James B. Colgate School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.893464,
+        40.74228
+       ]
+      },
+      {
+       "name": "I.S. 227Q - Louis Armstrong Middle School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874662,
+        40.757906
+       ]
+      },
+      {
+       "name": "P.S. 149Q - The Christa McAuliffe School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.874426,
+        40.755279
+       ]
+      },
+      {
+       "name": "P.S. 92Q - The Harry T. Stewart, Sr. School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.868759,
+        40.756001
+       ]
+      },
+      {
+       "name": "P.S.174Q - William Sidney Mount School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.861236,
+        40.720623
+       ]
+      },
+      {
+       "name": "P.S. 212Q (candidate shelter (assumed))",
+       "lonlat": [
+        -73.884643,
+        40.753206
+       ]
+      },
+      {
+       "name": "P.S. 58 - The School of Heroes (candidate shelter (assumed))",
+       "lonlat": [
+        -73.889885,
+        40.729
+       ]
+      },
+      {
+       "name": "Maspeth High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.88786,
+        40.729066
+       ]
+      },
+      {
+       "name": "J.H.S. 157 - Stephen A. Halsey Junior High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.8529,
+        40.732348
+       ]
+      },
+      {
+       "name": "P.S. 175Q - The Lynn Gross Discovery School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.852581,
+        40.730906
+       ]
+      },
+      {
+       "name": "J.H.S. 190Q - Russel Sage Junior High School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.851756,
+        40.723152
+       ]
+      },
+      {
+       "name": "P.S. 330Q - Helen M. Marshall School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.85889,
+        40.757581
+       ]
+      },
+      {
+       "name": "P.S. 89Q - The Jose Peralta School of DREAMers (candidate shelter (assumed))",
+       "lonlat": [
+        -73.879626,
+        40.745988
+       ]
+      },
+      {
+       "name": "I.S. 73 - The Frank Sansivieri Intermediate School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.893262,
+        40.728473
+       ]
+      },
+      {
+       "name": "P.S. 139Q - The Rego Park School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.862561,
+        40.728018
+       ]
+      },
+      {
+       "name": "P.S. 148Q - The Ruby G. Allen School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.878704,
+        40.758001
+       ]
+      },
+      {
+       "name": "P.S. 339Q - East Elmhurst Community School (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871906,
+        40.761625
+       ]
+      },
+      {
+       "name": "P.S. 280Q (candidate shelter (assumed))",
+       "lonlat": [
+        -73.873934,
+        40.753552
+       ]
+      },
+      {
+       "name": "Elmhurst Educational Campus (candidate shelter (assumed))",
+       "lonlat": [
+        -73.871421,
+        40.743153
+       ]
+      }
+     ],
+     "presets": [
+      {
+       "label": "Ida 1 Sep 2021 (LaGuardia gauge)",
+       "aoi_id": "nyc-queens-v0",
+       "storm": {
+        "total_mm": 118,
+        "duration_h": 4,
+        "pattern": "center_peaked"
+       },
+       "sim_hours": 8
+      },
+      {
+       "label": "Ida at the Central Park rate",
+       "aoi_id": "nyc-queens-v0",
+       "storm": {
+        "total_mm": 181,
+        "duration_h": 4.5,
+        "pattern": "center_peaked"
+       },
+       "sim_hours": 8
+      },
+      {
+       "label": "Ida core over Woodside",
+       "aoi_id": "nyc-queens-v0",
+       "storm": {
+        "total_mm": 181,
+        "duration_h": 4.5,
+        "pattern": "center_peaked",
+        "spatial": {
+         "kind": "cell",
+         "place": "Woodside",
+         "radius_m": 5000,
+         "profile": "gaussian"
+        }
+       },
+       "sim_hours": 8
+      },
+      {
+       "label": "Ida (LaGuardia) with sewers x2",
+       "aoi_id": "nyc-queens-v0",
+       "storm": {
+        "total_mm": 118,
+        "duration_h": 4,
+        "pattern": "center_peaked"
+       },
+       "interventions": [
+        {
+         "type": "drain_upgrade",
+         "capacity_factor": 2.0
+        }
+       ],
+       "sim_hours": 8
+      }
+     ],
+     "tide": {
+      "default_level_m": -0.5,
+      "preset_levels_m": [
+       0.5,
+       1.0,
+       1.5
+      ],
+      "note": "assumed lagoon/sea level, not a forecast"
+     }
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 1.9,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 4.93,
+   "kind": "thought",
+   "data": {
+    "text": "I've got Ida's local rainfall record for Queens — now replaying the baseline flood and the doubled-sewer case."
+   }
+  },
+  {
+   "t": 4.93,
+   "kind": "tool_call",
+   "data": {
+    "name": "run_simulation",
+    "arguments": {
+     "aoi_id": "nyc-queens-v0",
+     "sim_hours": 8.0,
+     "storm": {
+      "duration_h": 4,
+      "pattern": "center_peaked",
+      "total_mm": 118
+     }
+    }
+   }
+  },
+  {
+   "t": 5.08,
+   "kind": "tool_result",
+   "data": {
+    "name": "run_simulation",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "status": "done",
+     "backend": "solver",
+     "stats": {
+      "run_id": "r_48aae11b5d8514ed",
+      "buildings_flooded": 12531,
+      "buildings_flooded_severe": 4975,
+      "buildings_flooded_own_cell": 3854,
+      "road_km_impassable": 92.198,
+      "people_exposed": 45385,
+      "flooded_area_km2": 2.2384,
+      "max_depth_m": 4.521,
+      "peak_t_s": 12000,
+      "rain_volume_m3": 2828098.8,
+      "rain_generated_m3": null,
+      "rain_in_aoi_m3": null,
+      "inflow_volume_m3": 0.0,
+      "drained_volume_m3": 1163496.2,
+      "infiltrated_volume_m3": 779262.6,
+      "stored_volume_end_m3": 729052.4,
+      "boundary_outflow_m3": 156287.6,
+      "mass_balance_error_pct": 0.0,
+      "buildings_in_ponds": 0,
+      "passability_threshold_m": 0.3,
+      "is_surrogate": false
+     },
+     "error": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 4.9,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 5.08,
+   "kind": "run_ready",
+   "data": {
+    "run_id": "r_48aae11b5d8514ed"
+   }
+  },
+  {
+   "t": 7.48,
+   "kind": "thought",
+   "data": {
+    "text": "Baseline shows widespread flooding — now checking how it breaks down by neighbourhood and whether doubled sewers help."
+   }
+  },
+  {
+   "t": 7.48,
+   "kind": "tool_call",
+   "data": {
+    "name": "run_simulation",
+    "arguments": {
+     "aoi_id": "nyc-queens-v0",
+     "interventions": [
+      {
+       "type": "drain_upgrade",
+       "capacity_factor": 2.0
+      }
+     ],
+     "sim_hours": 8.0,
+     "storm": {
+      "duration_h": 4,
+      "pattern": "center_peaked",
+      "total_mm": 118
+     }
+    }
+   }
+  },
+  {
+   "t": 7.6,
+   "kind": "tool_result",
+   "data": {
+    "name": "run_simulation",
+    "result": {
+     "run_id": "r_e617927367a13c19",
+     "status": "done",
+     "backend": "solver",
+     "stats": {
+      "run_id": "r_e617927367a13c19",
+      "buildings_flooded": 9113,
+      "buildings_flooded_severe": 1963,
+      "buildings_flooded_own_cell": 2091,
+      "road_km_impassable": 44.154,
+      "people_exposed": 21324,
+      "flooded_area_km2": 1.0691,
+      "max_depth_m": 2.306,
+      "peak_t_s": 11400,
+      "rain_volume_m3": 2828098.8,
+      "rain_generated_m3": null,
+      "rain_in_aoi_m3": null,
+      "inflow_volume_m3": 0.0,
+      "drained_volume_m3": 1859186.1,
+      "infiltrated_volume_m3": 725236.4,
+      "stored_volume_end_m3": 206063.3,
+      "boundary_outflow_m3": 37613.1,
+      "mass_balance_error_pct": 0.0,
+      "buildings_in_ponds": 0,
+      "passability_threshold_m": 0.3,
+      "is_surrogate": false
+     },
+     "error": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 7.4,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 7.6,
+   "kind": "run_ready",
+   "data": {
+    "run_id": "r_e617927367a13c19"
+   }
+  },
+  {
+   "t": 11.64,
+   "kind": "thought",
+   "data": {
+    "text": "Overall, doubling sewers cuts flooding sharply — now digging into which streets and neighbourhoods stay deepest."
+   }
+  },
+  {
+   "t": 11.64,
+   "kind": "tool_call",
+   "data": {
+    "name": "compare_runs",
+    "arguments": {
+     "alt_run_id": "r_e617927367a13c19",
+     "base_run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 11.64,
+   "kind": "tool_result",
+   "data": {
+    "name": "compare_runs",
+    "result": {
+     "base_run_id": "r_48aae11b5d8514ed",
+     "alt_run_id": "r_e617927367a13c19",
+     "delta": {
+      "buildings_flooded": -3418.0,
+      "buildings_flooded_severe": -3012.0,
+      "buildings_flooded_own_cell": -1763.0,
+      "road_km_impassable": -48.044,
+      "people_exposed": -24061.0,
+      "flooded_area_km2": -1.1693,
+      "max_depth_m": -2.215,
+      "drained_volume_m3": 695689.9,
+      "stored_volume_end_m3": -522989.1,
+      "boundary_outflow_m3": -118674.5
+     }
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 11.5,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 11.64,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Elmhurst",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.05,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "place": "Elmhurst",
+     "buildings_flooded": 3012,
+     "buildings_flooded_own_cell": 981,
+     "people_exposed": 10775,
+     "road_km_impassable": 27.055,
+     "max_depth_m": 2.9,
+     "flooded_area_km2": 0.6364
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 14.9,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.05,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Corona",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.14,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "place": "Corona",
+     "buildings_flooded": 2006,
+     "buildings_flooded_own_cell": 574,
+     "people_exposed": 14063,
+     "road_km_impassable": 25.635,
+     "max_depth_m": 4.52,
+     "flooded_area_km2": 0.5411
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.0,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.14,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Jackson Heights",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.24,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "place": "Jackson Heights",
+     "buildings_flooded": 2782,
+     "buildings_flooded_own_cell": 980,
+     "people_exposed": 9318,
+     "road_km_impassable": 15.922,
+     "max_depth_m": 2.279,
+     "flooded_area_km2": 0.4241
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.1,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.25,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Woodside",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.37,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "place": "Woodside",
+     "buildings_flooded": 1452,
+     "buildings_flooded_own_cell": 419,
+     "people_exposed": 3429,
+     "road_km_impassable": 9.529,
+     "max_depth_m": 2.812,
+     "flooded_area_km2": 0.1881
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.2,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.37,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "East Elmhurst",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_48aae11b5d8514ed",
+     "place": "East Elmhurst",
+     "buildings_flooded": 935,
+     "buildings_flooded_own_cell": 274,
+     "people_exposed": 1933,
+     "road_km_impassable": 6.893,
+     "max_depth_m": 1.438,
+     "flooded_area_km2": 0.1526
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "LeFrak City",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Rego Park",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Middle Village",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Forest Hills",
+     "run_id": "r_48aae11b5d8514ed"
+    }
+   }
+  },
+  {
+   "t": 15.45,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 15.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 28.07,
+   "kind": "thought",
+   "data": {
+    "text": "Replay of 1 Sep 2021 Ida rain over Queens `nyc-queens-v0`\n\nModelled as planning model, not a forecast:\n\n* **Baseline:** `total_mm: 118, duration_h: 4, pattern: center_peaked`, rain over the whole study area, `sim_hours: 8`\n  * This matches the `Ida 1 Sep 2021 (LaGuardia gauge)` preset storm.\n* **Intervention test, one change at a time:** whole-area `drain_upgrade capacity_factor: 2.0` - i.e. double existing sewer capacity everywhere, not a local fix.\n\nNo river inflows in this area - `inflow_volume_m3: 0.0` in both runs.\n\n### 1. Baseline - what floods\n\nRun `r_48aae11b5d8514ed`, solver:\n\n* `buildings_flooded: 12531`\n* `buildings_flooded_severe: 4975`\n* `people_exposed: 45385`\n* `road_km_impassable: 92.198` km at 0.3 m threshold\n* `flooded_area_km2: 2.2384`\n* `max_depth_m: 4.521`\n* `peak_t_s: 12000` - ~3.3h after storm start\n* `drained_volume_m3: 1163496.2`, `infiltrated_volume_m3: 779262.6`, `stored_volume_end_m3: 729052.4`\n\nWidespread pluvial flooding with 92 km of roads impassable.\n\nNeighbourhood breakdown, same run:\n\n* **Elmhurst:** `area:Elmhurst:buildings_flooded: 3012`, `area:Elmhurst:people_exposed: 10775`, `area:Elmhurst:road_km_impassable: 27.055`, `area:Elmhurst:max_depth_m: 2.9`, `area:Elmhurst:flooded_area_km2: 0.6364`\n* **Jackson Heights:** `area:Jackson Heights:buildings_flooded: 2782`, `area:Jackson Heights:people_exposed: 9318`, `area:Jackson Heights:road_km_impassable: 15.922`, `area:Jackson Heights:max_depth_m: 2.279`, `area:Jackson Heights:flooded_area_km2: 0.4241`\n* **Corona:** `area:Corona:buildings_flooded: 2006`, `area:Corona:people_exposed: 14063`, `area:Corona:road_km_impassable: 25.635`, `area:Corona:max_depth_m: 4.52`, `area:Corona:flooded_area_km2: 0.5411`\n* **Woodside:** `area:Woodside:buildings_flooded: 1452`, `area:Woodside:people_exposed: 3429`, `area:Woodside:road_km_impassable: 9.529`, `area:Woodside:max_depth_m: 2.812`, `area:Woodside:flooded_area_km2: 0.1881`\n* **East Elmhurst:** `area:East Elmhurst:buildings_flooded: 935`, `area:East Elmhurst:people_exposed: 1933`, `area:East Elmhurst:road_km_impassable: 6.893`, `area:East Elmhurst:max_depth_m: 1.438`, `area:East Elmhurst:flooded_area_km2: 0.1526`\n\nIn this sample:\n\n* Most buildings flooded: Elmhurst > Jackson Heights > Corona > Woodside > East Elmhurst\n* Most people exposed: Corona > Elmhurst > Jackson Heights\n* Deepest local maxima: Corona 4.52 m - the study-area maximum - then Elmhurst 2.9 m, Woodside 2.812 m, Jackson Heights 2.279 m, East Elmhurst 1.438 m\n\nDepths >2-4 m are local low-pocket maxima, e.g. underpasses / depressed lots, not area-average water.\n\n### 2. Would doubling sewer capacity have helped?\n\nRun `r_e617927367a13c19`, same storm + sewers x2:\n\n* `buildings_flooded: 9113`\n* `buildings_flooded_severe: 1963`\n* `people_exposed: 21324`\n* `road_km_impassable: 44.154`\n* `flooded_area_km2: 1.0691`\n* `max_depth_m: 2.306`\n* `drained_volume_m3: 1859186.1`\n\nDifference alt - base:\n\n* `buildings_flooded: -3418.0` : -27% total\n* `buildings_flooded_severe: -3012.0` : -61% severe\n* `people_exposed: -24061.0` : -53%\n* `road_km_impassable: -48.044` : -52%\n* `flooded_area_km2: -1.1693` : -52%\n* `max_depth_m: -2.215`\n* `drained_volume_m3: +695689.9`\n\nYes - substantially:\n\nDoubling area-wide capacity drains ~0.70M m3 more, halves flooded area, road-impassable length and people exposed, and cuts severe buildings by ~3,000 and maximum depth from 4.52 m to 2.31 m.\n\nIt does not prevent Ida-scale flooding: >9,100 buildings still flooded, 1,963 severely, 44 km roads impassable and 21,324 people exposed remain. For this intensity, sewers alone are insufficient - residual ponding would need complementary storage / green / overland flow-path measures.\n"
+   }
+  },
+  {
+   "t": 42.36,
+   "kind": "brief",
+   "data": {
+    "title": "Hurricane Ida replay over Queens and citywide sewer doubling test",
+    "summary": "Ida rain replayed over Queens produces widespread building flooding and many kilometres of impassable road, with the deepest water and largest building counts in Corona, Elmhurst and Jackson Heights and notable flooding in Woodside and East Elmhurst, while citywide doubling of sewer capacity markedly reduces flooded buildings, severe cases, road disruption and exposure yet leaves substantial residual flooding.",
+    "claims": [
+     {
+      "text": "buildings with flood water close by in Ida replay",
+      "value": 12531.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in Ida replay",
+      "value": 3854.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Ida replay",
+      "value": 4.521,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "length of impassable road in Ida replay",
+      "value": 92.198,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "road_km_impassable",
+      "verified": true
+     },
+     {
+      "text": "people exposed in Ida replay",
+      "value": 45385.0,
+      "model_value": null,
+      "unit": "people",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "people_exposed",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by in Elmhurst in Ida replay",
+      "value": 3012.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Elmhurst:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by in Corona in Ida replay",
+      "value": 2006.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Corona:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by in Jackson Heights in Ida replay",
+      "value": 2782.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Jackson Heights:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by in Woodside in Ida replay",
+      "value": 1452.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Woodside:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by in East Elmhurst in Ida replay",
+      "value": 935.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:East Elmhurst:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Corona in Ida replay",
+      "value": 4.52,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Corona:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Elmhurst in Ida replay",
+      "value": 2.9,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Elmhurst:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Jackson Heights in Ida replay",
+      "value": 2.279,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_48aae11b5d8514ed",
+      "field": "area:Jackson Heights:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water close by with sewers doubled citywide",
+      "value": 9113.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building with sewers doubled citywide",
+      "value": 2091.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "change in buildings with flood water close by with sewers doubled citywide",
+      "value": -3418.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "delta:buildings_flooded:r_48aae11b5d8514ed",
+      "verified": true
+     },
+     {
+      "text": "change in severely flooded buildings with sewers doubled citywide",
+      "value": -3012.0,
+      "model_value": null,
+      "unit": "count",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "delta:buildings_flooded_severe:r_48aae11b5d8514ed",
+      "verified": true
+     },
+     {
+      "text": "change in length of impassable road with sewers doubled citywide",
+      "value": -48.044,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "delta:road_km_impassable:r_48aae11b5d8514ed",
+      "verified": true
+     },
+     {
+      "text": "change in people exposed with sewers doubled citywide",
+      "value": -24061.0,
+      "model_value": null,
+      "unit": "people",
+      "source_run_id": "r_e617927367a13c19",
+      "field": "delta:people_exposed:r_48aae11b5d8514ed",
+      "verified": true
+     }
+    ],
+    "recommended_run_id": "r_e617927367a13c19",
+    "model": "muse-spark-1.3",
+    "provider": "meta",
+    "prose_has_digits": false
+   }
+  },
+  {
+   "t": 42.36,
+   "kind": "done",
+   "data": {}
+  }
+ ]
+}
