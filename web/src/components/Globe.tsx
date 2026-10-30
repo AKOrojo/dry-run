@@ -38,8 +38,10 @@ function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
   });
 }
 
-export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer }: {
+export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer }: {
   aoi: AOIManifest; frameUrl?: string; frames?: { t_s: number; url: string }[]; tS?: number;
+  /** Compare swipe: frames drawn right of `split` (0..1 of the width); `frames` are then drawn left of it. */
+  framesB?: { t_s: number; url: string }[]; split?: number;
   ionToken: string; buildingsUrl?: string;
   buildingDepthsUrl?: string; onBuildingsStatus?: (status: string) => void;
   /** Called with the Cesium viewer once created (and with undefined when it is destroyed). */
@@ -56,8 +58,9 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   const terrainRef = useRef<Cesium.Terrain>();
   const layer = useRef<Cesium.ImageryLayer>();
   const frameLayers = useRef<{ t_s: number; layer: Cesium.ImageryLayer; url: string }[]>([]);
+  const frameLayersB = useRef<{ t_s: number; layer: Cesium.ImageryLayer; url: string }[]>([]);
   /** Water on the photoreal mesh: one textured ground primitive classifying the 3D tiles, its image set to the current frame. */
-  const drape = useRef<{ prim: Cesium.GroundPrimitive; url?: string }>();
+  const drape = useRef<{ prim: Cesium.GroundPrimitive; url?: string; key?: string }>();
   const photoreal = useRef<Cesium.Cesium3DTileset>();
   const photorealBuildings = useRef(false);
   /** Metres to raise our buildings so they stand on the photoreal mesh instead of under it (0 on aerial). */
@@ -70,6 +73,8 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     p.modelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.multiplyByScalar(up, meshLift.current, up));
   };
   photorealBuildings.current = !!aoi.photoreal_buildings;
+  const splitRef = useRef(split ?? 0.5);
+  splitRef.current = split ?? 0.5;
   const tSRef = useRef(tS);
   tSRef.current = tS;
   const layerState = useLayers();
@@ -255,22 +260,82 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     return () => { cancelled = true; };
   }, [buildingDepthsUrl]);
 
-  const showNearest = () => {
-    const list = frameLayers.current;
-    if (!list.length) return;
+  const nearestOf = <T extends { t_s: number }>(list: T[]) => {
     const t = tSRef.current ?? 0;
     let best = list[0];
     for (const f of list) if (Math.abs(f.t_s - t) < Math.abs(best.t_s - t)) best = f;
+    return best;
+  };
+  const showNearest = () => {
     const water = layerRef.current.water;
     const d = drape.current;
-    for (const f of list) { f.layer.show = !d && water.on && f === best; f.layer.alpha = water.opacity; }
-    if (d && !d.prim.isDestroyed()) {
+    const bestA = frameLayers.current.length ? nearestOf(frameLayers.current) : undefined;
+    const bestB = frameLayersB.current.length ? nearestOf(frameLayersB.current) : undefined;
+    for (const [list, best] of [[frameLayers.current, bestA], [frameLayersB.current, bestB]] as const) {
+      for (const f of list) { f.layer.show = !d && water.on && f === best; f.layer.alpha = water.opacity; }
+    }
+    if (d && !d.prim.isDestroyed() && bestA) {
       d.prim.show = water.on;
       const m = (d.prim.appearance as Cesium.MaterialAppearance).material;
-      if (d.url !== best.url) { m.uniforms.image = best.url; d.url = best.url; }
+      if (bestB) drapeSwipe(d, bestA.url, bestB.url);
+      else if (d.url !== bestA.url) { m.uniforms.image = bestA.url; d.url = bestA.url; d.key = undefined; }
       m.uniforms.color = new Cesium.Color(1, 1, 1, water.opacity);
     }
   };
+  const swipe = !!framesB?.length;
+
+  // Swipe on the photoreal mesh: the drape is one image, so A and B are composited into it, split along the
+  // ground line under the screen split (flat ground keeps that line straight on screen, so it meets the handle).
+  const images = useRef(new Map<string, Promise<HTMLImageElement>>());
+  const image = (url: string) => {
+    let p = images.current.get(url);
+    if (!p) {
+      p = new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => ok(im); im.onerror = bad; im.src = url; });
+      images.current.set(url, p);
+      if (images.current.size > 80) images.current.delete(images.current.keys().next().value as string);
+    }
+    return p;
+  };
+  const drapeSwipe = (d: NonNullable<typeof drape.current>, urlA: string, urlB: string) => {
+    const v = viewer.current;
+    if (!v || v.isDestroyed()) return;
+    const c = v.canvas, x = splitRef.current * c.clientWidth;
+    const ground = (px: number, py: number) => {
+      const cart = v.camera.pickEllipsoid(new Cesium.Cartesian2(px, py));
+      if (!cart) return null;
+      const g = Cesium.Cartographic.fromCartesian(cart);
+      return [Cesium.Math.toDegrees(g.longitude), Cesium.Math.toDegrees(g.latitude)] as const;
+    };
+    const top = ground(x, c.clientHeight * 0.35), bottom = ground(x, c.clientHeight), leftPt = ground(0, c.clientHeight);
+    if (!top || !bottom || !leftPt) return;
+    const key = `${urlA}|${urlB}|${top.map((q) => q.toFixed(5))}|${bottom.map((q) => q.toFixed(5))}`;
+    if (d.key === key) return;
+    d.key = key;
+    Promise.all([image(urlA), image(urlB)]).then(([a, b]) => {
+      if (d.key !== key || d.prim.isDestroyed()) return;
+      const W = b.naturalWidth, H = b.naturalHeight;
+      const px = ([lon, lat]: readonly [number, number]) => [((lon - w) / (e - w)) * W, ((n - lat) / (n - s)) * H] as const;
+      const [p0, p1, pl] = [px(top), px(bottom), px(leftPt)];
+      // Half-plane on the A side of the line p0-p1: extend the line far beyond the image, close on A's side.
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, far = 4 * (W + H);
+      const side = Math.sign((pl[0] - p0[0]) * uy - (pl[1] - p0[1]) * ux) || 1;
+      const nx = uy * side * far, ny = -ux * side * far;
+      const canvas = document.createElement("canvas"); canvas.width = W; canvas.height = H;
+      const g = canvas.getContext("2d")!;
+      g.drawImage(b, 0, 0);
+      g.save(); g.beginPath();
+      g.moveTo(p0[0] - ux * far, p0[1] - uy * far); g.lineTo(p0[0] + ux * far, p0[1] + uy * far);
+      g.lineTo(p0[0] + ux * far + nx, p0[1] + uy * far + ny); g.lineTo(p0[0] - ux * far + nx, p0[1] - uy * far + ny); g.closePath();
+      g.clip(); g.clearRect(0, 0, W, H); g.drawImage(a, 0, 0); g.restore();
+      (d.prim.appearance as Cesium.MaterialAppearance).material.uniforms.image = canvas;
+      d.url = undefined;
+    }).catch(() => { /* frame image unavailable: keep the last drape */ });
+  };
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || v.isDestroyed() || !swipe) return;
+    return v.scene.postRender.addEventListener(() => { if (drape.current) showNearest(); });
+  }, [swipe]);
 
   // Preloaded frames: every PNG is a hidden layer; playback only flips `show`.
   useEffect(() => {
@@ -284,6 +349,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
         const layer = v.imageryLayers.addImageryProvider(p);
         layer.alpha = layerRef.current.water.opacity;  // PNGs carry their own alpha ramp
         layer.show = false;
+        layer.splitDirection = swipe ? Cesium.SplitDirection.LEFT : Cesium.SplitDirection.NONE;
         added.push(layer);
         return { t_s: frames[i].t_s, layer, url: frames[i].url };
       });
@@ -294,7 +360,36 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       frameLayers.current = [];
       if (!v.isDestroyed()) added.forEach((l) => v.imageryLayers.remove(l, true));
     };
-  }, [frames]);
+  }, [frames, swipe]);
+
+  // Compare swipe: run B's frames on the right of the split, the same way.
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !framesB?.length) return;
+    let cancelled = false;
+    const added: Cesium.ImageryLayer[] = [];
+    Promise.all(framesB.map((f) => Cesium.SingleTileImageryProvider.fromUrl(f.url, { rectangle: rect }))).then((providers) => {
+      if (cancelled || v.isDestroyed()) return;
+      frameLayersB.current = providers.map((p, i) => {
+        const layer = v.imageryLayers.addImageryProvider(p);
+        layer.show = false;
+        layer.splitDirection = Cesium.SplitDirection.RIGHT;
+        added.push(layer);
+        return { t_s: framesB[i].t_s, layer, url: framesB[i].url };
+      });
+      showNearest();
+    }).catch(() => { /* B frames unavailable: only A shows. */ });
+    return () => {
+      cancelled = true;
+      frameLayersB.current = [];
+      if (!v.isDestroyed()) added.forEach((l) => v.imageryLayers.remove(l, true));
+    };
+  }, [framesB]);
+
+  useEffect(() => {
+    const v = viewer.current;
+    if (v && !v.isDestroyed()) v.scene.splitPosition = split ?? 0.5;
+  }, [split]);
 
   useEffect(showNearest, [tS, layerState.water.on, layerState.water.opacity]);
 

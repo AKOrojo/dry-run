@@ -17,7 +17,7 @@ function ModeTab({ name, Ic, active, badge, onClick }: { name: Mode; Ic: Icon; a
     ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", border: "1px solid var(--hairline)", fontWeight: 600 }
     : { background: "transparent", color: "var(--ink-muted)", border: "1px solid transparent" };
   return (
-    <button type="button" data-tour={name === "Agent" ? "agent" : undefined} aria-current={active ? "page" : undefined} onClick={onClick}
+    <button type="button" data-tour={name === "Agent" ? "agent" : name === "Compare" ? "compare" : undefined} aria-current={active ? "page" : undefined} onClick={onClick}
       style={{ height: 28, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", borderRadius: 3, font: "inherit", ...st }}>
       <Ic size={15} weight="bold" style={{ flex: "none" }} />{name}
       {!!badge && (

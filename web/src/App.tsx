@@ -8,6 +8,9 @@ import { usePinnedSeries } from "./lib/inspect";
 import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib/view";
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
+import type * as Cesium from "cesium";
+import { ByPlace, CompareCard, CompareMapOverlay, CompareView, DeltaCard, SideGlobe, WaterBudgetCard, WhatChanges } from "./components/Compare";
+import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
@@ -19,6 +22,9 @@ const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce
 const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
 // A shared link (?aoi=&run=&t=) opens on that area, run and time, paused.
 const shared = readSharedView();
+const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
+const sameStorm = (x: RunManifest, y: RunManifest) =>
+  JSON.stringify([x.scenario.storm, x.scenario.sim_hours]) === JSON.stringify([y.scenario.storm, y.scenario.sim_hours]);
 
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
@@ -40,6 +46,15 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("Scenario");
   const [agentRuns, setAgentRuns] = useState(0);
   const [tour, setTour] = useState(false);
+  // Finished runs this session (Scenario and Agent), newest first: the Compare choices.
+  const [runs, setRuns] = useState<RunManifest[]>([]);
+  const [cmp, setCmp] = useState<{ a?: string; b?: string }>({});
+  const [cmpView, setCmpView] = useState<CompareView>("Swipe");
+  const [split, setSplit] = useState(0.5);
+  const [agentIds, setAgentIds] = useState<Set<string>>(new Set());
+  const [mainViewer, setMainViewer] = useState<Cesium.Viewer>();
+  const [baseBusy, setBaseBusy] = useState(false);
+  const addRun = (m: RunManifest) => { if (m.status === "done") setRuns((p) => [m, ...p.filter((r) => r.run_id !== m.run_id)]); };
   const { t_s } = useClock();
   const view = useView();
   const pinSeries = usePinnedSeries();
@@ -114,6 +129,7 @@ export default function App() {
     try {
       const m = await simulate({ aoi_id: aoi!.aoi_id, storm: { total_mm: rain, duration_h: durationH, pattern }, interventions });
       setRun(m);
+      addRun(m);
       startClock(m);
     } catch (e) {
       setSimErr(e instanceof ApiError ? { message: e.message, retryable: e.retryable }
@@ -121,9 +137,57 @@ export default function App() {
     } finally { setBusy(false); }
   };
 
+  // ---- Compare: A defaults to the baseline of B's storm, B to the newest run that is not a baseline.
+  const here = useMemo(() => runs.filter((r) => r.scenario.aoi_id === aoiId), [runs, aoiId]);
+  const comparing = mode === "Compare";
+  useEffect(() => {
+    if (!comparing || !here.length || baseBusy) return;
+    const latest = here.find((r) => !isBaseline(r)) ?? here[0];
+    if (isBaseline(latest) || here.some((r) => isBaseline(r) && sameStorm(r, latest))) return;
+    // Its baseline is usually a cache hit (the warmed presets); runs are content-addressed, so this is idempotent.
+    setBaseBusy(true);
+    simulate({ ...latest.scenario, interventions: [], label: null }).then(addRun, () => { /* compare what exists */ }).finally(() => setBaseBusy(false));
+  }, [comparing, here]);
+  useEffect(() => {
+    if (!comparing) return;
+    const has = (id?: string) => here.some((r) => r.run_id === id);
+    if (has(cmp.a) && has(cmp.b)) return;
+    const b = here.find((r) => !isBaseline(r)) ?? here[0];
+    const a = b && (here.find((r) => r !== b && isBaseline(r) && sameStorm(r, b)) ?? here.find((r) => r !== b));
+    if (a?.run_id !== cmp.a || b?.run_id !== cmp.b) setCmp({ a: a?.run_id, b: b?.run_id });
+  }, [comparing, here, cmp]);
+  const aRun = here.find((r) => r.run_id === cmp.a), bRun = here.find((r) => r.run_id === cmp.b);
+  const pair = comparing && aRun && bRun && aRun !== bRun ? { a: aRun, b: bRun } : undefined;
+  useEffect(() => { if (pair) clock.set({ max_s: pair.b.frames.at(-1)?.t_s ?? 0 }); }, [pair?.b.run_id]);
+  // Side by side: A on the left map, B on the right one. A single run view shows that run; the others show B's buildings.
+  const mapRun = pair ? (cmpView === "A" || cmpView === "Side by side" ? pair.a : pair.b) : run;
+  const framesOf = (m?: RunManifest) => m?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, m.run_id, f.png) }));
+  const origin = (m: RunManifest) => (agentIds.has(m.run_id) ? "made by the agent" : isBaseline(m) ? "no interventions" : "made in Scenario");
+  const [places, setPlaces] = useState<PlaceRow[] | null>(null);
+  useEffect(() => {
+    setPlaces(null);
+    if (!pair || !aoiId) return;
+    let off = false;
+    byPlace(aoiId, pair.a.run_id, pair.b.run_id).then((r) => { if (!off) setPlaces(r); }, () => { if (!off) setPlaces([]); });
+    return () => { off = true; };
+  }, [aoiId, pair?.a.run_id, pair?.b.run_id]);
+  const changes = useMemo(() => (pair ? whatChanges(pair.a, pair.b) : []), [pair?.a.run_id, pair?.b.run_id]);
+  const activeChange = changes.reduce((k, c, i) => (c.tB != null && c.tB <= t_s && (k < 0 || c.tB >= (changes[k].tB ?? 0)) ? i : k), -1);
+  // Difference: one B-minus-A frame for the frame under the playhead, drawn in the browser.
+  const diffT = pair && cmpView === "Difference" ? pair.b.frames.reduce((best, f) => (Math.abs(f.t_s - t_s) < Math.abs(best - t_s) ? f.t_s : best), 0) : null;
+  const [diff, setDiff] = useState<{ t_s: number; url: string }[]>();
+  useEffect(() => {
+    if (!pair || diffT == null) { setDiff(undefined); return; }
+    let off = false;
+    diffFrame(runsBase, pair.a, pair.b, diffT).then((url) => { if (!off) setDiff([{ t_s: diffT, url }]); }, () => { /* keep the last difference frame */ });
+    return () => { off = true; };
+  }, [pair?.a.run_id, pair?.b.run_id, diffT, runsBase]);
+
   // Every frame of the run, preloaded by the map; the clock only picks which one shows.
-  const frames = useMemo(() => run?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, run.run_id, f.png) })),
-    [run, runsBase]);
+  const frames = useMemo(() => (pair && cmpView === "Difference" ? diff : pair && cmpView === "Swipe" ? framesOf(pair.a) : framesOf(mapRun)),
+    [mapRun, runsBase, pair?.a.run_id, cmpView, diff]);
+  const framesB = useMemo(() => (pair && cmpView === "Swipe" ? framesOf(pair.b) : undefined), [pair?.b.run_id, cmpView, runsBase]);
+  const side = !!pair && cmpView === "Side by side";
 
   const sources = Object.values(aoi?.sources ?? {});
   // Tide only applies to coastal areas: an AOI with river inflows is inland.
@@ -136,13 +200,24 @@ export default function App() {
         onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
-          {aoi && <MapStage aoi={aoi} run={run} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
+          <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
+            {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer}
+              tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
+          </div>
+          {side && aoi && pair && (
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", right: 0 }}>
+              <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
+            </div>
+          )}
+          {pair && <CompareMapOverlay a={pair.a} b={pair.b} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && <Dock run={run} series={pinSeries ?? undefined} />}
+        {view.timeline && <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+          third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
+          note={pair ? "One clock drives A and B" : undefined} />}
       </div>
       {!view.sidebar ? null : mode === "Agent" ? (
         <aside className="dr-panel">
@@ -150,11 +225,17 @@ export default function App() {
             <h2 className="label dr-section-title">Agent</h2>
             <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired}
               onReplay={setReplayed}
-              onRun={(id) => { setAgentRuns((n) => n + 1); getRun(id).then((m) => { setRun(m); startClock(m); }); }} />
+              onRun={(id) => { setAgentRuns((n) => n + 1); setAgentIds((p) => new Set(p).add(id)); getRun(id).then((m) => { setRun(m); addRun(m); startClock(m); }); }} />
           </section>
         </aside>
       ) : (
-        <Sidebar aoi={aoi} run={run} sources={sources} scenario={{
+        <Sidebar aoi={aoi} run={mapRun} sources={sources} onScenario={() => setMode("Scenario")} compare={comparing ? (
+          <>
+            <CompareCard runs={here} a={cmp.a} b={cmp.b} busy={baseBusy} onScenario={() => setMode("Scenario")}
+              onA={(a) => setCmp((c) => ({ ...c, a }))} onB={(b) => setCmp((c) => ({ ...c, b }))} onSwap={() => setCmp((c) => ({ a: c.b, b: c.a }))} />
+            {pair && <><DeltaCard a={pair.a} b={pair.b} /><WaterBudgetCard a={pair.a} b={pair.b} /></>}
+          </>
+        ) : undefined} scenario={{
           rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
           coastal, busy, canRun: !!aoi, onSimulate: go, err: simErr,
         }} />

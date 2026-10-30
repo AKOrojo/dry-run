@@ -31,6 +31,10 @@ type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
 export type MapStageProps = {
   aoi?: AOIManifest; run?: RunManifest; frames?: { t_s: number; url: string }[]; tS: number;
   ionToken: string; buildingsUrl?: string; runsBase: string;
+  /** Compare swipe: run B's frames, drawn right of `split` (0..1 of the width) while `frames` stay left of it. */
+  framesB?: { t_s: number; url: string }[]; split?: number;
+  /** Also told about the Cesium viewer (Compare's side-by-side map follows its camera). */
+  onViewer?: (viewer: Cesium.Viewer | undefined) => void;
 };
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
@@ -494,7 +498,7 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
 }
 
 // ---------- the stage ----------
-export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
+export function MapStage({ aoi, run, frames, framesB, split, onViewer, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
@@ -1032,9 +1036,9 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
 
   return (
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
-      {aoi && <Globe aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
+      {aoi && <Globe aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
-        onViewer={(v) => { setViewer(v); setMapViewer(v); }} />}
+        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {lay.places.on && places.map((p) => {
           const lp = evPlace.get(p.name)?.label_point;

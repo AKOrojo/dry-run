@@ -1,6 +1,6 @@
 // Dock (rev 5 dock()): timeline, three charts, key events. Everything reads the one clock.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent } from "react";
+import type { PointerEvent, ReactNode } from "react";
 import { CaretDown, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
 import type { RunEvents, RunManifest } from "../lib/api";
 import { setFocus } from "../lib/focus";
@@ -51,14 +51,16 @@ function niceMax(v: number) {
 }
 const tickLabel = (v: number) => String(+v.toFixed(2));
 
-function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, baseline, events = [], ymaxMin = 0 }: {
-  series: number[]; color: string; playI: number; tTotal: number; width: number; aria: string; gid: string;
+function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, threshold, baseline, events = [], ymaxMin = 0, ghost }: {
+  series: number[]; color: string; playI: number; tTotal: number; width: number; height?: number; aria: string; gid: string;
   threshold?: [number, string]; baseline?: [number, string]; events?: Ev[]; ymaxMin?: number;
+  /** Compare mode: run A on the same frame times, drawn dashed in muted ink under run B. */
+  ghost?: number[];
 }) {
-  const W = width, H = 104, L = 32, R = 6, T = 8, B = 20;
+  const W = width, H = height, L = 32, R = 6, T = 8, B = 20;
   const pw = W - L - R, ph = H - T - B, base = T + ph;
   const n = series.length;
-  const ymax = niceMax(Math.max(ymaxMin, ...series));
+  const ymax = niceMax(Math.max(ymaxMin, ...series, ...(ghost ?? [])));
   const yticks = [0, ymax / 2, ymax];
   const X = (i: number) => L + (pw * i) / Math.max(1, n - 1);
   const Y = (v: number) => T + ph * (1 - v / ymax);
@@ -82,6 +84,7 @@ function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, base
           <text x={L - 6} y={Y(v) + 3.5} textAnchor="end" fill="var(--ink-muted)">{tickLabel(v)}</text>
         </g>
       ))}
+      {ghost && ghost.length > 1 && <path d={path(ghost.map((v, i) => [X(i), Y(v)] as const))} fill="none" stroke="var(--ink-muted)" strokeWidth="1.5" strokeDasharray="3 3" />}
       {n > 1 && <>
         <path d={`${path(fut)} L${fut[fut.length - 1][0].toFixed(1)} ${base} L${fut[0][0].toFixed(1)} ${base} Z`} fill={`url(#${gid}f)`} />
         <path d={`${path(past)} L${past[past.length - 1][0].toFixed(1)} ${base} L${past[0][0].toFixed(1)} ${base} Z`} fill={`url(#${gid}p)`} />
@@ -119,11 +122,14 @@ function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, base
   );
 }
 
-function ChartFigure({ title, unit, now, last, series, empty, ...rest }: {
+function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
+  /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
+  ab?: ReactNode;
 } & Omit<React.ComponentProps<typeof Chart>, "series" | "width">) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
+  const ch = ab ? 84 : 104;  // the A / B line takes the difference
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -135,12 +141,13 @@ function ChartFigure({ title, unit, now, last, series, empty, ...rest }: {
     <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, borderRight: last ? undefined : "1px solid var(--hairline)" }}>
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
         <span style={{ fontWeight: 600 }}>{title}</span><span style={{ color: "var(--ink-muted)" }}>({unit})</span>
-        <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>
+        {!ab && <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>}
         <span style={{ display: "flex", alignSelf: "center", color: "var(--ink-muted)" }}><DotsThreeVertical size={14} weight="bold" /></span>
       </figcaption>
-      <div ref={ref} style={{ height: 104, position: "relative", minWidth: 0 }}>
-        {series && series.length > 1 && w > 60 ? <Chart series={series} width={w} {...rest} />
-          : <p style={{ margin: 0, height: 104, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", fontSize: 12 }}>{empty ?? "No data yet"}</p>}
+      {ab}
+      <div ref={ref} style={{ height: ch, position: "relative", minWidth: 0 }}>
+        {series && series.length > 1 && w > 60 ? <Chart series={series} width={w} height={ch} {...rest} />
+          : <p style={{ margin: 0, height: ch, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", fontSize: 12 }}>{empty ?? "No data yet"}</p>}
       </div>
     </figure>
   );
@@ -148,7 +155,7 @@ function ChartFigure({ title, unit, now, last, series, empty, ...rest }: {
 
 const sq: React.CSSProperties = { height: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "var(--radius-md)" };
 
-function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed }: { ts: TS; events: Ev[]; durS: number; rainStopS: number; nowS: number; playing: boolean; speed: number }) {
+function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: { ts: TS; events: Ev[]; durS: number; rainStopS: number; nowS: number; playing: boolean; speed: number; note?: string }) {
   const pct = (t: number) => (100 * t) / durS;
   const ph = pct(nowS);
   const track = useRef<HTMLDivElement>(null);
@@ -168,7 +175,7 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed }: { ts: T
   const pressed = { background: "var(--pressed-bg)", color: "var(--ground)", border: "1px solid var(--ink)", boxShadow: "var(--pressed-shadow)" };
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <Band title="Timeline" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}><span style={{ fontFamily: "var(--font-mono)" }}>T+00:00 – {fmtT(durS)}</span> · {frames} frames, {stepMin} min</span>} />
+      <Band title="Timeline" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>{note ?? <><span style={{ fontFamily: "var(--font-mono)" }}>T+00:00 – {fmtT(durS)}</span> · {frames} frames, {stepMin} min</>}</span>} />
       <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 18, alignItems: "center", padding: "14px 18px 10px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button type="button" aria-label="Play" style={{ ...sq, width: 30, ...raisedButton }} onClick={() => clock.set(nowS >= durS ? { t_s: 0, playing: true } : { playing: true })}>{svg12(ico.play)}</button>
@@ -282,7 +289,21 @@ function KeyEvents({ events, nowS, runId }: { events: Ev[]; nowS: number; runId?
   );
 }
 
-export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[] }) {
+/** Compare header: "A 20.81  B 3.66  −82%" at the playhead. */
+function abNow(a: number, b: number, digits: number) {
+  const p = a > 0 ? Math.round((100 * (b - a)) / a) : null;
+  return (
+    <span style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: -2, fontWeight: 600, whiteSpace: "nowrap", ...FIG }}>
+      <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>A {a.toFixed(digits)}</span>B {b.toFixed(digits)}
+      {p != null && <span style={{ color: p < 0 ? "var(--verified)" : p > 0 ? "var(--hazard)" : "var(--ink-muted)" }}>{p > 0 ? "+" : p < 0 ? "−" : ""}{Math.abs(p)}%</span>}
+    </span>
+  );
+}
+
+export function Dock({ run, series, ghost, third, side, note }: { run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+  /** Compare mode: run A, drawn under `run` (B) in the charts. */ ghost?: RunManifest;
+  /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. */
+  third?: ReactNode; side?: ReactNode; note?: string }) {
   const { t_s, playing, speed } = useClock();
   const ts = run?.timeseries ?? null;
   const rainStopS = (run?.scenario.storm.duration_h ?? 3) * 3600;
@@ -301,20 +322,24 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
   const chartEvents = events.filter((e) => e.kind === "cut" || e.kind === "surge");
   const common = { playI: pi, tTotal: durS };
   const dp = series && series.length > 1 ? series : undefined;
+  // Run A on B's frame times (nearest frame), so both lines share one x axis and one playhead.
+  const gts = ghost?.timeseries;
+  const onB = (k: "flooded_area_km2" | "road_km_impassable") => (gts && gts.t_s.length > 1 ? ts.t_s.map((t) => gts[k][nearest(gts.t_s, t)]) : undefined);
+  const gfa = onB("flooded_area_km2"), grk = onB("road_km_impassable");
   return (
     <div data-tour="timeline" style={shell}>
       <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
-        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} />
+        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
-          <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
+          <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
             aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />
-          <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
+          <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
             aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />
-          <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map"
-            color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />
+          {third ?? <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map"
+            color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />}
         </div>
       </div>
-      <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />
+      {side ?? <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />}
     </div>
   );
 }

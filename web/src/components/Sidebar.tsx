@@ -1,5 +1,5 @@
-// Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources.
-import { useState } from "react";
+// Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
+import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -19,12 +19,13 @@ import { Button } from "./ds";
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
 export type Failure = { message: string; retryable: boolean };
 const TABS = ["Layers", "Inspect", "Scenario", "Sources"] as const;
-type Tab = (typeof TABS)[number];
+const COMPARE_TABS = ["Compare", "Inspect", "Sources"] as const;
+type Tab = (typeof TABS)[number] | "Compare";
 
-function Tabs({ active, onTab }: { active: Tab; onTab: (t: Tab) => void }) {
+function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTab: (t: Tab) => void }) {
   return (
     <nav aria-label="Sidebar" style={{ display: "flex", alignItems: "flex-end", padding: "0 16px", background: "var(--surface)", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
-      {TABS.map((n) => {
+      {tabs.map((n) => {
         const on = n === active;
         const st: CSSProperties = on
           ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: "0 12px" }
@@ -197,7 +198,7 @@ function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   );
 }
 
-const describeIv = (iv: { type: string; [k: string]: unknown }) =>
+export const describeIv = (iv: { type: string; [k: string]: unknown }) =>
   iv.type === "tide" ? `Sea level ${(iv.boundary_level_m as number) > 0 ? "+" : ""}${iv.boundary_level_m} m`
   : iv.type === "drain_upgrade" ? `Drains ×${iv.capacity_factor ?? "?"}`
   : iv.type === "green" ? "Green infrastructure" : iv.type === "pond" ? "Retention pond" : iv.type === "road_closure" ? "Road closure" : iv.type;
@@ -343,18 +344,22 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources }: {
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario }: {
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
+  /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
+  compare?: ReactNode; onScenario?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("Scenario");
+  const comparing = compare != null;
+  useEffect(() => setTab(comparing ? "Compare" : "Scenario"), [comparing]);
   const { t_s } = useClock();
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
-      <Tabs active={tab} onTab={setTab} />
+      <Tabs tabs={comparing ? COMPARE_TABS : TABS} active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
         {tab === "Layers" && <LayersCard />}
-        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={() => setTab("Scenario")} /></>}
+        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={comparing && onScenario ? onScenario : () => setTab("Scenario")} /></>}
         {tab === "Scenario" && (
           <>
             <StormCard {...scenario} />
@@ -367,6 +372,7 @@ export function Sidebar({ aoi, run, scenario, sources }: {
             )}
           </>
         )}
+        {tab === "Compare" && compare}
         {tab === "Sources" && <SourcesCard sources={sources} />}
       </div>
     </aside>
