@@ -29,7 +29,7 @@ const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 const cssColor = (name: string) =>
   Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 
-type Reading = { depth: number; max: number; ser?: PointSeries | null };
+type Reading = { depth: number; max: number; ser?: PointSeries | null; loading?: boolean };
 type Place = { name: string; lon: number; lat: number; ring: [number, number][] };
 type Area = { road_km_impassable: number; buildings_flooded: number };
 type ArrivalLegend = { edges_min: number[]; alphas: number[]; rgb: string; note: string };
@@ -211,6 +211,12 @@ function Tooltip({ r, tS, cellM, pinned, style }: { r: Reading; tS: number; cell
   const wet = r.depth >= wetM, cut = r.depth >= passM;
   const permanent = !!ser?.permanent_water;
   const since = (t: number | null | undefined) => (!ser ? "" : t == null ? "never" : `since ${fmtT(t)}`);
+  if (r.loading) return (
+    <div role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+      borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
+      Loading depth… the first point on a run can take a few seconds.
+    </div>
+  );
   return (
     <div role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", overflow: "hidden", ...style }}>
@@ -432,7 +438,10 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       const cur = cursor.current;
       if (!cur || !runId || pinnedRef.current || !inAoi(cur.lon, cur.lat)) { if (!pinnedRef.current) setHover(null); return; }
       const mine = ++seq;
+      // A cold server instance can take ~20 s to load a run's depth stack: show a loading state, never a timeout.
+      const slow = setTimeout(() => { if (mine === seq && !pinnedRef.current) setHover({ depth: NaN, max: NaN, loading: true, ...cur }); }, 300);
       const r = await fetchReading(runId, cur.lon, cur.lat, tSRef.current);
+      clearTimeout(slow);
       if (mine !== seq || pinnedRef.current) return;
       setHover(r ? { ...r, ...cur } : null);
     };
@@ -454,7 +463,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       if (moved) return;
       if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
-      if (h) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
+      if (h && !h.loading) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
     };
     let rdown: { x: number; y: number } | null = null;
     const onContext = (e: MouseEvent) => {
@@ -524,7 +533,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   // Inspect store: the pinned point wins over the hover.
   const shown = pinned ?? hover;
   useEffect(() => {
-    setInspect(shown ? { lon: shown.lon, lat: shown.lat, depth_m: shown.depth, max_m: shown.max,
+    setInspect(shown && !shown.loading ? { lon: shown.lon, lat: shown.lat, depth_m: shown.depth, max_m: shown.max,
       wet_t: shown.ser?.first_flooded_s ?? null, impassable_t: shown.ser?.first_impassable_s ?? null } : null);
   }, [shown?.lon, shown?.lat, shown?.depth, shown?.max, shown?.ser]);
   useEffect(() => () => setInspect(null), []);
