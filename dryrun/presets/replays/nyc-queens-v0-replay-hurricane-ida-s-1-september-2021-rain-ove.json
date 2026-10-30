@@ -1,5 +1,5 @@
 {
- "recorded_at": "2026-10-30T20:00:31+00:00",
+ "recorded_at": "2026-10-30T23:02:26+00:00",
  "base": "https://dryrun-vcdpde6nnq-uc.a.run.app",
  "provider": "meta",
  "model": "muse-spark-1.3",
@@ -7,14 +7,14 @@
  "question": "Replay Hurricane Ida's 1 September 2021 rain over Queens: which neighbourhoods flood, how deep, and would doubling sewer capacity have helped?",
  "events": [
   {
-   "t": 1.83,
+   "t": 1.63,
    "kind": "thought",
    "data": {
-    "text": "Replaying Ida's deluge over Queens — pulling the study-area map to set the baseline."
+    "text": "Replaying Ida's rainfall over Queens — pulling the flood model geography first."
    }
   },
   {
-   "t": 1.83,
+   "t": 1.63,
    "kind": "tool_call",
    "data": {
     "name": "get_aoi_info",
@@ -24,7 +24,7 @@
    }
   },
   {
-   "t": 1.95,
+   "t": 1.79,
    "kind": "tool_result",
    "data": {
     "name": "get_aoi_info",
@@ -1229,20 +1229,20 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 1.7,
+     "elapsed_s": 1.5,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 4.78,
+   "t": 4.66,
    "kind": "thought",
    "data": {
-    "text": "I've mapped your Ida replay options — now running the LaGuardia-gauge baseline to pinpoint flooding."
+    "text": "I've got Ida's storm presets ready — running the historical replay and the doubled-sewer case."
    }
   },
   {
-   "t": 4.8,
+   "t": 4.66,
    "kind": "tool_call",
    "data": {
     "name": "run_simulation",
@@ -1258,16 +1258,16 @@
    }
   },
   {
-   "t": 4.81,
+   "t": 4.76,
    "kind": "tool_result",
    "data": {
     "name": "run_simulation",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "status": "done",
      "backend": "solver",
      "stats": {
-      "run_id": "r_e5558564426152f5",
+      "run_id": "r_8b20b998115ce8be",
       "buildings_flooded": 12531,
       "buildings_flooded_severe": 4975,
       "buildings_flooded_own_cell": 3854,
@@ -1289,34 +1289,42 @@
       "mass_balance_error_pct": 0.0,
       "buildings_in_ponds": 0,
       "passability_threshold_m": 0.3,
-      "is_surrogate": false
+      "is_surrogate": false,
+      "sewer_captured_m3": null,
+      "sewer_surcharge_m3": null,
+      "drain_outfall_m3": null,
+      "drain_storage_end_m3": null,
+      "drain_peak_full_pct": null,
+      "drain_full_t_s": null,
+      "drain_surcharge_start_t_s": null,
+      "drain_surcharge_end_t_s": null
      },
      "error": null
     },
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 4.6,
+     "elapsed_s": 4.5,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 4.81,
+   "t": 4.76,
    "kind": "run_ready",
    "data": {
-    "run_id": "r_e5558564426152f5"
+    "run_id": "r_8b20b998115ce8be"
    }
   },
   {
-   "t": 7.39,
+   "t": 7.69,
    "kind": "thought",
    "data": {
-    "text": "Baseline shows widespread flooding — now breaking it down by neighbourhood and testing doubled sewers."
+    "text": "Baseline replay is done — now testing doubled sewer capacity and mapping neighbourhood impacts."
    }
   },
   {
-   "t": 7.39,
+   "t": 7.69,
    "kind": "tool_call",
    "data": {
     "name": "run_simulation",
@@ -1324,8 +1332,8 @@
      "aoi_id": "nyc-queens-v0",
      "interventions": [
       {
-       "type": "drain_upgrade",
-       "capacity_factor": 2.0
+       "capacity_factor": 2.0,
+       "type": "drain_upgrade"
       }
      ],
      "sim_hours": 8.0,
@@ -1338,16 +1346,16 @@
    }
   },
   {
-   "t": 7.39,
+   "t": 7.78,
    "kind": "tool_result",
    "data": {
     "name": "run_simulation",
     "result": {
-     "run_id": "r_525e918dbc221462",
+     "run_id": "r_8b3f80e2196e7e72",
      "status": "done",
      "backend": "solver",
      "stats": {
-      "run_id": "r_525e918dbc221462",
+      "run_id": "r_8b3f80e2196e7e72",
       "buildings_flooded": 9113,
       "buildings_flooded_severe": 1963,
       "buildings_flooded_own_cell": 2091,
@@ -1369,50 +1377,58 @@
       "mass_balance_error_pct": 0.0,
       "buildings_in_ponds": 0,
       "passability_threshold_m": 0.3,
-      "is_surrogate": false
+      "is_surrogate": false,
+      "sewer_captured_m3": null,
+      "sewer_surcharge_m3": null,
+      "drain_outfall_m3": null,
+      "drain_storage_end_m3": null,
+      "drain_peak_full_pct": null,
+      "drain_full_t_s": null,
+      "drain_surcharge_start_t_s": null,
+      "drain_surcharge_end_t_s": null
      },
      "error": null
     },
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 7.2,
+     "elapsed_s": 7.5,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 7.39,
+   "t": 7.78,
    "kind": "run_ready",
    "data": {
-    "run_id": "r_525e918dbc221462"
+    "run_id": "r_8b3f80e2196e7e72"
    }
   },
   {
-   "t": 11.98,
+   "t": 10.6,
    "kind": "thought",
    "data": {
-    "text": "Overall, doubling sewers cuts flooding sharply — now checking which neighbourhoods flood deepest."
+    "text": "Baseline flooding is severe and doubling sewers helps a lot — now breaking down which neighbourhoods are hit hardest."
    }
   },
   {
-   "t": 11.98,
+   "t": 10.6,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Elmhurst",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 15.62,
+   "t": 13.84,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "Elmhurst",
      "buildings_flooded": 3012,
      "buildings_flooded_own_cell": 981,
@@ -1424,29 +1440,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.4,
+     "elapsed_s": 13.5,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 15.62,
+   "t": 13.84,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Corona",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 15.7,
+   "t": 13.93,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "Corona",
      "buildings_flooded": 2006,
      "buildings_flooded_own_cell": 574,
@@ -1458,29 +1474,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.5,
+     "elapsed_s": 13.6,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 15.7,
+   "t": 13.93,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Woodside",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 15.77,
+   "t": 14.01,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "Woodside",
      "buildings_flooded": 1452,
      "buildings_flooded_own_cell": 419,
@@ -1492,29 +1508,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.6,
+     "elapsed_s": 13.7,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 15.77,
+   "t": 14.01,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Jackson Heights",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 15.88,
+   "t": 14.09,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "Jackson Heights",
      "buildings_flooded": 2782,
      "buildings_flooded_own_cell": 980,
@@ -1526,29 +1542,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.7,
+     "elapsed_s": 13.8,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 15.88,
+   "t": 14.09,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "East Elmhurst",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 15.96,
+   "t": 14.17,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "East Elmhurst",
      "buildings_flooded": 935,
      "buildings_flooded_own_cell": 274,
@@ -1560,29 +1576,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.8,
+     "elapsed_s": 13.9,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 15.96,
+   "t": 14.17,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Middle Village",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 16.06,
+   "t": 14.25,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_e5558564426152f5",
+     "run_id": "r_8b20b998115ce8be",
      "place": "Middle Village",
      "buildings_flooded": 1359,
      "buildings_flooded_own_cell": 384,
@@ -1594,24 +1610,24 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.9,
+     "elapsed_s": 13.9,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 16.06,
+   "t": 14.25,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Rego Park",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 16.06,
+   "t": 14.25,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
@@ -1621,51 +1637,24 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.9,
+     "elapsed_s": 13.9,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 16.06,
-   "kind": "tool_call",
-   "data": {
-    "name": "get_area_stats",
-    "arguments": {
-     "place": "Forest Hills",
-     "run_id": "r_e5558564426152f5"
-    }
-   }
-  },
-  {
-   "t": 16.06,
-   "kind": "tool_result",
-   "data": {
-    "name": "get_area_stats",
-    "result": {
-     "error": "Turn tool budget reached; answer with existing results"
-    },
-    "budget": {
-     "runs_used": 0,
-     "runs_max": 4,
-     "elapsed_s": 15.9,
-     "deadline_s": 240
-    }
-   }
-  },
-  {
-   "t": 16.06,
+   "t": 14.25,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "LeFrak City",
-     "run_id": "r_e5558564426152f5"
+     "run_id": "r_8b20b998115ce8be"
     }
    }
   },
   {
-   "t": 16.06,
+   "t": 14.25,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
@@ -1675,250 +1664,385 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 15.9,
+     "elapsed_s": 14.0,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 23.14,
-   "kind": "thought",
+   "t": 14.25,
+   "kind": "tool_call",
    "data": {
-    "text": "Replay of 1 Sep 2021 Ida rain over Queens, study area `nyc-queens-v0`:\n\nStorm used for both runs:\n\n* **118 mm in 4 h, center_peaked, rain over the whole study area** - the `Ida 1 Sep 2021 (LaGuardia gauge)` case\n* `sim_hours: 8` to allow ponded water to drain\n* Planning model, not a forecast.\n\n### Baseline - no change to sewers\n\nRun `r_e5558564426152f5`:\n\n* 12,531 buildings flooded, of which 4,975 severe\n* 45,385 people exposed\n* 92.198 km road impassable at >0.3 m\n* 2.2384 km2 flooded\n* max depth 4.521 m in domain\n* drained 1,163,496.2 m3, stored at end 729,052.4 m3\n\nAll neighbourhoods checked flood:\n\n* **Elmhurst:** 3,012 buildings flooded, max_depth 2.9 m, 27.055 km road impassable, 10,775 people exposed, 0.6364 km2 flooded\n* **Jackson Heights:** 2,782 buildings flooded, max_depth 2.279 m, 15.922 km road impassable, 9,318 people exposed, 0.4241 km2 flooded\n* **Corona:** 2,006 buildings flooded, max_depth 4.52 m - deepest of those checked, domain max, 25.635 km road impassable, 14,063 people exposed - highest people count, 0.5411 km2 flooded\n* **Woodside:** 1,452 buildings flooded, max_depth 2.812 m, 9.529 km road impassable, 3,429 people exposed, 0.1881 km2 flooded\n* **Middle Village:** 1,359 buildings flooded, max_depth 1.479 m, 5.895 km road impassable, 1,061 people exposed, 0.1043 km2 flooded\n* **East Elmhurst:** 935 buildings flooded, max_depth 1.438 m, 6.893 km road impassable, 1,933 people exposed, 0.1526 km2 flooded\n\n> Rank by buildings flooded: Elmhurst > Jackson Heights > Corona > Woodside > Middle Village > East Elmhurst\n> Rank by depth: Corona 4.52m > Elmhurst 2.9m > Woodside 2.812m > Jackson Heights 2.279m > Middle Village 1.479m > East Elmhurst 1.438m\n> Rank by people: Corona > Elmhurst > Jackson Heights\n\n### Would doubling sewer capacity have helped?\n\nTested city-wide doubling of existing drains - `drain_upgrade capacity_factor: 2.0` with no place, so applied to WHOLE study area, same 118mm / 4h storm.\n\nRun `r_525e918dbc221462`:\n\n* 9,113 buildings flooded vs 12,531 baseline: -3,418, -27%\n* 1,963 buildings severe vs 4,975 baseline: -3,012, -61%\n* 21,324 people exposed vs 45,385: -24,061, -53%\n* 44.154 km road impassable vs 92.198 km: -48.044 km, -52%\n* 1.0691 km2 flooded vs 2.2384 km2: -52%\n* max depth 2.306 m vs 4.521 m\n* drained volume 1,859,186.1 m3 vs 1,163,496.2 m3, stored at end 206,063.3 m3 vs 729,052.4 m3\n\nYes - doubling existing sewer capacity substantially reduces severe flooding, people exposed and impassable roads by about half, and severe buildings by ~60%.\n\nIt does not prevent flooding: >9,000 buildings still flood and >44 km of road remains impassable in this replay."
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Forest Hills",
+     "run_id": "r_8b20b998115ce8be"
+    }
    }
   },
   {
-   "t": 39.2,
+   "t": 14.25,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 14.0,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 14.25,
+   "kind": "tool_call",
+   "data": {
+    "name": "compare_runs",
+    "arguments": {
+     "alt_run_id": "r_8b3f80e2196e7e72",
+     "base_run_id": "r_8b20b998115ce8be"
+    }
+   }
+  },
+  {
+   "t": 14.26,
+   "kind": "tool_result",
+   "data": {
+    "name": "compare_runs",
+    "result": {
+     "error": "Turn tool budget reached; answer with existing results"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 14.0,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 23.1,
+   "kind": "thought",
+   "data": {
+    "text": "Replay of 1 September 2021 rain over Queens.\n\nModelled as rain over the whole study area `nyc-queens-v0`:\n\n* **Baseline:** `total_mm: 118, duration_h: 4, pattern: center_peaked, sim_hours: 8`\n  * This is the preset `Ida 1 Sep 2021 (LaGuardia gauge)` run verbatim\n  * Run `r_8b20b998115ce8be`\n* **Intervention:** same storm + city-wide `drain_upgrade capacity_factor: 2.0`\n  * Applies to the WHOLE study area, i.e. city-wide doubled sewer capacity, not a local fix\n  * This is the preset `Ida (LaGuardia) with sewers x2` run verbatim\n  * Run `r_8b3f80e2196e7e72`\n\nThis is a planning model, not a forecast.\n\n### Baseline: what floods\n\nRun `r_8b20b998115ce8be`:\n\n* buildings_flooded: 12,531\n* buildings_flooded_severe: 4,975\n* people_exposed: 45,385\n* road_km_impassable: 92.198 km at 0.3 m threshold\n* flooded_area_km2: 2.2384\n* max_depth_m: 4.521\n* drained_volume_m3: 1,163,496.2\n\nNeighbourhoods, inside-place stats for the same run:\n\n* **Elmhurst:** buildings_flooded 3,012, people_exposed 10,775, road_km_impassable 27.055, max_depth_m 2.9, flooded_area_km2 0.6364\n  * `area:Elmhurst:buildings_flooded`, `area:Elmhurst:max_depth_m`\n* **Jackson Heights:** buildings_flooded 2,782, people_exposed 9,318, road_km_impassable 15.922, max_depth_m 2.279, flooded_area_km2 0.4241\n* **Corona:** buildings_flooded 2,006, people_exposed 14,063, road_km_impassable 25.635, max_depth_m 4.52, flooded_area_km2 0.5411\n  * deepest of the neighbourhoods retrieved, and highest people_exposed\n* **Woodside:** buildings_flooded 1,452, people_exposed 3,429, road_km_impassable 9.529, max_depth_m 2.812, flooded_area_km2 0.1881\n* **Middle Village:** buildings_flooded 1,359, people_exposed 1,061, road_km_impassable 5.895, max_depth_m 1.479, flooded_area_km2 0.1043\n* **East Elmhurst:** buildings_flooded 935, people_exposed 1,933, road_km_impassable 6.893, max_depth_m 1.438, flooded_area_km2 0.1526\n\nIn order of buildings_flooded retrieved: Elmhurst > Jackson Heights > Corona > Woodside > Middle Village > East Elmhurst.\n\nIn order of max_depth_m retrieved: Corona 4.52 m > Elmhurst 2.9 m > Woodside 2.812 m > Jackson Heights 2.279 m > Middle Village 1.479 m > East Elmhurst 1.438 m.\n\n### Would doubling sewer capacity have helped?\n\nYes, substantially, but widespread flooding remains.\n\nRun `r_8b3f80e2196e7e72` vs baseline `r_8b20b998115ce8be`:\n\n* buildings_flooded: 9,113 vs 12,531 = -3,418, -27.3%\n* buildings_flooded_severe: 1,963 vs 4,975 = -3,012, -60.5%\n* people_exposed: 21,324 vs 45,385 = -24,061, -53.0%\n* road_km_impassable: 44.154 vs 92.198 = -48.044 km, -52.1%\n* flooded_area_km2: 1.0691 vs 2.2384 = -1.1693 km2, -52.2%\n* max_depth_m: 2.306 vs 4.521 = -2.215 m\n* drained_volume_m3: 1,859,186.1 vs 1,163,496.2 = +695,690 m3 more drained\n\nInterpretation for engineering:\n\n1. Run baseline first shows Ida-LaGuardia rate overwhelms drainage: ~92 km of roads impassable, ~12.5k buildings flooded.\n2. One change at a time, city-wide sewers x2, cuts severe buildings by ~60%, people exposed and impassable roads by ~half, and peak depth by ~2.2 m.\n3. Residual risk is still high: 9,113 buildings flooded, 1,963 severe, 44.2 km roads impassable with x2 sewers, so sewers alone do not eliminate Ida-scale flooding."
+   }
+  },
+  {
+   "t": 42.66,
    "kind": "brief",
    "data": {
-    "title": "Queens Ida rainfall replay with doubled sewer comparison",
-    "summary": "Replay of Ida LaGuardia rain over Queens shows widespread flooding with deepest water in Corona and Elmhurst and severe impacts in Jackson Heights and Woodside, while doubled city-wide sewer capacity substantially lowers buildings flooded, severe flooding, impassable roads and exposure but leaves extensive residual flooding.",
+    "title": "Ida rain replay over Queens and test of doubled sewer capacity",
+    "summary": "Replay of Ida rain with existing sewers floods all assessed neighbourhoods, with hardest impacts in Elmhurst and Jackson Heights and Corona and Woodside and deepest ponding in Corona, while East Elmhurst and Middle Village flood less deeply but still widely. Doubling city-wide sewer capacity sharply lowers depths and flooded area and impassable roads and exposure, yet many buildings remain at risk so sewers alone do not prevent Ida-scale flooding.",
     "claims": [
      {
-      "text": "buildings with flood water close by under Ida rain",
+      "text": "buildings with flood water nearby across study area under Ida replay",
       "value": 12531.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "buildings_flooded",
       "verified": true
      },
      {
-      "text": "buildings with water at the building under Ida rain",
+      "text": "buildings with water at the building across study area under Ida replay",
       "value": 3854.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "peak flood depth across study area under Ida rain",
+      "text": "severely flooded buildings across study area under Ida replay",
+      "value": 4975.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "buildings_flooded_severe",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth across study area under Ida replay",
       "value": 4.521,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "max_depth_m",
       "verified": true
      },
      {
-      "text": "impassable road length under Ida rain",
+      "text": "length of impassable road across study area under Ida replay",
       "value": 92.198,
       "model_value": null,
       "unit": "km",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "road_km_impassable",
       "verified": true
      },
      {
-      "text": "people exposed under Ida rain",
+      "text": "people exposed across study area under Ida replay",
       "value": 45385.0,
       "model_value": null,
       "unit": "people",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "people_exposed",
       "verified": true
      },
      {
-      "text": "flooded area under Ida rain",
+      "text": "flooded area across study area under Ida replay",
       "value": 2.238,
       "model_value": null,
       "unit": "sq km",
-      "source_run_id": "r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
       "field": "flooded_area_km2",
       "verified": true
      },
      {
-      "text": "peak flood depth in Corona under Ida rain",
-      "value": 4.52,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Corona:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "peak flood depth in Elmhurst under Ida rain",
-      "value": 2.9,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Elmhurst:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "peak flood depth in Jackson Heights under Ida rain",
-      "value": 2.279,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Jackson Heights:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "peak flood depth in Woodside under Ida rain",
-      "value": 2.812,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Woodside:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "peak flood depth in East Elmhurst under Ida rain",
-      "value": 1.438,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:East Elmhurst:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "peak flood depth in Middle Village under Ida rain",
-      "value": 1.479,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Middle Village:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "buildings with flood water close by in Elmhurst under Ida rain",
-      "value": 3012.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Elmhurst:buildings_flooded",
-      "verified": true
-     },
-     {
-      "text": "buildings with flood water close by in Corona under Ida rain",
-      "value": 2006.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Corona:buildings_flooded",
-      "verified": true
-     },
-     {
-      "text": "buildings with flood water close by in Jackson Heights under Ida rain",
-      "value": 2782.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Jackson Heights:buildings_flooded",
-      "verified": true
-     },
-     {
-      "text": "buildings with flood water close by in Woodside under Ida rain",
-      "value": 1452.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_e5558564426152f5",
-      "field": "area:Woodside:buildings_flooded",
-      "verified": true
-     },
-     {
-      "text": "residual buildings with flood water close by with doubled sewers",
+      "text": "buildings with flood water nearby with doubled sewer capacity",
       "value": 9113.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_525e918dbc221462",
+      "source_run_id": "r_8b3f80e2196e7e72",
       "field": "buildings_flooded",
       "verified": true
      },
      {
-      "text": "residual buildings with water at the building with doubled sewers",
+      "text": "buildings with water at the building with doubled sewer capacity",
       "value": 2091.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_525e918dbc221462",
+      "source_run_id": "r_8b3f80e2196e7e72",
       "field": "buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "change in buildings with flood water close by with doubled sewers",
+      "text": "maximum flood depth with doubled sewer capacity",
+      "value": 2.306,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "length of impassable road with doubled sewer capacity",
+      "value": 44.154,
+      "model_value": null,
+      "unit": "km",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "road_km_impassable",
+      "verified": true
+     },
+     {
+      "text": "people exposed with doubled sewer capacity",
+      "value": 21324.0,
+      "model_value": null,
+      "unit": "people",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "people_exposed",
+      "verified": true
+     },
+     {
+      "text": "flooded area with doubled sewer capacity",
+      "value": 1.069,
+      "model_value": null,
+      "unit": "sq km",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "flooded_area_km2",
+      "verified": true
+     },
+     {
+      "text": "change in nearby flooded buildings with doubled sewers relative to replay",
       "value": -3418.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:buildings_flooded:r_e5558564426152f5",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "delta:buildings_flooded:r_8b20b998115ce8be",
       "verified": true
      },
      {
-      "text": "change in severely flooded buildings with doubled sewers",
-      "value": -3012.0,
+      "text": "change in buildings with water at the building with doubled sewers relative to replay",
+      "value": -1763.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:buildings_flooded_severe:r_e5558564426152f5",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "delta:buildings_flooded_own_cell:r_8b20b998115ce8be",
       "verified": true
      },
      {
-      "text": "change in impassable road length with doubled sewers",
+      "text": "change in impassable road length with doubled sewers relative to replay",
       "value": -48.044,
       "model_value": null,
       "unit": "km",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:road_km_impassable:r_e5558564426152f5",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "delta:road_km_impassable:r_8b20b998115ce8be",
       "verified": true
      },
      {
-      "text": "change in people exposed with doubled sewers",
+      "text": "change in people exposed with doubled sewers relative to replay",
       "value": -24061.0,
       "model_value": null,
       "unit": "people",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:people_exposed:r_e5558564426152f5",
+      "source_run_id": "r_8b3f80e2196e7e72",
+      "field": "delta:people_exposed:r_8b20b998115ce8be",
       "verified": true
      },
      {
-      "text": "change in flooded area with doubled sewers",
-      "value": -1.169,
+      "text": "buildings with flood water nearby in Elmhurst under Ida replay",
+      "value": 3012.0,
       "model_value": null,
-      "unit": "sq km",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:flooded_area_km2:r_e5558564426152f5",
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Elmhurst:buildings_flooded",
       "verified": true
      },
      {
-      "text": "change in peak flood depth with doubled sewers",
-      "value": -2.215,
+      "text": "buildings with water at the building in Elmhurst under Ida replay",
+      "value": 981.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Elmhurst:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Elmhurst under Ida replay",
+      "value": 2.9,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_525e918dbc221462",
-      "field": "delta:max_depth_m:r_e5558564426152f5",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Elmhurst:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water nearby in Corona under Ida replay",
+      "value": 2006.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Corona:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in Corona under Ida replay",
+      "value": 574.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Corona:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Corona under Ida replay",
+      "value": 4.52,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Corona:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water nearby in Jackson Heights under Ida replay",
+      "value": 2782.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Jackson Heights:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in Jackson Heights under Ida replay",
+      "value": 980.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Jackson Heights:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Jackson Heights under Ida replay",
+      "value": 2.279,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Jackson Heights:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water nearby in Woodside under Ida replay",
+      "value": 1452.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Woodside:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in Woodside under Ida replay",
+      "value": 419.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Woodside:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "maximum flood depth in Woodside under Ida replay",
+      "value": 2.812,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Woodside:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water nearby in East Elmhurst under Ida replay",
+      "value": 935.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:East Elmhurst:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in East Elmhurst under Ida replay",
+      "value": 274.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:East Elmhurst:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "buildings with flood water nearby in Middle Village under Ida replay",
+      "value": 1359.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Middle Village:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "buildings with water at the building in Middle Village under Ida replay",
+      "value": 384.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_8b20b998115ce8be",
+      "field": "area:Middle Village:buildings_flooded_own_cell",
       "verified": true
      }
     ],
-    "recommended_run_id": "r_525e918dbc221462",
+    "recommended_run_id": "r_8b3f80e2196e7e72",
     "model": "muse-spark-1.3",
     "provider": "meta",
     "prose_has_digits": false
    }
   },
   {
-   "t": 39.2,
+   "t": 42.66,
    "kind": "done",
    "data": {}
   }
