@@ -8,6 +8,9 @@ import type { AOIManifest } from "../lib/api";
 import { useLayers } from "../lib/layers";
 
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
+// Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
+// with "The Resource is already being fetched" (React's dev double effect, quick basemap toggles).
+let googleQueue: Promise<unknown> = Promise.resolve();
 const cssColor = (name: string) =>
   Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const buildingColor = (depth: number) => {
@@ -47,7 +50,10 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   const viewer = useRef<Cesium.Viewer>();
   const terrainRef = useRef<Cesium.Terrain>();
   const layer = useRef<Cesium.ImageryLayer>();
-  const frameLayers = useRef<{ t_s: number; layer: Cesium.ImageryLayer }[]>([]);
+  const frameLayers = useRef<{ t_s: number; layer: Cesium.ImageryLayer; url: string }[]>([]);
+  /** Water on the photoreal mesh: one textured ground primitive classifying the 3D tiles, its image set to the current frame. */
+  const drape = useRef<{ prim: Cesium.GroundPrimitive; url?: string }>();
+  const photoreal = useRef<Cesium.Cesium3DTileset>();
   const tSRef = useRef(tS);
   tSRef.current = tS;
   const layerState = useLayers();
@@ -62,9 +68,15 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     const current = buildings.current;
     if (!current || current.primitive.isDestroyed() || !current.primitive.ready) return;
     current.primitive.show = layerRef.current.buildings.on;
+    // Opaque buildings cast and take shadows; only a faded layer needs the translucent pass.
+    const translucent = layerRef.current.buildings.opacity < 1 || layerRef.current.basemap === "photoreal";
+    if ((current.primitive.appearance as Cesium.PerInstanceColorAppearance).translucent !== translucent) {
+      current.primitive.appearance = new Cesium.PerInstanceColorAppearance({ flat: false, translucent });
+    }
     for (const id of current.ids) {
       const depth = depths.current.get(id) ?? 0;
-      const color = buildingColor(depth).withAlpha(layerRef.current.buildings.opacity);
+      const dryHidden = layerRef.current.basemap === "photoreal" && !(depth >= 0.15);
+      const color = buildingColor(depth).withAlpha(dryHidden ? 0 : layerRef.current.buildings.opacity);
       const attributes = current.primitive.getGeometryInstanceAttributes(id);
       if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
     }
@@ -87,13 +99,21 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       // Without an ion token fall back to OSM tiles (attribution shown by Cesium credits).
       ...(token ? {} : { baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })) }),
     });
-    v.shadowMap.softShadows = false;
+    // Render settings from the design prototype: soft 4k shadows, a lower sun, sharper terrain and
+    // full device resolution (the browser-recommended scale renders at CSS pixels and blurs on HiDPI).
+    v.shadowMap.softShadows = true;
+    v.shadowMap.size = 4096;
+    v.shadowMap.darkness = 0.45;
+    v.useBrowserRecommendedResolution = false;
+    v.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
+    v.scene.globe.maximumScreenSpaceError = 1.5;
+    v.scene.globe.tileCacheSize = 1000;
     v.scene.globe.enableLighting = true;
     if (v.scene.fog) v.scene.fog.enabled = true;
     if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
-    // Fixed daytime sun, not event time (Eng A): 14:00 local solar time at the AOI centre, 2026-07-15.
+    // Fixed daytime sun, not event time (Eng A): 16:00 local solar time at the AOI centre, 2026-07-15.
     v.clock.shouldAnimate = false;
-    v.clock.currentTime = Cesium.JulianDate.fromDate(new Date(Date.UTC(2026, 6, 15) + (14 - (w + e) / 2 / 15) * 3600e3));
+    v.clock.currentTime = Cesium.JulianDate.fromDate(new Date(Date.UTC(2026, 6, 15) + (16 - (w + e) / 2 / 15) * 3600e3));
     // Start oblique (30 deg, 3.5 km out): viewed straight down, the ~5 m buildings look flat.
     v.camera.lookAt(Cesium.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2, 0),
       new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 3500));
@@ -101,9 +121,15 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     // Orbit, tilt and zoom stay above the ground; the pitch clamp lives in MapStage.
     const ctl = v.scene.screenSpaceCameraController;
     ctl.enableCollisionDetection = true;
+    // 3D-app mouse map: left-drag pans, right-drag (or middle, or Ctrl+left) orbits and tilts, scroll zooms.
+    const E = Cesium.CameraEventType;
+    ctl.tiltEventTypes = [E.RIGHT_DRAG, E.MIDDLE_DRAG, { eventType: E.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.CTRL }];
+    ctl.zoomEventTypes = [E.WHEEL, E.PINCH];
+    ctl.lookEventTypes = [{ eventType: E.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT }];
     ctl.minimumZoomDistance = 150;
     ctl.maximumZoomDistance = 25000;
     viewer.current = v;
+    if (import.meta.env.DEV) (window as unknown as { __viewer?: Cesium.Viewer }).__viewer = v;
     onViewer?.(v);
     return () => { layer.current = undefined; viewer.current = undefined; onViewer?.(undefined); if (!v.isDestroyed()) v.destroy(); };
   }, [aoi.aoi_id, token]);
@@ -167,8 +193,8 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       }));
       if (!instances.length) { setBuildingStatus(ids.size.toLocaleString()); return; }
       primitive = v.scene.primitives.add(new Cesium.Primitive({
-        geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: true }),
-        asynchronous: true,
+        geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false }),
+        shadows: Cesium.ShadowMode.ENABLED, asynchronous: true,
       }));
       buildings.current = { primitive: primitive!, ids: [...ids] };
       const ready = () => {
@@ -214,7 +240,14 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     let best = list[0];
     for (const f of list) if (Math.abs(f.t_s - t) < Math.abs(best.t_s - t)) best = f;
     const water = layerRef.current.water;
-    for (const f of list) { f.layer.show = water.on && f === best; f.layer.alpha = water.opacity; }
+    const d = drape.current;
+    for (const f of list) { f.layer.show = !d && water.on && f === best; f.layer.alpha = water.opacity; }
+    if (d && !d.prim.isDestroyed()) {
+      d.prim.show = water.on;
+      const m = (d.prim.appearance as Cesium.MaterialAppearance).material;
+      if (d.url !== best.url) { m.uniforms.image = best.url; d.url = best.url; }
+      m.uniforms.color = new Cesium.Color(1, 1, 1, water.opacity);
+    }
   };
 
   // Preloaded frames: every PNG is a hidden layer; playback only flips `show`.
@@ -230,7 +263,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
         layer.alpha = layerRef.current.water.opacity;  // PNGs carry their own alpha ramp
         layer.show = false;
         added.push(layer);
-        return { t_s: frames[i].t_s, layer };
+        return { t_s: frames[i].t_s, layer, url: frames[i].url };
       });
       showNearest();
     }).catch(() => { /* Frames unavailable: globe stays without overlay. */ });
@@ -242,6 +275,54 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   }, [frames]);
 
   useEffect(showNearest, [tS, layerState.water.on, layerState.water.opacity]);
+
+  // Photoreal basemap: Google 3D tiles through ion. The globe stays loaded (fully transparent) so terrain
+  // heights and picking keep working; water is a textured ground primitive classifying the tiles (imagery layers on the tileset did not render).
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || v.isDestroyed() || !token || layerState.basemap !== "photoreal") return;
+    let cancelled = false;
+    let tiles: Cesium.Cesium3DTileset | undefined;
+    const g = v.scene.globe;
+    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: 8 }));
+    googleQueue = load.then(() => undefined, () => undefined);
+    load.then((t) => {
+      if (cancelled || v.isDestroyed()) { t.destroy(); return; }
+      tiles = t;
+      t.shadows = Cesium.ShadowMode.ENABLED;
+      v.scene.primitives.add(t);
+      photoreal.current = t;
+      if (import.meta.env.DEV) (window as unknown as { __tiles?: Cesium.Cesium3DTileset }).__tiles = t;
+      const prim = new Cesium.GroundPrimitive({
+        geometryInstances: new Cesium.GeometryInstance({ geometry: new Cesium.RectangleGeometry({ rectangle: rect, vertexFormat: Cesium.MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat }) }),
+        appearance: new Cesium.MaterialAppearance({ material: Cesium.Material.fromType("Image", { image: Cesium.Material.DefaultImageId, color: Cesium.Color.WHITE }), flat: true, translucent: true }),
+        classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
+        show: false,
+      });
+      v.scene.groundPrimitives.add(prim);
+      drape.current = { prim };
+      showNearest();
+      g.translucency.enabled = true;
+      g.translucency.frontFaceAlpha = 0;
+      g.translucency.backFaceAlpha = 0;
+      g.showGroundAtmosphere = false;
+      recolour();
+    }).catch((e) => console.warn("Photoreal 3D tiles unavailable, staying on aerial imagery:", e instanceof Error ? e.message : e));
+    return () => {
+      cancelled = true;
+      photoreal.current = undefined;
+      const d = drape.current;
+      drape.current = undefined;
+      if (d && !v.isDestroyed()) v.scene.groundPrimitives.remove(d.prim);
+      showNearest();
+      if (!v.isDestroyed()) {
+        g.translucency.enabled = false;
+        g.showGroundAtmosphere = true;
+        if (tiles) v.scene.primitives.remove(tiles);
+      }
+      recolour();
+    };
+  }, [layerState.basemap, aoi.aoi_id, token]);
 
   // Base imagery: opacity, on/off and colour/greyscale.
   useEffect(() => {

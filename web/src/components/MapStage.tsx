@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
-import { ArrowsOut, CaretDown, Crosshair, Drone, GlobeHemisphereWest, RoadHorizon, X } from "@phosphor-icons/react";
+import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Pause, Path, Play, RoadHorizon, X } from "@phosphor-icons/react";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
 import { API, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
@@ -15,6 +15,13 @@ import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { setInspect, setPinnedSeries } from "../lib/inspect";
 import { addWaypoint, removeWaypoint, useWaypoints } from "../lib/waypoints";
+import { clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
+import type { LonLat } from "../lib/flyroute";
+import { useFlyAlong, useFreeCamera } from "./camera";
+import type { FlyHud } from "./camera";
+
+type CamMode = "orbit" | "free" | "fly";
+type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
 
 export type MapStageProps = {
   aoi?: AOIManifest; run?: RunManifest; frames?: { t_s: number; url: string }[]; tS: number;
@@ -159,21 +166,21 @@ function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => v
   );
 }
 
-function ViewSwitch({ active, onPick, canFly }: { active: "Orbit" | "Plan" | "Fly along"; onPick: (v: "Orbit" | "Plan") => void; canFly: boolean }) {
+function ViewSwitch({ active, onPick, canFly }: { active: ViewName; onPick: (v: ViewName) => void; canFly: boolean }) {
   const items = [
     { name: "Orbit" as const, icon: <GlobeHemisphereWest size={14} weight="bold" /> },
+    { name: "Free" as const, icon: <ArrowsOutCardinal size={14} weight="bold" /> },
     { name: "Plan" as const, icon: <Crosshair size={14} weight="bold" /> },
     { name: "Fly along" as const, icon: <Drone size={14} weight="bold" /> },
   ];
   return (
-    <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 2, padding: 3, background: "var(--surface-raised)",
+    <div data-tour="camera" style={{ display: "flex", gap: 2, padding: 3, background: "var(--surface-raised)",
       border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: `inset 0 1px 0 ${elevHi}, var(--shadow-float)`, pointerEvents: "auto" }}>
       {items.map((it) => {
-        const fly = it.name === "Fly along";
-        const disabled = fly && !canFly;
+        const disabled = it.name === "Fly along" && !canFly;
         return (
           <button key={it.name} type="button" disabled={disabled} title={disabled ? "Draw a route first" : it.name}
-            aria-pressed={it.name === active} onClick={() => { if (!fly) onPick(it.name as "Orbit" | "Plan"); }}
+            aria-pressed={it.name === active} onClick={() => onPick(it.name)}
             style={{ height: 28, display: "flex", alignItems: "center", gap: 6, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
               ...(it.name === active
                 ? { background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }
@@ -183,6 +190,71 @@ function ViewSwitch({ active, onPick, canFly }: { active: "Orbit" | "Plan" | "Fl
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const menuItem: CSSProperties = {
+  width: "100%", height: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 9px", border: 0, borderRadius: 3,
+  background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 12, textAlign: "left", cursor: "pointer",
+};
+
+/** "Draw route" button beside the view switch; with a saved or evacuation route it opens a small menu. */
+function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, onToggleMenu, onEvac, onClear }: {
+  drawing: boolean; menuOpen: boolean; hasRoute: boolean; hasEvac: boolean;
+  onDraw: () => void; onCancel: () => void; onToggleMenu: () => void; onEvac: () => void; onClear: () => void;
+}) {
+  const extras = hasRoute || hasEvac;
+  return (
+    <div style={{ position: "relative", pointerEvents: "auto" }}>
+      <div style={{ display: "flex", padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6,
+        boxShadow: `inset 0 1px 0 ${elevHi}, var(--shadow-float)` }}>
+        <button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
+          title={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
+          style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <Path size={14} weight="bold" />{drawing ? "Drawing" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
+        </button>
+      </div>
+      {menuOpen && !drawing && (
+        <div role="menu" style={{ position: "absolute", right: 0, top: 40, minWidth: 190, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+          borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)" }}>
+          <button type="button" role="menuitem" onClick={onDraw} style={menuItem}>Draw new route</button>
+          {hasEvac && <button type="button" role="menuitem" onClick={onEvac} style={menuItem}>Use evacuation route</button>}
+          {hasRoute && <button type="button" role="menuitem" onClick={onClear} style={menuItem}>Clear route</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const fmtLen = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`);
+
+function FlyHudCard({ hud, cellM, onToggle, onSpeed, onSeek }: {
+  hud: FlyHud; cellM: number; onToggle: () => void; onSpeed: (n: 1 | 2 | 4) => void; onSeek: (s: number) => void;
+}) {
+  return (
+    <div style={{ position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 420,
+      background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
+      whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 12px", borderBottom: "1px solid var(--hairline)" }}>
+        <Drone size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
+        <span style={{ fontWeight: 600 }}>Fly along</span>
+        <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)" }}>
+        <button type="button" aria-label={hud.playing ? "Pause" : "Play"} title={hud.playing ? "Pause" : "Play"} onClick={onToggle}
+          style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
+            background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
+          {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
+        </button>
+        <div style={{ ...groupStyle, height: 28, gap: 2 }}>
+          {([1, 2, 4] as const).map((n) => <button key={n} type="button" aria-pressed={hud.speed === n} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 22), cursor: "pointer" }}>{n}x</button>)}
+        </div>
+        <input type="range" aria-label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)}
+          onChange={(e) => onSeek(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: "var(--danfo)" }} />
+        <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)}</span>
+        <span style={{ fontSize: 12, ...FIG }} title="Height above ground">{Math.round(hud.hAgl)} m</span>
+      </div>
     </div>
   );
 }
@@ -351,6 +423,23 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   tSRef.current = tS;
   const scene = viewer && !viewer.isDestroyed() ? viewer.scene : undefined;
 
+  // ----- camera mode (orbit / free / fly along) -----
+  const [mode, setMode] = useState<CamMode>("orbit");
+  const modeRef = useRef<CamMode>("orbit");
+  modeRef.current = mode;
+  const [freeSpeed, setFreeSpeed] = useState(1);
+  const route = useFlyRoute();
+  const evac = useEvacLine();
+  const [drawing, setDrawing] = useState(false);
+  const [drawPts, setDrawPts] = useState<LonLat[]>([]);
+  const drawRef = useRef({ drawing: false, pts: [] as LonLat[] });
+  drawRef.current = { drawing, pts: drawPts };
+  const [routeMenu, setRouteMenu] = useState(false);
+  const fly = useFlyAlong(viewer, mode === "fly", route);
+  const flyPlayingRef = useRef(false);
+  flyPlayingRef.current = mode === "fly" && fly.hud.playing;
+  useFreeCamera(viewer, mode === "free", setFreeSpeed);
+
   // ----- camera state -----
   const [cam, setCam] = useState({ headingDeg: 0, pitchDeg: -30, zoom: 1, nice: 100, px: 120 });
   const reorient = useCallback((heading?: number, pitch?: number) => {
@@ -370,7 +459,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     const s = viewer.scene, c = viewer.camera;
     let lastCam = 0;
     const onPost = () => {
-      if (c.pitch > MAX_PITCH || c.pitch < MIN_PITCH || Math.abs(c.roll) > 1e-3) {
+      if (modeRef.current === "orbit" && (c.pitch > MAX_PITCH || c.pitch < MIN_PITCH || Math.abs(c.roll) > 1e-3)) {
         c.setView({ orientation: { heading: c.heading, pitch: Cesium.Math.clamp(c.pitch, MIN_PITCH, MAX_PITCH), roll: 0 } });
       }
       anchors.current.forEach((f) => f(s));
@@ -399,6 +488,17 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
 
   const view: "Orbit" | "Plan" = cam.pitchDeg <= -89 ? "Plan" : "Orbit";
   const pickView = (v: "Orbit" | "Plan") => reorient(v === "Plan" ? 0 : undefined, Cesium.Math.toRadians(v === "Plan" ? -90 : -30));
+  const active: ViewName = mode === "free" ? "Free" : mode === "fly" ? "Fly along" : view;
+  const backToOrbit = useCallback(() => {
+    if (modeRef.current === "orbit" || !viewer || viewer.isDestroyed()) return;
+    // Leave the low first-person / fly camera at a sensible orbit framing.
+    const c = viewer.camera, carto = Cesium.Cartographic.fromCartesian(c.positionWC);
+    const g = viewer.scene.globe.getHeight(carto) ?? 0;
+    modeRef.current = "orbit";
+    setMode("orbit");
+    c.setView({ destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, Math.max(carto.height, g + 400)),
+      orientation: { heading: c.heading, pitch: Cesium.Math.toRadians(-35), roll: 0 } });
+  }, [viewer]);
 
   // ----- hover, pin, waypoints, context menu -----
   const bounds = aoi?.grid.bounds_wgs84;
@@ -433,10 +533,11 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       const c = Cesium.Cartographic.fromCartesian(p);
       return { lon: Cesium.Math.toDegrees(c.longitude), lat: Cesium.Math.toDegrees(c.latitude) };
     };
+    const hoverAllowed = () => modeRef.current !== "free" && !flyPlayingRef.current && !drawRef.current.drawing;
     const process = async () => {
       timer = undefined;
       const cur = cursor.current;
-      if (!cur || !runId || pinnedRef.current || !inAoi(cur.lon, cur.lat)) { if (!pinnedRef.current) setHover(null); return; }
+      if (!cur || !runId || pinnedRef.current || !hoverAllowed() || !inAoi(cur.lon, cur.lat)) { if (!pinnedRef.current) setHover(null); return; }
       const mine = ++seq;
       // A cold server instance can take ~20 s to load a run's depth stack: show a loading state, never a timeout.
       const slow = setTimeout(() => { if (mine === seq && !pinnedRef.current) setHover({ depth: NaN, max: NaN, loading: true, ...cur }); }, 300);
@@ -457,6 +558,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     const onDown = (e: MouseEvent) => { down = e.button === 0 ? local(e) : null; setMenu(null); };
     const onUp = (e: MouseEvent) => {
       if (e.button !== 0 || !down) return;
+      if (!hoverAllowed()) { down = null; return; }
       const { x, y } = local(e);
       const moved = Math.hypot(x - down.x, y - down.y) > 4;
       down = null;
@@ -541,6 +643,76 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   useEffect(() => { setPinnedSeries(pinned?.ser?.depth_m ?? null); }, [pinned?.ser]);
   useEffect(() => () => setPinnedSeries(null), []);
 
+  // Hover tooltips stop while flying (free camera, playback) or drawing.
+  useEffect(() => { if (mode === "free" || drawing || (mode === "fly" && fly.hud.playing)) setHover(null); }, [mode, drawing, fly.hud.playing]);
+
+  const pickMode = (v: ViewName) => {
+    setRouteMenu(false);
+    if (v === "Free") { setHover(null); setMode("free"); return; }
+    if (v === "Fly along") { if (route.length >= 2) { setHover(null); setMode("fly"); } return; }
+    if (modeRef.current !== "orbit") backToOrbit();
+    pickView(v);
+  };
+  const startDraw = () => {
+    setRouteMenu(false);
+    if (modeRef.current !== "orbit") backToOrbit();
+    setDrawPts([]); setDrawing(true);
+  };
+  const finishDraw = (pts: LonLat[]) => {
+    if (pts.length >= 2) setFlyRoute(pts);
+    setDrawing(false); setDrawPts([]);
+  };
+
+  // Route drawing: left clicks add vertices, double-click finishes.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !drawing) return;
+    const canvas = viewer.canvas, s = viewer.scene;
+    let down: { x: number; y: number } | null = null;
+    const local = (e: MouseEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const onDown = (e: PointerEvent) => { down = e.button === 0 ? local(e) : null; };
+    const onUp = (e: PointerEvent) => {
+      if (e.button !== 0 || !down) return;
+      const { x, y } = local(e);
+      const moved = Math.hypot(x - down.x, y - down.y) > 4;
+      down = null;
+      if (moved) return;
+      const p = s.globe.pick(viewer.camera.getPickRay(new Cesium.Cartesian2(x, y)) as Cesium.Ray, s);
+      if (!p) return;
+      const c = Cesium.Cartographic.fromCartesian(p);
+      setDrawPts((cur) => [...cur, [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)]]);
+    };
+    const onDbl = () => {
+      const pts = drawRef.current.pts.slice(0, -1);  // the second click of the double-click added a duplicate vertex
+      finishDraw(pts.length >= 2 ? pts : drawRef.current.pts);
+    };
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("dblclick", onDbl);
+    return () => {
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("dblclick", onDbl);
+    };
+  }, [viewer, drawing]);
+
+  // The drawn route (or the one being drawn): 3 px danfo line clamped to ground, small vertex points.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const pts = drawing ? drawPts : route;
+    if (!pts.length) return;
+    const danfo = cssColor("--danfo"), ground = cssColor("--ground");
+    const made: Cesium.Entity[] = [];
+    if (pts.length >= 2) {
+      made.push(viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArray(pts.flat()), width: 3, clampToGround: true, material: danfo } }));
+    }
+    for (const [lon, lat] of pts) {
+      made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        point: { pixelSize: 7, color: danfo, outlineColor: ground, outlineWidth: 2, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY } }));
+    }
+    return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
+  }, [viewer, drawing, drawPts, route]);
+
   const dropWaypoint = useCallback((lon: number, lat: number) => {
     if (!inAoi(lon, lat)) return;
     setSelectedWp(addWaypoint(lon, lat).id);
@@ -551,13 +723,35 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "Escape") { setPinned(null); setMenu(null); setSelectedPlace(null); setSelectedWp(null); }
+      if (e.key === "Escape") {
+        setPinned(null); setMenu(null); setSelectedPlace(null); setSelectedWp(null); setRouteMenu(false);
+        if (drawing) { setDrawing(false); setDrawPts([]); } else if (modeRef.current !== "orbit") backToOrbit();
+      }
+      else if (drawing) {
+        if (e.key === "Enter") { e.preventDefault(); finishDraw(drawPts); }
+        else if (e.key === "Backspace") { e.preventDefault(); setDrawPts((p) => p.slice(0, -1)); }
+      }
+      else if (modeRef.current === "free") { /* WASD belongs to the free camera; waypoints come from the right-click menu */ }
+      else if (modeRef.current === "orbit" && viewer && over.current && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-", "_"].includes(e.key)) {
+        e.preventDefault();
+        const c = viewer.camera;
+        const step = Cesium.Math.toRadians(e.shiftKey ? 15 : 5);
+        if (e.key === "ArrowLeft") reorient(c.heading - step);
+        else if (e.key === "ArrowRight") reorient(c.heading + step);
+        else if (e.key === "ArrowUp") reorient(undefined, Cesium.Math.clamp(c.pitch + step, MIN_PITCH, MAX_PITCH));
+        else if (e.key === "ArrowDown") reorient(undefined, Cesium.Math.clamp(c.pitch - step, MIN_PITCH, MAX_PITCH));
+        else {
+          const carto = Cesium.Cartographic.fromCartesian(c.positionWC);
+          const agl = Math.max(100, carto.height - (viewer.scene.globe.getHeight(carto) ?? 0));
+          if (e.key === "-" || e.key === "_") c.zoomOut(agl * 0.2); else c.zoomIn(agl * 0.2);
+        }
+      }
       else if ((e.key === "w" || e.key === "W") && over.current && cursor.current) { dropWaypoint(cursor.current.lon, cursor.current.lat); }
       else if ((e.key === "Backspace" || e.key === "Delete") && selectedWp !== null) { e.preventDefault(); removeWaypoint(selectedWp); setSelectedWp(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dropWaypoint, selectedWp]);
+  }, [dropWaypoint, selectedWp, drawing, drawPts, viewer, reorient, backToOrbit]);
 
   // ----- places -----
   const [places, setPlaces] = useState<Place[]>([]);
@@ -740,10 +934,24 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
             <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
           </div>
         )}
-        <ViewSwitch active={view} onPick={pickView} canFly={false} />
+        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <RouteButton drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
+            onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
+            onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
+          <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
+        </div>
         <span style={{ ...pill, position: "absolute", left: "50%", top: 18, transform: "translateX(-50%)" }}>
-          Drag to orbit · right-drag to tilt · scroll to zoom · W to drop a waypoint
+          {drawing ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
+            : mode === "free" ? "Drag to look · WASD to move · E / Q up and down · Shift faster · Esc to orbit"
+            : mode === "fly" ? "Drag to look around · scroll or E / Q for height · Esc to orbit"
+            : "Drag to pan · right-drag or Ctrl+drag to orbit and tilt · scroll to zoom · W to drop a waypoint"}
         </span>
+        {mode === "free" && (
+          <span style={{ ...pill, position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)", ...FIG }}>
+            Move speed {freeSpeed.toFixed(freeSpeed < 1 ? 2 : 1)}× · scroll to change
+          </span>
+        )}
+        {mode === "fly" && <FlyHudCard hud={fly.hud} cellM={cellM} onToggle={fly.toggle} onSpeed={fly.setSpeed} onSeek={fly.seek} />}
 
         {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
 

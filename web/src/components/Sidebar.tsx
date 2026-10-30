@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Play, Ruler, TrendUp, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
-import { LayerKey, setImageryMode, setLayer, useLayers } from "../lib/layers";
+import { LayerKey, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
 import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
@@ -92,12 +92,24 @@ function LayersCard() {
           </label>
         );
       })}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
+        Base map
+        <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+          {(["photoreal", "aerial"] as const).map((m) => {
+            const on = lay.basemap === m;
+            return <button key={m} type="button" aria-pressed={on} onClick={() => setBasemap(m)}
+              title={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}
+              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
+              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</button>;
+          })}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", fontSize: 12, color: "var(--ink-muted)", opacity: lay.basemap === "aerial" ? 1 : 0.45 }}>
         Imagery
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["colour", "greyscale"] as const).map((m) => {
             const on = imageryMode === m;
-            return <button key={m} type="button" aria-pressed={on} onClick={() => setImageryMode(m)}
+            return <button key={m} type="button" aria-pressed={on} disabled={lay.basemap !== "aerial"} onClick={() => setImageryMode(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
               {m === "colour" ? "Colour" : "Greyscale"}</button>;
           })}
@@ -297,7 +309,7 @@ function SourcesCard({ sources }: { sources: string[] }) {
 export function Sidebar({ aoi, run, scenario, sources }: {
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
 }) {
-  const [tab, setTab] = useState<Tab>("Layers");
+  const [tab, setTab] = useState<Tab>("Scenario");
   const { t_s } = useClock();
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
