@@ -1,7 +1,7 @@
 // Rev 5 map stage: the globe plus every overlay (compass, view switch, map controls, hover tooltip,
 // waypoints, place labels, time-to-flood layer and legend). All styling follows the rev 5 design
 // (docs/design/rev5-ref/parts.py): tokens only, no hand-rolled colours.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
 import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Pause, Path, Play, RoadHorizon, X } from "@phosphor-icons/react";
@@ -624,6 +624,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     c.setView({ destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, Math.max(carto.height, g + 400)),
       orientation: { heading: c.heading, pitch: Cesium.Math.toRadians(-35), roll: 0 } });
   }, [viewer]);
+  // Opening a 3D close-up ends Free / Fly along first, so the close-up's own camera flight is not fought by them.
+  useLayoutEffect(() => {
+    if (closeUp.active && modeRef.current !== "orbit") { modeRef.current = "orbit"; setMode("orbit"); }
+  }, [closeUp.active]);
 
   // ----- hover, pin, waypoints, context menu -----
   const bounds = aoi?.grid.bounds_wgs84;
