@@ -1,11 +1,18 @@
-// Day-1 skeleton (owner: Eng B). Proves the full loop against the fake backend:
-// load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
-// Cesium globe replaces the <img> preview in Globe.tsx on Day 1-2.
+// Twin UI shell (rev 5 frame). Top bar, map + dock on the left, sidebar on the right.
+// Flow: load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
 import { useEffect, useMemo, useState } from "react";
-import { AOIManifest, API, getAOI, getAOIs, getConfig, getRun, RunManifest, runFileUrl, simulate } from "./lib/api";
+import { ApiError, AOIManifest, API, getAOI, getAOIs, getConfig, getRun, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
-import { Globe } from "./components/Globe";
+import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
+import { ProvenanceBadge } from "./components/ds";
+import { Dock } from "./components/Dock";
+import { Failure, Pattern, Sidebar } from "./components/Sidebar";
+import { Mode, TopBar } from "./components/TopBar";
+
+// Autoplay starts after a run loads, unless the user asked for reduced motion.
+const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
 
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
@@ -15,12 +22,18 @@ export default function App() {
   const [buildingsUrl, setBuildingsUrl] = useState("");
   const [defaultAoi, setDefaultAoi] = useState("");
   const [aois, setAois] = useState<{ aoi_id: string; name: string }[]>([]);
-  const [buildingsStatus, setBuildingsStatus] = useState("loading…");
   const [runsBase, setRunsBase] = useState("/runs");
   const [run, setRun] = useState<RunManifest>();
   const [rain, setRain] = useState(120);
-  const [drains, setDrains] = useState(1.0);
-  const { t_s, playing } = useClock();
+  const [durationH, setDurationH] = useState(3);
+  const [pattern, setPattern] = useState<Pattern>("uniform");
+  const [level, setLevel] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [simErr, setSimErr] = useState<Failure | null>(null);
+  const [replayed, setReplayed] = useState(false);
+  const [mode, setMode] = useState<Mode>("Scenario");
+  const [agentRuns, setAgentRuns] = useState(0);
+  const { t_s } = useClock();
 
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
@@ -30,53 +43,58 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { setRun(undefined); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => { setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const go = async () => {
-    const m = await simulate({
-      aoi_id: aoi!.aoi_id, storm: { total_mm: rain, duration_h: 3 },
-      interventions: drains !== 1 ? [{ type: "drain_upgrade", capacity_factor: drains }] : [],
-    });
-    setRun(m);
-    clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true });
+    setBusy(true); setSimErr(null);
+    const interventions: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
+    try {
+      const m = await simulate({ aoi_id: aoi!.aoi_id, storm: { total_mm: rain, duration_h: durationH, pattern }, interventions });
+      setRun(m);
+      startClock(m);
+    } catch (e) {
+      setSimErr(e instanceof ApiError ? { message: e.message, retryable: e.retryable }
+        : { message: "The server is busy. Try again.", retryable: true });
+    } finally { setBusy(false); }
   };
 
-  const frameUrl = useMemo(() => {
-    if (!run?.frames.length) return undefined;
-    const f = run.frames.reduce((a, b) => (Math.abs(b.t_s - t_s) < Math.abs(a.t_s - t_s) ? b : a));
-    return runFileUrl(runsBase, run.run_id, f.png);
-  }, [run, t_s, runsBase]);
+  // Every frame of the run, preloaded by the map; the clock only picks which one shows.
+  const frames = useMemo(() => run?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, run.run_id, f.png) })),
+    [run, runsBase]);
+
+  const sources = Object.values(aoi?.sources ?? {});
+  // Tide only applies to coastal areas: an AOI with river inflows is inland.
+  const coastal = !Object.keys(aoi?.layers ?? {}).some((k) => k.includes("inflows"));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", height: "100vh", fontFamily: "var(--font-sans)" }}>
-      <div style={{ position: "relative" }}>
-        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl}
-          buildingDepthsUrl={run?.building_depths ? runFileUrl(runsBase, run.run_id, run.building_depths) : undefined}
-          onBuildingsStatus={setBuildingsStatus} />}
-        {run?.backend === "fake" && <div className="badge" style={{ position: "absolute", top: 8, left: 8, background: "#b45309", color: "#fff", padding: "2px 8px" }}>PLACEHOLDER PHYSICS</div>}
-        {aoi?.is_synthetic && <div style={{ position: "absolute", top: 8, right: 8, background: "#444", color: "#fff", padding: "2px 8px" }}>SYNTHETIC TERRAIN</div>}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 12, background: "rgba(0,0,0,.6)", color: "#fff" }}>
-          <button onClick={() => clock.set({ playing: !playing })}>{playing ? "Pause" : "Play"}</button>{" "}
-          <input type="range" min={0} max={clock.get().max_s} value={t_s} style={{ width: "70%" }}
-            onChange={(e) => clock.set({ t_s: +e.target.value, playing: false })} />{" "}
-          <span className="num" style={{ fontFamily: "var(--font-mono)" }}>T+{(t_s / 3600).toFixed(2)} h</span>
+    <div className="dr-app body">
+      <TopBar aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
+        mode={mode} onMode={setMode} agentRuns={agentRuns} />
+      <div className="dr-main">
+        <div className="dr-map">
+          {aoi && <MapStage aoi={aoi} run={run} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
+          <div className="dr-badges">
+            {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
+            {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
+          </div>
         </div>
+        <Dock run={run} series={undefined} />
       </div>
-      <aside style={{ padding: 12, overflow: "auto", borderLeft: "1px solid #ddd" }}>
-        <h3>Scenario</h3>
-        {aois.length > 1 && <label>Area: <select value={aoi?.aoi_id} onChange={(e) => switchAoi(e.target.value)}>
-          {aois.map((a) => <option key={a.aoi_id} value={a.aoi_id}>{a.name}</option>)}
-        </select></label>}
-        <div style={{ fontSize: 12, marginBottom: 8 }}>Buildings: {buildingsStatus}</div>
-        <label>Rain (mm / 3 h): {rain} <input type="range" min={20} max={250} value={rain} onChange={(e) => setRain(+e.target.value)} /></label><br />
-        <label>Drain capacity: x{drains.toFixed(1)} <input type="range" min={0.5} max={4} step={0.1} value={drains} onChange={(e) => setDrains(+e.target.value)} /></label><br />
-        <button onClick={go}>Simulate</button>
-        {run?.stats && <pre className="num" style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}>{JSON.stringify(run.stats, null, 1)}</pre>}
-        <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onRun={(id) => getRun(id).then((m) => { setRun(m); clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: true }); })} />
-        <footer style={{ fontSize: 11, marginTop: 16, opacity: 0.7 }}>
-          Built with Muse Spark Open · © OpenStreetMap contributors · Not an operational warning system
-        </footer>
-      </aside>
+      {mode === "Agent" ? (
+        <aside className="dr-panel">
+          <section className="dr-section">
+            <h2 className="label dr-section-title">Agent</h2>
+            <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired}
+              onReplay={setReplayed}
+              onRun={(id) => { setAgentRuns((n) => n + 1); getRun(id).then((m) => { setRun(m); startClock(m); }); }} />
+          </section>
+        </aside>
+      ) : (
+        <Sidebar aoi={aoi} run={run} sources={sources} scenario={{
+          rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
+          coastal, busy, canRun: !!aoi, onSimulate: go, err: simErr,
+        }} />
+      )}
     </div>
   );
 }
