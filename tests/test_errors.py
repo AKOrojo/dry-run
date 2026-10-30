@@ -1,5 +1,6 @@
 """Client-facing error envelope and safe model-error classification."""
 
+import json
 import os
 
 import httpx
@@ -95,3 +96,37 @@ def test_agent_error_event_is_safe(monkeypatch):
     err = next(e for e in events if e.kind == "error")
     assert err.data["stage"] == "chat" and err.data["code"] == "llm_rate_limited"
     assert "SECRET" not in str(err.data)
+
+
+FILTERED = {"error": {"code": "content_policy_violation", "type": "invalid_request_error",
+                      "message": "The response was filtered due to the prompt triggering our content management policy."}}
+
+
+def filtered_error() -> httpx.HTTPStatusError:
+    req = httpx.Request("POST", SECRET)
+    return httpx.HTTPStatusError(SECRET, request=req, response=httpx.Response(400, json=FILTERED, request=req))
+
+
+def test_content_filter_is_its_own_retryable_code():
+    info = classify_llm_error(filtered_error())
+    assert info["code"] == "llm_content_filter" and info["retryable"] and "rephrase" in info["message"]
+    assert "sk-SECRET" not in json.dumps(info)
+
+
+def test_provider_retries_a_content_filter_refusal_once(monkeypatch):
+    from dryrun.meta import providers
+
+    monkeypatch.setenv("META_API_KEY", "k")
+    req = httpx.Request("POST", "https://api.example/v1/chat/completions")
+    ok = {"id": "x", "usage": {}, "choices": [{"message": {"content": "hi", "tool_calls": None}}]}
+    for script, want in [([400, 200], "hi"), ([400, 400], None)]:
+        replies = [httpx.Response(s, json=FILTERED if s == 400 else ok, request=req) for s in script]
+        monkeypatch.setattr(httpx, "post", lambda *a, **k: replies.pop(0))
+        p = providers.OpenAICompatProvider("meta")
+        if want:
+            assert p.chat([{"role": "user", "content": "q"}]).content == want
+        else:
+            with pytest.raises(httpx.HTTPStatusError) as e:
+                p.chat([{"role": "user", "content": "q"}])
+            assert classify_llm_error(e.value)["code"] == "llm_content_filter"
+        assert not replies  # exactly 1 + CONTENT_FILTER_RETRIES calls, never more

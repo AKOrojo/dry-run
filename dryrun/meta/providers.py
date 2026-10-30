@@ -54,6 +54,9 @@ class Turn:
     raw: dict
 
 
+CONTENT_FILTER_RETRIES = 1  # the filter is not deterministic; one retry clears most refusals
+
+
 class OpenAICompatProvider:
     def __init__(self, name: str):
         cfg = DEFAULTS[name]
@@ -71,8 +74,14 @@ class OpenAICompatProvider:
             body["tools"] = tools
         if response_format:
             body["response_format"] = response_format
-        r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=60,
-                       headers={"Authorization": f"Bearer {self.key}"})
+        from dryrun.api.errors import content_filtered
+
+        for attempt in range(1 + CONTENT_FILTER_RETRIES):
+            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=60,
+                           headers={"Authorization": f"Bearer {self.key}"})
+            if not content_filtered(r):
+                break
+            log.warning("llm_content_filter provider=%s model=%s attempt=%d", self.name, self.model, attempt + 1)
         r.raise_for_status()
         data = r.json()
         # Proof-of-use log (open-weights prize is verified by the partner): one line per call.

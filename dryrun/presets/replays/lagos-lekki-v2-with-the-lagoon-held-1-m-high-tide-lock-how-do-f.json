@@ -1,36 +1,36 @@
 {
- "recorded_at": "2026-10-29T20:18:00+00:00",
+ "recorded_at": "2026-10-30T13:56:17+00:00",
  "base": "https://dryrun-vcdpde6nnq-uc.a.run.app",
  "provider": "meta",
  "model": "muse-spark-1.3",
- "aoi_id": "lagos-lekki-v1",
+ "aoi_id": "lagos-lekki-v2",
  "question": "With the lagoon held 1 m high (tide lock), how do flooded buildings and the evacuation route to the nearest shelter change?",
  "events": [
   {
-   "t": 1.33,
+   "t": 0.83,
    "kind": "thought",
    "data": {
-    "text": "Holding the lagoon 1m high — I'll check how flooding and evacuation shift."
+    "text": "Holding the lagoon a metre up — I'll test how flooding and escape routes shift."
    }
   },
   {
-   "t": 1.33,
+   "t": 0.83,
    "kind": "tool_call",
    "data": {
     "name": "get_aoi_info",
     "arguments": {
-     "aoi_id": "lagos-lekki-v1"
+     "aoi_id": "lagos-lekki-v2"
     }
    }
   },
   {
-   "t": 1.5,
+   "t": 0.94,
    "kind": "tool_result",
    "data": {
     "name": "get_aoi_info",
     "result": {
-     "aoi_id": "lagos-lekki-v1",
-     "name": "Lekki-Ajah, Lagos (v1)",
+     "aoi_id": "lagos-lekki-v2",
+     "name": "Lekki-Ajah, Lagos (v2)",
      "bounds_wgs84": [
       3.47,
       6.42,
@@ -337,7 +337,7 @@
      "presets": [
       {
        "label": "baseline 120mm/3h",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -345,7 +345,7 @@
       },
       {
        "label": "baseline 50mm/3h",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 50,
         "duration_h": 3
@@ -353,7 +353,7 @@
       },
       {
        "label": "baseline 200mm/3h",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 200,
         "duration_h": 3
@@ -361,7 +361,7 @@
       },
       {
        "label": "drains +40%",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -375,7 +375,7 @@
       },
       {
        "label": "drains +40% in Lekki Phase 1",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -390,7 +390,7 @@
       },
       {
        "label": "new drains 40 mm/h",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -404,7 +404,7 @@
       },
       {
        "label": "green Lekki Phase 1",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -420,7 +420,7 @@
       },
       {
        "label": "pond near Ajah",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -435,7 +435,7 @@
       },
       {
        "label": "high tide lock",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -449,7 +449,7 @@
       },
       {
        "label": "sweep top 1 (drains x3, new drains, green)",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -470,7 +470,7 @@
       },
       {
        "label": "sweep top 2 (top 1 + pond)",
-       "aoi_id": "lagos-lekki-v1",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -495,8 +495,8 @@
        ]
       },
       {
-       "label": "sweep top 3 (new drains, green)",
-       "aoi_id": "lagos-lekki-v1",
+       "label": "sweep top 3 (drains x2, new drains, green)",
+       "aoi_id": "lagos-lekki-v2",
        "storm": {
         "total_mm": 120,
         "duration_h": 3
@@ -504,7 +504,7 @@
        "interventions": [
         {
          "type": "drain_upgrade",
-         "capacity_factor": 1.0,
+         "capacity_factor": 2.0,
          "add_mm_h": 40.0
         },
         {
@@ -515,25 +515,39 @@
         }
        ]
       }
-     ]
+     ],
+     "tide": {
+      "default_level_m": -0.5,
+      "preset_levels_m": [
+       0.5,
+       1.0,
+       1.5
+      ],
+      "note": "assumed lagoon/sea level, not a forecast"
+     }
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 0.8,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 6.84,
+   "t": 3.21,
    "kind": "thought",
    "data": {
-    "text": "I've mapped the study area — now I'll run the baseline storm and its 1m tide-lock counterpart."
+    "text": "I found a ready-made tide-lock scenario — I'll compare it to the baseline for the same storm."
    }
   },
   {
-   "t": 6.84,
+   "t": 3.21,
    "kind": "tool_call",
    "data": {
     "name": "run_simulation",
     "arguments": {
-     "aoi_id": "lagos-lekki-v1",
-     "label": "baseline 120mm/3h",
+     "aoi_id": "lagos-lekki-v2",
      "storm": {
       "duration_h": 3,
       "total_mm": 120
@@ -542,67 +556,67 @@
    }
   },
   {
-   "t": 6.84,
+   "t": 3.21,
    "kind": "tool_result",
    "data": {
     "name": "run_simulation",
     "result": {
-     "run_id": "r_3277ec9d2e6e1ec8",
+     "run_id": "r_19bad5451b9f8e42",
      "status": "done",
      "backend": "solver",
      "stats": {
-      "run_id": "r_3277ec9d2e6e1ec8",
-      "buildings_flooded": 30202,
-      "buildings_flooded_severe": 9187,
-      "buildings_flooded_own_cell": 13314,
-      "road_km_impassable": 406.713,
-      "people_exposed": 94280,
-      "flooded_area_km2": 23.1791,
-      "max_depth_m": 2.154,
+      "run_id": "r_19bad5451b9f8e42",
+      "buildings_flooded": 29137,
+      "buildings_flooded_severe": 8230,
+      "buildings_flooded_own_cell": 12420,
+      "road_km_impassable": 384.7,
+      "people_exposed": 88124,
+      "flooded_area_km2": 21.8598,
+      "max_depth_m": 2.051,
       "peak_t_s": 10200,
       "rain_volume_m3": 12994002.6,
+      "rain_generated_m3": null,
+      "rain_in_aoi_m3": null,
       "inflow_volume_m3": 0.0,
-      "drained_volume_m3": 197251.7,
-      "infiltrated_volume_m3": 2964977.0,
-      "stored_volume_end_m3": 8165301.9,
-      "boundary_outflow_m3": 1666472.0,
-      "mass_balance_error_pct": -0.0,
+      "drained_volume_m3": 189205.7,
+      "infiltrated_volume_m3": 3925577.9,
+      "stored_volume_end_m3": 7335883.6,
+      "boundary_outflow_m3": 1543335.4,
+      "mass_balance_error_pct": 0.0,
       "buildings_in_ponds": 0,
       "passability_threshold_m": 0.3,
       "is_surrogate": false
      },
      "error": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 3.1,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 6.84,
+   "t": 3.21,
    "kind": "run_ready",
    "data": {
-    "run_id": "r_3277ec9d2e6e1ec8"
+    "run_id": "r_19bad5451b9f8e42"
    }
   },
   {
-   "t": 10.96,
-   "kind": "thought",
-   "data": {
-    "text": "Baseline complete — now I'll model the tide-lock case for comparison."
-   }
-  },
-  {
-   "t": 10.96,
+   "t": 3.21,
    "kind": "tool_call",
    "data": {
     "name": "run_simulation",
     "arguments": {
-     "aoi_id": "lagos-lekki-v1",
+     "aoi_id": "lagos-lekki-v2",
      "interventions": [
       {
        "boundary_level_m": 1.0,
        "type": "tide"
       }
      ],
-     "label": "high tide lock",
      "storm": {
       "duration_h": 3,
       "total_mm": 120
@@ -611,159 +625,103 @@
    }
   },
   {
-   "t": 11.14,
+   "t": 3.32,
    "kind": "tool_result",
    "data": {
     "name": "run_simulation",
     "result": {
-     "run_id": "r_cc14fcd1e804a1f0",
+     "run_id": "r_7d9f3940cb415e7e",
      "status": "done",
      "backend": "solver",
      "stats": {
-      "run_id": "r_cc14fcd1e804a1f0",
-      "buildings_flooded": 30595,
-      "buildings_flooded_severe": 9544,
-      "buildings_flooded_own_cell": 13525,
-      "road_km_impassable": 450.011,
-      "people_exposed": 96288,
-      "flooded_area_km2": 29.7909,
-      "max_depth_m": 2.154,
+      "run_id": "r_7d9f3940cb415e7e",
+      "buildings_flooded": 29567,
+      "buildings_flooded_severe": 8585,
+      "buildings_flooded_own_cell": 12646,
+      "road_km_impassable": 430.071,
+      "people_exposed": 90212,
+      "flooded_area_km2": 28.5074,
+      "max_depth_m": 2.064,
       "peak_t_s": 10200,
       "rain_volume_m3": 12994002.6,
+      "rain_generated_m3": null,
+      "rain_in_aoi_m3": null,
       "inflow_volume_m3": 0.0,
-      "drained_volume_m3": 199118.5,
-      "infiltrated_volume_m3": 3004312.5,
-      "stored_volume_end_m3": 14629833.3,
-      "boundary_outflow_m3": -4839261.8,
+      "drained_volume_m3": 191377.6,
+      "infiltrated_volume_m3": 3967722.1,
+      "stored_volume_end_m3": 13827730.8,
+      "boundary_outflow_m3": -4992827.9,
       "mass_balance_error_pct": -0.0,
       "buildings_in_ponds": 0,
       "passability_threshold_m": 0.3,
       "is_surrogate": false
      },
      "error": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 3.2,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 11.14,
+   "t": 3.32,
    "kind": "run_ready",
    "data": {
-    "run_id": "r_cc14fcd1e804a1f0"
+    "run_id": "r_7d9f3940cb415e7e"
    }
   },
   {
-   "t": 15.3,
+   "t": 7.46,
    "kind": "thought",
    "data": {
-    "text": "Both flood scenarios are ready — now I'll compare building impacts and test evacuation routing."
+    "text": "Baseline versus tide-lock is in — now I'll measure the difference and test the nearest-shelter route."
    }
   },
   {
-   "t": 15.3,
+   "t": 7.46,
    "kind": "tool_call",
    "data": {
     "name": "compare_runs",
     "arguments": {
-     "alt_run_id": "r_cc14fcd1e804a1f0",
-     "base_run_id": "r_3277ec9d2e6e1ec8"
+     "alt_run_id": "r_7d9f3940cb415e7e",
+     "base_run_id": "r_19bad5451b9f8e42"
     }
    }
   },
   {
-   "t": 15.36,
+   "t": 7.46,
    "kind": "tool_result",
    "data": {
     "name": "compare_runs",
     "result": {
-     "base_run_id": "r_3277ec9d2e6e1ec8",
-     "alt_run_id": "r_cc14fcd1e804a1f0",
+     "base_run_id": "r_19bad5451b9f8e42",
+     "alt_run_id": "r_7d9f3940cb415e7e",
      "delta": {
-      "buildings_flooded": 393.0,
-      "buildings_flooded_severe": 357.0,
-      "buildings_flooded_own_cell": 211.0,
-      "road_km_impassable": 43.298,
-      "people_exposed": 2008.0,
-      "flooded_area_km2": 6.6118,
-      "max_depth_m": 0.0,
-      "drained_volume_m3": 1866.8,
-      "stored_volume_end_m3": 6464531.4,
-      "boundary_outflow_m3": -6505733.8
+      "buildings_flooded": 430.0,
+      "buildings_flooded_severe": 355.0,
+      "buildings_flooded_own_cell": 226.0,
+      "road_km_impassable": 45.371,
+      "people_exposed": 2088.0,
+      "flooded_area_km2": 6.6476,
+      "max_depth_m": 0.013,
+      "drained_volume_m3": 2171.9,
+      "stored_volume_end_m3": 6491847.2,
+      "boundary_outflow_m3": -6536163.3
      }
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 7.3,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 19.1,
-   "kind": "thought",
-   "data": {
-    "text": "Flooding rises modestly overall, but tide impacts vary by neighbourhood — I'll pinpoint where and verify evacuation paths."
-   }
-  },
-  {
-   "t": 19.1,
-   "kind": "tool_call",
-   "data": {
-    "name": "get_area_stats",
-    "arguments": {
-     "place": "Lekki Phase 1",
-     "run_id": "r_3277ec9d2e6e1ec8"
-    }
-   }
-  },
-  {
-   "t": 19.43,
-   "kind": "tool_result",
-   "data": {
-    "name": "get_area_stats",
-    "result": {
-     "run_id": "r_3277ec9d2e6e1ec8",
-     "place": "Lekki Phase 1",
-     "buildings_flooded": 1614,
-     "buildings_flooded_own_cell": 573,
-     "people_exposed": 5129,
-     "road_km_impassable": 19.678,
-     "max_depth_m": 1.388,
-     "flooded_area_km2": 0.6767
-    }
-   }
-  },
-  {
-   "t": 23.15,
-   "kind": "thought",
-   "data": {
-    "text": "Baseline exposure in Lekki Phase 1 is set — now I'll measure the same pocket under tide lock and map evacuation routes."
-   }
-  },
-  {
-   "t": 23.15,
-   "kind": "tool_call",
-   "data": {
-    "name": "get_area_stats",
-    "arguments": {
-     "place": "Lekki Phase 1",
-     "run_id": "r_cc14fcd1e804a1f0"
-    }
-   }
-  },
-  {
-   "t": 23.42,
-   "kind": "tool_result",
-   "data": {
-    "name": "get_area_stats",
-    "result": {
-     "run_id": "r_cc14fcd1e804a1f0",
-     "place": "Lekki Phase 1",
-     "buildings_flooded": 1612,
-     "buildings_flooded_own_cell": 573,
-     "people_exposed": 5122,
-     "road_km_impassable": 19.71,
-     "max_depth_m": 1.388,
-     "flooded_area_km2": 0.6757
-    }
-   }
-  },
-  {
-   "t": 23.42,
+   "t": 7.46,
    "kind": "tool_call",
    "data": {
     "name": "compute_route",
@@ -772,38 +730,37 @@
       3.47674,
       6.44154
      ],
-     "run_id": "r_3277ec9d2e6e1ec8",
+     "run_id": "r_19bad5451b9f8e42",
      "t_s": 10200
     }
    }
   },
   {
-   "t": 23.76,
+   "t": 7.68,
    "kind": "tool_result",
    "data": {
     "name": "compute_route",
     "result": {
-     "route_id": "rt_a6a760f4a2e1",
-     "run_id": "r_3277ec9d2e6e1ec8",
+     "route_id": "rt_f9007e065e4d",
+     "run_id": "r_19bad5451b9f8e42",
      "t_s": 10200,
      "reachable": false,
      "path": [],
      "length_km": null,
      "eta_min": null,
-     "edges_removed": 2773,
+     "edges_removed": 2563,
      "destination_name": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 7.5,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 26.5,
-   "kind": "thought",
-   "data": {
-    "text": "Baseline evacuation looks blocked at peak flooding — now I'll check if tide makes it worse."
-   }
-  },
-  {
-   "t": 26.5,
+   "t": 7.68,
    "kind": "tool_call",
    "data": {
     "name": "compute_route",
@@ -812,38 +769,112 @@
       3.47674,
       6.44154
      ],
-     "run_id": "r_cc14fcd1e804a1f0",
+     "run_id": "r_7d9f3940cb415e7e",
      "t_s": 10200
     }
    }
   },
   {
-   "t": 26.8,
+   "t": 7.89,
    "kind": "tool_result",
    "data": {
     "name": "compute_route",
     "result": {
-     "route_id": "rt_1ddc055b81a2",
-     "run_id": "r_cc14fcd1e804a1f0",
+     "route_id": "rt_27cd5946289d",
+     "run_id": "r_7d9f3940cb415e7e",
      "t_s": 10200,
      "reachable": false,
      "path": [],
      "length_km": null,
      "eta_min": null,
-     "edges_removed": 3103,
+     "edges_removed": 2886,
      "destination_name": null
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 7.7,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 31.26,
+   "t": 12.2,
    "kind": "thought",
    "data": {
-    "text": "Peak-hour escape looks cut off in both cases — I'll test an earlier window to see how tide lock changes the outcome."
+    "text": "Flooding is up and the peak-hour route is cut in both cases — I'll zoom into Lekki Phase 1 and check an earlier escape window."
    }
   },
   {
-   "t": 31.26,
+   "t": 12.2,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Lekki Phase 1",
+     "run_id": "r_19bad5451b9f8e42"
+    }
+   }
+  },
+  {
+   "t": 12.47,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_19bad5451b9f8e42",
+     "place": "Lekki Phase 1",
+     "buildings_flooded": 1555,
+     "buildings_flooded_own_cell": 521,
+     "people_exposed": 4698,
+     "road_km_impassable": 18.468,
+     "max_depth_m": 1.296,
+     "flooded_area_km2": 0.6191
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 12.3,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 12.48,
+   "kind": "tool_call",
+   "data": {
+    "name": "get_area_stats",
+    "arguments": {
+     "place": "Lekki Phase 1",
+     "run_id": "r_7d9f3940cb415e7e"
+    }
+   }
+  },
+  {
+   "t": 12.64,
+   "kind": "tool_result",
+   "data": {
+    "name": "get_area_stats",
+    "result": {
+     "run_id": "r_7d9f3940cb415e7e",
+     "place": "Lekki Phase 1",
+     "buildings_flooded": 1555,
+     "buildings_flooded_own_cell": 521,
+     "people_exposed": 4698,
+     "road_km_impassable": 18.468,
+     "max_depth_m": 1.296,
+     "flooded_area_km2": 0.6191
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 12.5,
+     "deadline_s": 240
+    }
+   }
+  },
+  {
+   "t": 12.64,
    "kind": "tool_call",
    "data": {
     "name": "compute_route",
@@ -852,19 +883,19 @@
       3.47674,
       6.44154
      ],
-     "run_id": "r_3277ec9d2e6e1ec8",
+     "run_id": "r_19bad5451b9f8e42",
      "t_s": 3600
     }
    }
   },
   {
-   "t": 31.66,
+   "t": 13.06,
    "kind": "tool_result",
    "data": {
     "name": "compute_route",
     "result": {
-     "route_id": "rt_7a2ae075cc3c",
-     "run_id": "r_3277ec9d2e6e1ec8",
+     "route_id": "rt_cb086abf58b1",
+     "run_id": "r_19bad5451b9f8e42",
      "t_s": 3600,
      "reachable": true,
      "path": [
@@ -915,13 +946,19 @@
      ],
      "length_km": 0.865,
      "eta_min": 13.0,
-     "edges_removed": 48,
+     "edges_removed": 20,
      "destination_name": "Lekki British School (candidate shelter (assumed))"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 12.8,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 31.66,
+   "t": 13.06,
    "kind": "tool_call",
    "data": {
     "name": "compute_route",
@@ -930,19 +967,19 @@
       3.47674,
       6.44154
      ],
-     "run_id": "r_cc14fcd1e804a1f0",
+     "run_id": "r_7d9f3940cb415e7e",
      "t_s": 3600
     }
    }
   },
   {
-   "t": 32.01,
+   "t": 13.35,
    "kind": "tool_result",
    "data": {
     "name": "compute_route",
     "result": {
-     "route_id": "rt_cdab0094fe42",
-     "run_id": "r_cc14fcd1e804a1f0",
+     "route_id": "rt_62b69283a876",
+     "run_id": "r_7d9f3940cb415e7e",
      "t_s": 3600,
      "reachable": true,
      "path": [
@@ -993,178 +1030,112 @@
      ],
      "length_km": 0.865,
      "eta_min": 13.0,
-     "edges_removed": 363,
+     "edges_removed": 344,
      "destination_name": "Lekki British School (candidate shelter (assumed))"
+    },
+    "budget": {
+     "runs_used": 0,
+     "runs_max": 4,
+     "elapsed_s": 13.2,
+     "deadline_s": 240
     }
    }
   },
   {
-   "t": 43.75,
+   "t": 24.45,
    "kind": "thought",
    "data": {
-    "text": "In `lagos-lekki-v1` for `120mm / 3h` storm:\n\n* Baseline: `baseline 120mm/3h` - run `r_3277ec9d2e6e1ec8`\n* Tide-lock: same storm + `tide boundary_level_m: 1.0 m` - run `r_cc14fcd1e804a1f0`\n\nThis is a planning model, not a forecast.\n\n### Flooded buildings\n\n> Tide-lock holds water in the system - outflow reverses and stored volume rises by ~6.46M m3.\n\n* `buildings_flooded`: 30,202 -> 30,595 = **+393 buildings, +1.3%**\n* `buildings_flooded_severe`: 9,187 -> 9,544 = **+357, +3.9%**\n* `people_exposed`: 94,280 -> 96,288 = **+2,008, +2.1%**\n* `road_km_impassable`: 406.713 km -> 450.011 km = **+43.298 km, +10.6%**\n* `flooded_area_km2`: 23.1791 -> 29.7909 = **+6.6118 km2, +28.5%**\n* `max_depth_m`: 2.154 m -> 2.154 m = **no change**\n\nIn `Lekki Phase 1` specifically, almost no change:\n\n* `area:Lekki Phase 1:buildings_flooded`: 1,614 -> 1,612\n* `area:Lekki Phase 1:people_exposed`: 5,129 -> 5,122\n* `area:Lekki Phase 1:road_km_impassable`: 19.678 km -> 19.71 km\n\ni.e. the +393 buildings study-area-wide is not in Phase 1, it is lagoon-side / low-lying storage expansion.\n\n### Evacuation route to nearest shelter\n\nTested from `Lekki Phase 1 [3.47674,6.44154]` to nearest shelter.\n\nNearest shelter found in both runs: `Lekki British School (candidate shelter (assumed))`\n\n**At t=3600s - 1h into storm:**\n\n* Baseline `rt_7a2ae075cc3c`: reachable=true, length 0.865 km, ETA 13.0 min, edges_removed 48\n* Tide-lock `rt_cdab0094fe42`: reachable=true, length 0.865 km, ETA 13.0 min, edges_removed 363\n\n> Same path, same shelter, same time early - but tide-lock has already removed +315 road edges network-wide.\n\n**At peak t=10200s:**\n\n* Baseline `rt_a6a760f4a2e1`: reachable=false, edges_removed 2773\n* Tide-lock `rt_1ddc055b81a2`: reachable=false, edges_removed 3103\n\n> By peak, evacuation from this origin is cut off in **both** cases. Tide-lock makes it worse by +330 blocked edges.\n\nEngineering takeaway: 1 m lagoon hold does not much change building flooding in Phase 1, but study-area-wide it adds ~357 severe buildings, +43.3 km impassable roads and +6.6 km2 flooded area, and degrades the road network earlier - leave before peak."
+    "text": "In `lagos-lekki-v2`, 120mm / 3h over the whole area:\n\n**Baseline** `r_19bad5451b9f8e42` vs **lagoon held 1.0 m high** `r_7d9f3940cb415e7e`\n\n> Tide here is an assumed lagoon/sea boundary level, not a forecast. Default is -0.5 m.\n\n### Flooded buildings\n\n| stat | baseline | tide lock 1.0 m | change alt-base |\n|---|---|---|---|\n| buildings_flooded | 29137 | 29567 | +430 |\n| buildings_flooded_severe | 8230 | 8585 | +355 |\n| buildings_flooded_own_cell | 12420 | 12646 | +226 |\n| people_exposed | 88124 | 90212 | +2088 |\n| road_km_impassable | 384.7 | 430.071 | +45.371 |\n| flooded_area_km2 | 21.8598 | 28.5074 | +6.6476 |\n| max_depth_m | 2.051 | 2.064 | +0.013 |\n\nMechanism in the model: `boundary_outflow_m3` goes from +1543335.4 to -4992827.9, `stored_volume_end_m3` +6491847.2 m3.\n\nInterpretation:\n* Modest rise in building count, +430 / ~1.5%, but +355 of that is severe.\n* Large rise in extent, +6.65 km2 / ~30%, with almost no rise in max depth. Tide lock spreads shallow water and prevents drainage.\n* +45.4 km more impassable road.\n\nChecked locally in `Lekki Phase 1`:\n\n* baseline: 1555 buildings_flooded, 521 own_cell, 4698 people, 18.468 km impassable, max 1.296 m\n* tide lock 1.0 m: identical - 1555, 521, 4698, 18.468 km, 1.296 m\n\nThe +430 buildings are outside Lekki Phase 1, on lower lagoon margins.\n\n### Evacuation route to nearest shelter\n\nTested from Lekki Phase 1 centre `[3.47674,6.44154]` at peak `t_s=10200` and early `t_s=3600`:\n\n* At 1h:\n  * baseline `rt_cb086abf58b1`: reachable to `Lekki British School (candidate shelter (assumed))`, 0.865 km, 13.0 min ETA, 20 edges removed\n  * tide lock `rt_62b69283a876`: reachable to same shelter, same path, 0.865 km, 13.0 min ETA, but 344 edges removed network-wide\n  * Same short route still open, redundancy much lower.\n\n* At peak 2h50m:\n  * baseline `rt_f9007e065e4d`: unreachable, 2563 edges removed\n  * tide lock `rt_27cd5946289d`: unreachable, 2886 edges removed (+323 vs baseline)\n\nSo: evacuate early. Under 1 m tide lock the local route is unchanged at 1h but the network degrades faster, and by peak no route to nearest shelter from Lekki Phase 1 in either case, with more blockages under tide lock.\n\nPlanning model, not a forecast.\n"
    }
   },
   {
-   "t": 58.4,
+   "t": 39.81,
    "kind": "brief",
    "data": {
-    "title": "Tide lock flooding and evacuation impact",
-    "summary": "Baseline storm compared with lagoon held high shows a modest rise in flooded buildings study wide alongside larger growth in impassable roads and flooded extent with stored water sharply higher, while evacuation from the western neighbourhood to the nearest shelter remains possible early with unchanged travel time but many more roads cut and is unreachable at peak in both cases.",
+    "title": "Tide lock effects on flooding and shelter access",
+    "summary": "Same storm compared with and without lagoon held high shows more widespread flooding and more impassable roads study wide under tide lock, while early evacuation to the nearest shelter stays possible with similar travel time but with far fewer routing options, and peak time access is unavailable in both cases. Tide levels used here are assumptions not forecasts, and results come from a planning model not a forecast.",
     "claims": [
      {
-      "text": "buildings with flood water close by under baseline storm",
-      "value": 30202.0,
+      "text": "buildings with flood water close by under tide lock",
+      "value": 29567.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_3277ec9d2e6e1ec8",
+      "source_run_id": "r_7d9f3940cb415e7e",
       "field": "buildings_flooded",
       "verified": true
      },
      {
-      "text": "buildings with water at the building under baseline storm",
-      "value": 13314.0,
+      "text": "buildings with water at the building under tide lock",
+      "value": 12646.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_3277ec9d2e6e1ec8",
+      "source_run_id": "r_7d9f3940cb415e7e",
       "field": "buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "buildings with flood water close by with lagoon held high",
-      "value": 30595.0,
+      "text": "extra buildings with flood water close by from tide lock versus baseline",
+      "value": 430.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "buildings_flooded",
+      "source_run_id": "r_7d9f3940cb415e7e",
+      "field": "delta:buildings_flooded:r_19bad5451b9f8e42",
       "verified": true
      },
      {
-      "text": "buildings with water at the building with lagoon held high",
-      "value": 13525.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "buildings_flooded_own_cell",
-      "verified": true
-     },
-     {
-      "text": "extra buildings with flood water close by due to tide lock",
-      "value": 393.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "delta:buildings_flooded:r_3277ec9d2e6e1ec8",
-      "verified": true
-     },
-     {
-      "text": "extra severely flooded buildings due to tide lock",
-      "value": 357.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "delta:buildings_flooded_severe:r_3277ec9d2e6e1ec8",
-      "verified": true
-     },
-     {
-      "text": "extra impassable road length due to tide lock",
-      "value": 43.298,
+      "text": "extra length of impassable road from tide lock versus baseline",
+      "value": 45.371,
       "model_value": null,
       "unit": "km",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "delta:road_km_impassable:r_3277ec9d2e6e1ec8",
+      "source_run_id": "r_7d9f3940cb415e7e",
+      "field": "delta:road_km_impassable:r_19bad5451b9f8e42",
       "verified": true
      },
      {
-      "text": "extra flooded extent due to tide lock",
-      "value": 6.612,
+      "text": "extra flooded area from tide lock versus baseline",
+      "value": 6.648,
       "model_value": null,
       "unit": "km2",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "delta:flooded_area_km2:r_3277ec9d2e6e1ec8",
+      "source_run_id": "r_7d9f3940cb415e7e",
+      "field": "delta:flooded_area_km2:r_19bad5451b9f8e42",
       "verified": true
      },
      {
-      "text": "extra people exposed due to tide lock",
-      "value": 2008.0,
+      "text": "routing network roads removed early in storm under baseline",
+      "value": 20.0,
       "model_value": null,
-      "unit": "people",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "delta:people_exposed:r_3277ec9d2e6e1ec8",
+      "unit": "edges",
+      "source_run_id": "r_19bad5451b9f8e42",
+      "field": "route:rt_cb086abf58b1:edges_removed",
       "verified": true
      },
      {
-      "text": "early evacuation travel time under baseline storm",
+      "text": "routing network roads removed early in storm under tide lock",
+      "value": 344.0,
+      "model_value": null,
+      "unit": "edges",
+      "source_run_id": "r_7d9f3940cb415e7e",
+      "field": "route:rt_62b69283a876:edges_removed",
+      "verified": true
+     },
+     {
+      "text": "estimated travel time to nearest shelter early in storm under tide lock",
       "value": 13.0,
       "model_value": null,
       "unit": "min",
-      "source_run_id": "r_3277ec9d2e6e1ec8",
-      "field": "route:rt_7a2ae075cc3c:eta_min",
-      "verified": true
-     },
-     {
-      "text": "early evacuation travel time with lagoon held high",
-      "value": 13.0,
-      "model_value": null,
-      "unit": "min",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "route:rt_cdab0094fe42:eta_min",
-      "verified": true
-     },
-     {
-      "text": "roads cut for early evacuation under baseline storm",
-      "value": 48.0,
-      "model_value": null,
-      "unit": "edges",
-      "source_run_id": "r_3277ec9d2e6e1ec8",
-      "field": "route:rt_7a2ae075cc3c:edges_removed",
-      "verified": true
-     },
-     {
-      "text": "roads cut for early evacuation with lagoon held high",
-      "value": 363.0,
-      "model_value": null,
-      "unit": "edges",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "route:rt_cdab0094fe42:edges_removed",
-      "verified": true
-     },
-     {
-      "text": "roads cut at peak time under baseline storm",
-      "value": 2773.0,
-      "model_value": null,
-      "unit": "edges",
-      "source_run_id": "r_3277ec9d2e6e1ec8",
-      "field": "route:rt_a6a760f4a2e1:edges_removed",
-      "verified": true
-     },
-     {
-      "text": "roads cut at peak time with lagoon held high",
-      "value": 3103.0,
-      "model_value": null,
-      "unit": "edges",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "route:rt_1ddc055b81a2:edges_removed",
-      "verified": true
-     },
-     {
-      "text": "buildings with flood water close by in western neighbourhood with lagoon held high",
-      "value": 1612.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_cc14fcd1e804a1f0",
-      "field": "area:Lekki Phase 1:buildings_flooded",
+      "source_run_id": "r_7d9f3940cb415e7e",
+      "field": "route:rt_62b69283a876:eta_min",
       "verified": true
      }
     ],
-    "recommended_run_id": "r_cc14fcd1e804a1f0",
+    "recommended_run_id": null,
     "model": "muse-spark-1.3",
     "provider": "meta",
     "prose_has_digits": false
    }
   },
   {
-   "t": 58.4,
+   "t": 39.81,
    "kind": "done",
    "data": {}
   }

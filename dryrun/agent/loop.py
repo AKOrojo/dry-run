@@ -48,8 +48,8 @@ get_aoi_info's "presets" are scenarios already run: when one answers part of the
 pass it to run_simulation verbatim and it returns instantly. Presets are a speed path, not a menu: if the user
 asks for a different storm, place or intervention, run exactly what they asked, never the nearest preset.
 If a tool result has a "warning", fix the scenario rather than reporting its numbers.
-The simulator is a planning model, not a forecast. Do not give medical, political
-or blame-assigning commentary. Keep tool calls purposeful; stop when you can answer."""
+The simulator is a planning model, not a forecast. Keep to flood engineering; give no health advice
+and assign no blame. Keep tool calls purposeful; stop when you can answer."""
 
 BRIEF_INSTRUCTIONS = """Write the decision brief now as ONE JSON object, no prose around it:
 {"title": str, "summary": str, "claims": [{"text": str, "unit": str, "source_run_id": str,

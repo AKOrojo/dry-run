@@ -36,6 +36,15 @@ def _retry_after(resp: httpx.Response) -> int:
         return 60
 
 
+def content_filtered(r: httpx.Response) -> bool:
+    """Meta's content filter answers 400 with error.code content_policy_violation. It scores near its threshold on
+    some flood questions (Lekki, Hurricane Ida), so the same request can pass on a second try."""
+    try:
+        return r.status_code == 400 and r.json().get("error", {}).get("code") == "content_policy_violation"
+    except Exception:  # noqa: BLE001 - any non-JSON body is simply not a filter refusal
+        return False
+
+
 def classify_llm_error(exc: BaseException, stage: str | None = None) -> dict:
     # "not configured" only when building the provider failed; a KeyError mid-chat is a bad response, not setup.
     if isinstance(exc, httpx.HTTPStatusError):
@@ -48,6 +57,10 @@ def classify_llm_error(exc: BaseException, stage: str | None = None) -> dict:
                     "message": "The model provider is rate-limiting us. Wait a minute and try again."}
         if s >= 500:
             return {"code": "llm_unavailable", "retryable": True, "message": _UNAVAILABLE}
+        if content_filtered(exc.response):
+            return {"code": "llm_content_filter", "retryable": True,
+                    "message": "The model provider's content filter blocked this request. Try again or rephrase "
+                               "the question."}
         return {"code": "llm_bad_request", "retryable": False, "message": "The model provider refused the request."}
     if isinstance(exc, httpx.TimeoutException):
         return {"code": "llm_timeout", "retryable": True,
