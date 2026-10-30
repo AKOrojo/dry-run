@@ -96,6 +96,12 @@ def detach(job: Job) -> None:
             job.cancelled = True
 
 
+def active(run_id: str) -> bool:
+    """A job for run_id is live on this instance."""
+    job = _JOBS.get(run_id)
+    return job is not None and not job.finished.is_set()
+
+
 def watch(job: Job, watcher_id: str, token: str) -> None:
     """Register a stream that attach() already counted, so it can be cancelled by id."""
     with _LOCK:

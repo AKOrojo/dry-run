@@ -5,7 +5,7 @@ POST /api/simulate/estimate  ScenarioSpec ->
      output_interval_s, frames_total}
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
     started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
-    progress  {phase: queued|solving|saving, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}  ~1/s
+    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}
     done      {manifest}                                              terminal
     cancelled {reason}                                                terminal
     error     {code, message, retryable}                              terminal
@@ -40,6 +40,10 @@ router = APIRouter(prefix="/api/simulate")
 log = logging.getLogger(__name__)
 _WORK = ThreadPoolExecutor(4)  # the engine serialises solves itself (_SOLVE); this only holds waiting jobs
 TICK_S = 1.0
+# After a DELETE that leaves the job with no viewers, the stream stays open until the work has actually stopped:
+# Cloud Run throttles CPU once no request is open, so closing at once would leave the run crawling (and its
+# run_id locked) in the background.
+CANCEL_WAIT_S = 120.0
 
 
 def _backend() -> str:
@@ -71,6 +75,8 @@ def _status(run_id: str) -> str:
     m = storage.load_run(run_id)
     if m.status == RunStatus.failed and "Cancelled" in (m.error or ""):
         return "none"  # a cancelled run is simply not there yet
+    if m.status == RunStatus.running and not jobs.active(run_id):
+        return "none"  # left behind by a stopped instance: the next Simulate just runs it
     return m.status.value
 
 
@@ -166,6 +172,11 @@ async def stream(spec: ScenarioSpec, request: Request):
                 _WORK.submit(_work, job, spec)
             while not job.finished.is_set():
                 if not jobs.watching(job_id):  # this viewer cancelled (DELETE)
+                    waited = 0.0
+                    while job.cancelled and not job.finished.is_set() and waited < CANCEL_WAIT_S:
+                        yield _event("progress", {**job.progress(), "phase": "cancelling"})
+                        await asyncio.to_thread(job.finished.wait, TICK_S)
+                        waited += TICK_S
                     yield _event("cancelled", {"reason": "cancelled by this client"})
                     return
                 yield _event("progress", job.progress())

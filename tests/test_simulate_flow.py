@@ -145,3 +145,49 @@ def test_cancel_route(client):
 def test_started_carries_a_cancel_token(client):
     evs = events(client.post("/api/simulate/stream", json=spec(43)).text)
     assert len(evs[0]["data"]["cancel_token"]) >= 16
+
+
+def test_delete_keeps_the_stream_until_the_work_stops(client, monkeypatch):
+    """The last viewer's DELETE: progress(phase=cancelling) until the job finishes, then cancelled."""
+    import threading
+
+    from dryrun.api import simulate_routes
+
+    monkeypatch.setattr(simulate_routes, "TICK_S", 0.05)
+    started = threading.Event()
+
+    def slow_work(job, spec):
+        started.set()
+        while not job.cancelled:
+            job.finished.wait(0.01)
+        job.finished.wait(0.3)  # the solver takes a moment to reach its next hook
+        jobs.finish(job, error=jobs.Cancelled(job.run_id))
+
+    monkeypatch.setattr(simulate_routes, "_work", slow_work)
+    out: list = []
+
+    def reader():
+        with client.stream("POST", "/api/simulate/stream", json=spec(47)) as r:
+            for line in r.iter_lines():
+                if line.startswith("data: "):
+                    out.append(json.loads(line[6:]))
+
+    t = threading.Thread(target=reader)
+    t.start()
+    started.wait(5)
+    while not out:
+        started.wait(0.01)
+    s = out[0]["data"]
+    assert client.delete(f"/api/simulate/jobs/{s['job_id']}", headers={"X-Cancel-Token": s["cancel_token"]}).status_code == 202
+    t.join(10)
+    phases = [e["data"].get("phase") for e in out if e["kind"] == "progress"]
+    assert "cancelling" in phases and out[-1]["kind"] == "cancelled"
+
+
+def test_stale_running_manifest_reads_as_none(client):
+    from dryrun.contracts import RunManifest, RunStatus
+
+    s = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=53, duration_h=1))
+    storage.save_run(RunManifest(run_id=s.run_id(), scenario=s, status=RunStatus.running, backend="fake"))
+    e = client.post("/api/simulate/estimate", json=spec(53)).json()
+    assert e["run_id"] == s.run_id() and e["status"] == "none" and e["cached"] is False
