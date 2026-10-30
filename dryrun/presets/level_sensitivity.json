@@ -1,0 +1,64 @@
+{
+ "lagos-lekki-v2": {
+  "storm": "120 mm / 3 h",
+  "datum": "EGM2008 m; -0.5 m is the default level",
+  "rows": [
+   {
+    "level_m": -0.5,
+    "run_id": "r_19bad5451b9f8e42",
+    "flooded_km2": 21.86,
+    "buildings": 29137
+   },
+   {
+    "level_m": 0.5,
+    "run_id": "r_b2890236870410c3",
+    "flooded_km2": 27.703,
+    "buildings": 29355
+   },
+   {
+    "level_m": 1.0,
+    "run_id": "r_7d9f3940cb415e7e",
+    "flooded_km2": 28.507,
+    "buildings": 29567
+   },
+   {
+    "level_m": 1.5,
+    "run_id": "r_83600aa83d2c2082",
+    "flooded_km2": 30.128,
+    "buildings": 30068
+   }
+  ],
+  "note": "the lagoon fringe is low (14,667 land cells below 1.5 m), so the lagoon level matters"
+ },
+ "nyc-queens-v0": {
+  "storm": "Ida 1 Sep 2021 (LaGuardia gauge)",
+  "datum": "EGM2008 m; -0.5 m is the default level",
+  "rows": [
+   {
+    "level_m": -0.5,
+    "run_id": "r_48aae11b5d8514ed",
+    "flooded_km2": 2.238,
+    "buildings": 12531
+   },
+   {
+    "level_m": 0.5,
+    "run_id": "r_84b47af1ea443e64",
+    "flooded_km2": 2.247,
+    "buildings": 12531
+   },
+   {
+    "level_m": 1.0,
+    "run_id": "r_60b796c107809b94",
+    "flooded_km2": 2.251,
+    "buildings": 12547
+   },
+   {
+    "level_m": 1.5,
+    "run_id": "r_04cad0031b910ed5",
+    "flooded_km2": 2.252,
+    "buildings": 12541
+   }
+  ],
+  "note": "sea level barely matters here: Queens land is high (5th percentile 5.6 m; 194 land cells below 1.5 m), so even +1.5 m adds under 0.02 km2; Ida flooding was rain, not surge"
+ }
+}

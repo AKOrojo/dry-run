@@ -661,3 +661,19 @@ def test_moving_cell_passes_centre_at_rain_peak():
         f, f0 = I.rain_field(sp, g), I.rain_field(still, g)
         assert np.allclose(f.shape(tp), f0.shape(0.0))
         assert f.shape(tp + 1800).max() < 0.01  # 21.6 km on, the cell has left the fixture
+
+
+def test_level_sensitivity_route():
+    from fastapi.testclient import TestClient
+
+    from dryrun import presets
+    from dryrun.api.main import app
+
+    c = TestClient(app)
+    for aoi in ("lagos-lekki-v2", "nyc-queens-v0"):
+        t = c.get(f"/api/aoi/{aoi}/level_sensitivity").json()
+        levels = [r["level_m"] for r in t["rows"]]
+        assert levels == sorted(levels) and levels[0] == -0.5 and t["storm"] and t["note"]
+        base = next(s for s in presets.scenarios(aoi) if not s.get("interventions") and "spatial" not in s["storm"])
+        assert t["rows"][0]["flooded_km2"] > 0 and base  # the -0.5 m row is the reference storm itself
+    assert c.get("/api/aoi/texas-guadalupe-v0/level_sensitivity").status_code == 404

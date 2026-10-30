@@ -420,6 +420,18 @@ def aoi_point(aoi_id: str, lon: float, lat: float, request: Request):
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/api/aoi/{aoi_id}/level_sensitivity")
+def aoi_level_sensitivity(aoi_id: str):
+    """Precomputed lagoon/sea level sensitivity: {storm, datum, note, rows: [{level_m, run_id, flooded_km2, buildings}]}.
+    404 where the AOI has none."""
+    from dryrun import presets
+
+    t = presets.level_sensitivity(aoi_id)
+    if t is None:
+        raise HTTPException(404, "no level sensitivity table for this AOI")
+    return t
+
+
 @app.get("/api/aoi/{aoi_id}/boundary.geojson")
 def boundary_layer(aoi_id: str):
     """Lagoon/sea outline from boundary_mask (empty for inland AOIs)."""

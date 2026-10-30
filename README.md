@@ -285,6 +285,21 @@ pipes, which the model does not represent. 311 cannot measure false alarms: a st
 have flooded. At 50 m every hit rate rises (74 % at 118 mm) but so does the baseline (53 %), so the lift falls
 to 1.4×.
 
+### Lagoon and sea level (`evals/validation/level_sensitivity.py`)
+The water held at the lagoon/sea cells, re-run at −0.5 (default), +0.5, +1.0 and +1.5 m EGM2008 under each
+coastal AOI's reference storm (`GET /api/aoi/{aoi_id}/level_sensitivity`):
+
+| Level (m) | Lagos v2, 120 mm / 3 h: flooded km² | buildings | Queens, Ida (LaGuardia): flooded km² | buildings |
+|---|---|---|---|---|
+| −0.5 | 21.86 | 29,137 | 2.238 | 12,531 |
+| +0.5 | 27.70 | 29,355 | 2.247 | 12,531 |
+| +1.0 | 28.51 | 29,567 | 2.251 | 12,547 |
+| +1.5 | 30.13 | 30,068 | 2.252 | 12,541 |
+
+Lagos's lagoon fringe is low (14,667 land cells below 1.5 m), so a high lagoon adds 6–8 km² of flooding, mostly
+open fringe with few buildings. Queens land is high (5th percentile 5.6 m), so sea level barely matters there;
+Ida's flooding was rain, not surge.
+
 ### Where the rain falls (contract 0.6.0)
 `Storm.spatial` sets the footprint; `null` keeps rain on the whole area. Every option builds one rain field on the
 grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `docs/` research, not in the repo).
