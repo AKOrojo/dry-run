@@ -12,13 +12,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 
 from dryrun import presets, storage
-from dryrun.contracts import COMPARE_FIELDS, CompareResult, RouteRequest, RunStats, ScenarioSpec
+from dryrun.contracts import COMPARE_FIELDS, CompareResult, RainCell, RouteRequest, RunStats, ScenarioSpec, StormTrack
 from dryrun.routing.evac import route
 from dryrun.sim.engine import area_stats, run_scenario, validate
 from dryrun.sim.solver import DEFAULT_TIDE_M
+
+log = logging.getLogger(__name__)
 
 _LONLAT = {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
            "description": "[lon, lat] in degrees"}
@@ -42,13 +45,41 @@ _INTERVENTION = {
     },
     "required": ["type"],
 }
+
+def _desc(model, field: str) -> str:
+    """A contract field's description, so the tool schema states the same limits the contract enforces."""
+    f = model.model_fields[field]
+    lims = [f"{k} {getattr(m, k)}" for m in f.metadata for k in ("ge", "gt", "le", "lt") if hasattr(m, k)]
+    return f.description + (f" ({', '.join(lims)})" if lims else "")
+
+
+_SPATIAL = {
+    "type": "object",
+    "description": ("Where the rain falls; omit for rain over the whole area. kind=cell: one storm cell centred on "
+                    "`place` (preferred) or `center`; total_mm is then the depth at the cell centre. "
+                    "kind=polygon: rain only inside `place` or `polygon`, total_mm inside it."),
+    "properties": {
+        "kind": {"type": "string", "enum": ["cell", "polygon"]},
+        "place": {"type": "string", "description": "name of a place from get_aoi_info"},
+        "center": {**_LONLAT, "description": "[lon, lat]; " + _desc(RainCell, "center")},
+        "polygon": _POLY,
+        "radius_m": {"type": "number", "description": _desc(RainCell, "radius_m")},
+        "profile": {"type": "string", "enum": ["gaussian", "exponential", "flat"]},
+        "track": {"type": "object", "description": "omit for a stationary cell", "properties": {
+            "heading_deg": {"type": "number", "description": _desc(StormTrack, "heading_deg")},
+            "speed_m_s": {"type": "number", "description": _desc(StormTrack, "speed_m_s")}},
+            "required": ["heading_deg", "speed_m_s"]},
+    },
+    "required": ["kind"],
+}
 _SCENARIO = {
     "type": "object",
     "properties": {
         "aoi_id": {"type": "string"},
         "storm": {"type": "object", "properties": {
             "total_mm": {"type": "number"}, "duration_h": {"type": "number"},
-            "pattern": {"type": "string", "enum": ["uniform", "front_loaded", "center_peaked"]}},
+            "pattern": {"type": "string", "enum": ["uniform", "front_loaded", "center_peaked"]},
+            "spatial": _SPATIAL},
             "required": ["total_mm", "duration_h"]},
         "interventions": {"type": "array", "items": _INTERVENTION},
         "sim_hours": {"type": "number", "description": "default 6, max 12"},
@@ -152,6 +183,18 @@ def aoi_info(aoi_id: str) -> dict:
     return out
 
 
+def rain_warnings(spec: ScenarioSpec) -> list[str]:
+    """The rain field preview's warnings (implausible peak intensity, rain falling outside the model area, a
+    moving cell) so the agent hears what the Scenario tab shows next to the map."""
+    from dryrun import rain_preview  # Eng A
+
+    try:
+        return [f"rain: {w}." for w in rain_preview.preview(spec)["warnings"]]
+    except Exception:  # the run already succeeded; a preview failure must not hide its result
+        log.exception("rain preview failed for %s", spec.run_id())
+        return []
+
+
 def canonical_place(aoi_id: str, name: str) -> str:
     """The places-layer spelling of `name`, matching case and ’/' alike (OSM names keep curly apostrophes;
     models often type straight ones). Unchanged when nothing matches, so the usual unknown-place error follows."""
@@ -186,6 +229,9 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
         for iv in args.get("interventions") or []:
             if isinstance(iv, dict) and isinstance(iv.get("place"), str) and isinstance(args.get("aoi_id"), str):
                 iv["place"] = canonical_place(args["aoi_id"], iv["place"])  # exact spelling = preset run_ids
+        sp = (args.get("storm") or {}).get("spatial") if isinstance(args.get("storm"), dict) else None
+        if isinstance(sp, dict) and isinstance(sp.get("place"), str) and isinstance(args.get("aoi_id"), str):
+            sp["place"] = canonical_place(args["aoi_id"], sp["place"])
         spec = ScenarioSpec.model_validate(args)  # validate BEFORE spending budget
         validate(spec)  # unknown AOI / unknown place -> error without spending budget
         if session is not None and not _cached(spec):  # cache hits are instant and free: no budget
@@ -203,6 +249,8 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
         if m.stats and m.stats.buildings_in_ponds > 0:
             warnings.append(f"ponds cover {m.stats.buildings_in_ponds} buildings: that displaces people, it is not "
                             "a flood reduction. Put ponds on open land or drop them.")
+        if spec.storm.spatial is not None:
+            warnings += rain_warnings(spec)
         if warnings:
             out["warning"] = " ".join(warnings)
         return out

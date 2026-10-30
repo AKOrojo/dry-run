@@ -431,5 +431,52 @@ def test_aoi_info_tide_only_for_coastal(monkeypatch):
     assert "tide" not in tools.aoi_info(fixtures.AOI_ID)
 
 
-def test_system_prompt_rules_out_wind_and_storm_centre():
-    assert "no wind, storm centre" in loop.SYSTEM and not any(ch.isdigit() for ch in loop.SYSTEM)
+def test_system_prompt_offers_localized_rain_without_digits():
+    assert "storm.spatial" in loop.SYSTEM and "never imitate a localized storm" in loop.SYSTEM
+    assert not any(ch.isdigit() for ch in loop.SYSTEM)
+
+
+def test_spatial_schema_states_the_contract_limits():
+    from dryrun.agent import tools
+    from dryrun.contracts import RainCell
+
+    spatial = tools._SCENARIO["properties"]["storm"]["properties"]["spatial"]
+    radius = RainCell.model_fields["radius_m"].metadata
+    for lim in radius:
+        for k in ("ge", "le"):
+            if hasattr(lim, k):
+                assert f"{k} {getattr(lim, k)}" in spatial["properties"]["radius_m"]["description"]
+    assert "$ref" not in json.dumps(tools._SCENARIO)  # still hand-flattened for OpenAI-compatible endpoints
+
+
+def test_spatial_place_is_canonicalised_and_rain_warnings_reach_the_agent(monkeypatch):
+    from dryrun.agent import tools
+
+    monkeypatch.setattr(tools, "rain_warnings", lambda spec: ["rain: checked."])
+    args = json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {
+        "total_mm": 63, "duration_h": 1, "spatial": {"kind": "cell", "place": "open field (SYNTHETIC)", "radius_m": 3000,
+                                                    "center": None, "track": None}}})
+    out = tools.dispatch("run_simulation", args, tools.Session())
+    m = storage.load_run(out["run_id"])
+    assert m.scenario.storm.spatial.place == "Open Field (synthetic)"
+    assert out["status"] == "done" and "rain: checked." in out["warning"]
+
+
+def test_rain_warnings_come_from_the_preview():
+    from dryrun.agent import tools
+    from dryrun.contracts import ScenarioSpec
+
+    far = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm={"total_mm": 60, "duration_h": 1, "spatial": {
+        "kind": "cell", "place": "Open Field (synthetic)", "radius_m": 15000}})
+    assert any("outside the model area" in w for w in tools.rain_warnings(far))
+
+
+def test_unknown_spatial_place_fails_before_spending_budget():
+    from dryrun.agent import tools
+
+    session = tools.Session()
+    args = json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {
+        "total_mm": 64, "duration_h": 1, "spatial": {"kind": "polygon", "place": "Nowhere"}}})
+    with pytest.raises(ValueError):
+        tools.dispatch("run_simulation", args, session)
+    assert session.runs == 0

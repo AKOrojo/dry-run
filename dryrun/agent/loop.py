@@ -40,8 +40,10 @@ Leave storm pattern, sim_hours and output_interval_min at their defaults unless 
 Study area: {aoi_id}. Call get_aoi_info first and reuse its place polygons; never invent coordinates.
 If get_aoi_info has has_river_inflows, gauged river inflows are built into every run and cannot be changed;
 tide is for coastal areas only: there get_aoi_info has a "tide" entry, whose levels are assumptions, not forecasts;
-say so when you use one. Rain falls evenly over the whole study area: there is no wind, storm centre or rain
-footprint. If asked for one, say the simulator cannot do it; never imitate it with other inputs.
+say so when you use one. Rain falls over the whole study area unless the user asks for localized rain: then set
+storm.spatial, a storm cell centred on a get_aoi_info place (kind cell; add a track only for a moving storm) or rain
+inside one place (kind polygon). With a cell, total_mm is the depth at its centre and less falls further out; say
+so. Rain can only come from storm inputs: never imitate a localized storm with interventions.
 get_aoi_info's "presets" are scenarios already run: when one answers part of the question,
 pass it to run_simulation verbatim and it returns instantly. Presets are a speed path, not a menu: if the user
 asks for a different storm, place or intervention, run exactly what they asked, never the nearest preset.
