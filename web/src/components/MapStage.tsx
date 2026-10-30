@@ -422,7 +422,7 @@ function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: stri
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />
       <span style={{ display: "flex", flexDirection: "column", padding: "4px 9px 5px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", backdropFilter: "blur(6px)",
         border: selected ? "1px solid var(--danfo)" : "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }}>
+        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }} data-declutter={selected ? 5 : 1}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
       </span>
@@ -440,7 +440,7 @@ function EventMarker({ color, name, sub, muted }: { color: string; name: string;
   return (
     <div style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, opacity: muted ? 0.45 : 1 }}>
       <span style={{ width: 10, height: 10, flex: "none", borderRadius: "50%", background: color, boxShadow: "0 0 0 2px var(--ground)" }} />
-      <span style={cardStyle}>
+      <span style={cardStyle} data-declutter={muted ? 2 : 3}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{sub}</span>
       </span>
@@ -462,7 +462,7 @@ function InflowMarker({ name, hydrograph, units, title }: { name: string; hydrog
   return (
     <div title={title} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--depth-3)", boxShadow: "0 0 0 2px var(--ground)" }} />
-      <span style={cardStyle}>
+      <span style={cardStyle} data-declutter={4}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         <Sparkline points={hydrograph} />
         <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px" }}>{units}</span>
@@ -484,6 +484,23 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
       <span className="ft-legend-note">Arrival of 0.15 m water (assumption), to the nearest 10-min frame</span>
     </div>
   );
+}
+
+/** Labels that overlap give way by priority (data-declutter, higher wins: selected place, river inflows, key events,
+ *  then places). The hidden card keeps its dot, so the spot stays marked. Runs every frame after the anchors move. */
+function declutter(root: HTMLElement) {
+  const boxes = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter]"))
+    .map((el) => ({ el, p: Number(el.dataset.declutter) || 0, r: el.getBoundingClientRect() }))
+    .filter((b) => b.r.width > 0)
+    .sort((a, b) => b.p - a.p);
+  // Map controls and the hint pill are obstacles: labels never sit under them.
+  const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block]")).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+  const PAD = 3;
+  for (const b of boxes) {
+    const hit = kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
+    b.el.style.visibility = hit ? "hidden" : "";
+    if (!hit) kept.push(b.r);
+  }
 }
 
 // ---------- the stage ----------
@@ -583,6 +600,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         c.setView({ orientation: { heading: c.heading, pitch: Cesium.Math.clamp(c.pitch, MIN_PITCH, MAX_PITCH), roll: 0 } });
       }
       anchors.current.forEach((f) => f(s));
+      if (stage.current) declutter(stage.current);
       const now = performance.now();
       if (now - lastCam < 120) return;
       lastCam = now;
@@ -1108,14 +1126,14 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
           </div>
         )}
-        <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <div data-declutter-block style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
           <RouteButton drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
             onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
             onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
           <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
         </div>
         {/* Below the route and camera controls, so it never covers them. */}
-        <span style={{ ...pill, position: "absolute", left: "50%", top: 62, transform: "translateX(-50%)", maxWidth: "calc(100% - 32px)" }}>
+        <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: 62, transform: "translateX(-50%)", maxWidth: "calc(100% - 32px)" }}>
           {rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
             : rs.picking === "centre" ? "Click the map to place the storm centre · Esc to cancel"
             : rs.visible && rs.mode === "cell" && !drawing && mode === "orbit" ? "Click to place the storm · drag the ring to resize · drag the arrow to steer"
@@ -1184,7 +1202,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         )}
 
-        <div style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
+        <div data-declutter-block style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
           <ScaleBar nice={cam.nice} px={cam.px} />
           <div style={{ ...groupStyle, gap: 2 }}>
             <button type="button" data-tour="plan" aria-pressed={view === "Plan"} onClick={() => pickView("Plan")} style={segBtn(view === "Plan", 24)}>2D</button>
