@@ -422,6 +422,16 @@ def aoi_point(aoi_id: str, lon: float, lat: float, request: Request):
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/api/aoi/{aoi_id}/presets")
+def aoi_presets(aoi_id: str):
+    """This AOI's demo ScenarioSpecs, verbatim (a verbatim copy has the warmed run_id, so it opens instantly). [] when
+    the AOI has none. Read-only and static."""
+    from dryrun import presets
+
+    _check_aoi(aoi_id)
+    return JSONResponse(presets.scenarios(aoi_id), headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/api/aoi/{aoi_id}/level_sensitivity")
 def aoi_level_sensitivity(aoi_id: str):
     """Precomputed lagoon/sea level sensitivity: {storm, datum, note, rows: [{level_m, run_id, flooded_km2, buildings}]}.
