@@ -7,10 +7,13 @@ import * as Cesium from "cesium";
 import { ArrowsOut, CaretDown, Crosshair, Drone, GlobeHemisphereWest, RoadHorizon, X } from "@phosphor-icons/react";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
-import { API } from "../lib/api";
-import type { AOIManifest, RunManifest } from "../lib/api";
+import { API, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
+import type { AOIManifest, PointSeries, RunManifest } from "../lib/api";
+import { useExtras } from "../lib/extras";
+import { setFocus, useFocus } from "../lib/focus";
+import { EVENT_ICON, SERVER_EVENT } from "./rev5";
 import { useLayers } from "../lib/layers";
-import { setInspect } from "../lib/inspect";
+import { setInspect, setPinnedSeries } from "../lib/inspect";
 import { addWaypoint, removeWaypoint, useWaypoints } from "../lib/waypoints";
 
 export type MapStageProps = {
@@ -26,7 +29,7 @@ const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 const cssColor = (name: string) =>
   Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 
-type Reading = { depth: number; max: number };
+type Reading = { depth: number; max: number; ser?: PointSeries | null };
 type Place = { name: string; lon: number; lat: number; ring: [number, number][] };
 type Area = { road_km_impassable: number; buildings_flooded: number };
 type ArrivalLegend = { edges_min: number[]; alphas: number[]; rgb: string; note: string };
@@ -129,6 +132,12 @@ async function fetchDepth(runId: string, lon: number, lat: number, tS: number, s
 
 const m2 = (v: number) => `${v.toFixed(2)} m`;
 
+/** Depth now (from the depth endpoint) plus the point's whole series (first wet, first impassable). */
+async function fetchReading(runId: string, lon: number, lat: number, tS: number): Promise<Reading | null> {
+  const [r, ser] = await Promise.all([fetchDepth(runId, lon, lat, tS), getPointSeries(runId, lon, lat)]);
+  return r ? { ...r, ser } : null;
+}
+
 // ---------- small presentational pieces ----------
 function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => void }) {
   const rot = -headingDeg;
@@ -197,22 +206,34 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
 }
 
 function Tooltip({ r, tS, cellM, pinned, style }: { r: Reading; tS: number; cellM: number; pinned: boolean; style?: CSSProperties }) {
-  const wet = r.depth >= WET_M, cut = r.depth >= IMPASSABLE_M;
+  const ser = r.ser;
+  const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
+  const wet = r.depth >= wetM, cut = r.depth >= passM;
+  const permanent = !!ser?.permanent_water;
+  const since = (t: number | null | undefined) => (!ser ? "" : t == null ? "never" : `since ${fmtT(t)}`);
   return (
     <div role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", overflow: "hidden", ...style }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "8px 10px 6px" }}>
-        <span style={{ fontSize: 16, lineHeight: "20px", fontWeight: 600, color: cut ? "var(--hazard)" : "var(--ink)", ...FIG }}>{m2(r.depth)}</span>
-        <span style={{ color: "var(--ink-muted)" }}>at {fmtT(tS)}</span>
-        <span style={{ marginLeft: "auto", color: "var(--ink-muted)", ...FIG }}>max {m2(r.max)}</span>
+        {permanent ? (
+          <span style={{ fontSize: 16, lineHeight: "20px", fontWeight: 600 }}>Permanent water</span>
+        ) : (
+          <>
+            <span style={{ fontSize: 16, lineHeight: "20px", fontWeight: 600, color: cut ? "var(--hazard)" : "var(--ink)", ...FIG }}>{m2(r.depth)}</span>
+            <span style={{ color: "var(--ink-muted)" }}>at {fmtT(tS)}</span>
+            <span style={{ marginLeft: "auto", color: "var(--ink-muted)", ...FIG }}>max {m2(r.max)}</span>
+          </>
+        )}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto", columnGap: 6, rowGap: 3, alignItems: "center", padding: "6px 10px 8px",
-        borderTop: "1px solid var(--hairline)" }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--depth-2)", opacity: wet ? 1 : 0.4 }} />
-        <span>Wet, ≥ 0.15 m</span><span />
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--hazard)", opacity: cut ? 1 : 0.4 }} />
-        <span>Road impassable</span><span />
-      </div>
+      {!permanent && (
+        <div style={{ display: "grid", gridTemplateColumns: "14px minmax(0, 1fr) auto", columnGap: 6, rowGap: 3, alignItems: "center", padding: "6px 10px 8px",
+          borderTop: "1px solid var(--hairline)" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--depth-2)", opacity: wet ? 1 : 0.4 }} />
+          <span>Wet, ≥ {wetM.toFixed(2)} m</span><span style={{ color: "var(--ink-muted)", ...FIG }}>{since(ser?.first_flooded_s)}</span>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--hazard)", opacity: cut ? 1 : 0.4 }} />
+          <span>Road impassable</span><span style={{ color: "var(--ink-muted)", ...FIG }}>{since(ser?.first_impassable_s)}</span>
+        </div>
+      )}
       <div style={{ padding: "5px 10px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11 }}>
         {pinned ? `Pinned · Esc to clear · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
       </div>
@@ -220,7 +241,7 @@ function Tooltip({ r, tS, cellM, pinned, style }: { r: Reading; tS: number; cell
   );
 }
 
-function WaypointPin({ n, reading, selected, onSelect }: { n: number; reading?: Reading; selected: boolean; onSelect: () => void }) {
+function WaypointPin({ n, reading, wetFrom, selected, onSelect }: { n: number; reading?: Reading; wetFrom?: string; selected: boolean; onSelect: () => void }) {
   return (
     <div onClick={onSelect} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-50%, -100%)", display: "flex", flexDirection: "column", alignItems: "center",
       pointerEvents: "auto", cursor: "pointer" }}>
@@ -231,6 +252,7 @@ function WaypointPin({ n, reading, selected, onSelect }: { n: number; reading?: 
         <span style={{ display: "flex", flexDirection: "column" }}>
           <span style={{ fontSize: 12, lineHeight: "15px", fontWeight: 600, ...FIG }}>{reading ? `${m2(reading.depth)} now` : "…"}</span>
           <span style={{ fontSize: 11, lineHeight: "14px", color: "var(--ink-muted)", ...FIG }}>{reading ? `max ${m2(reading.max)}` : " "}</span>
+          {wetFrom && <span style={{ fontSize: 11, lineHeight: "14px", color: "var(--ink-muted)", ...FIG }}>{wetFrom}</span>}
         </span>
       </span>
       <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true" style={{ marginTop: -1 }}><path d="M1 0h10L6 7z" fill="var(--surface-raised)" stroke="var(--danfo)" /></svg>
@@ -239,7 +261,7 @@ function WaypointPin({ n, reading, selected, onSelect }: { n: number; reading?: 
   );
 }
 
-function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string; selected: boolean; onClick: () => void }) {
+function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={selected}
       style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
@@ -249,9 +271,50 @@ function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: stri
         border: selected ? "1px solid var(--danfo)" : "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)",
         boxShadow: "var(--shadow-float)", whiteSpace: "nowrap" }}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
-        {sub && <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{sub}</span>}
+        {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
       </span>
     </button>
+  );
+}
+
+const cardStyle: CSSProperties = {
+  display: "flex", flexDirection: "column", padding: "4px 9px 5px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", backdropFilter: "blur(6px)",
+  border: "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", whiteSpace: "nowrap",
+};
+
+/** A timestamped event dot with a two-line label (map_label style). */
+function EventMarker({ color, name, sub, muted }: { color: string; name: string; sub: string; muted: boolean }) {
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, opacity: muted ? 0.45 : 1 }}>
+      <span style={{ width: 10, height: 10, flex: "none", borderRadius: "50%", background: color, boxShadow: "0 0 0 2px var(--ground)" }} />
+      <span style={cardStyle}>
+        <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
+        <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{sub}</span>
+      </span>
+    </div>
+  );
+}
+
+function Sparkline({ points }: { points: [number, number][] }) {
+  const W = 60, H = 18;
+  if (points.length < 2) return <svg width={W} height={H} aria-hidden="true" />;
+  const t0 = points[0][0], t1 = points[points.length - 1][0];
+  const vmax = Math.max(...points.map((p) => p[1]), 1e-9);
+  const d = points.map(([t, v], i) => `${i ? "L" : "M"}${((W * (t - t0)) / Math.max(1, t1 - t0)).toFixed(1)} ${(H - 1.5 - (H - 3) * (v / vmax)).toFixed(1)}`).join(" ");
+  return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" style={{ display: "block" }}><path d={d} fill="none" stroke="var(--depth-3)" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
+}
+
+/** River inflow source: name plus a hydrograph sparkline. */
+function InflowMarker({ name, hydrograph, units, title }: { name: string; hydrograph: [number, number][]; units: string; title?: string }) {
+  return (
+    <div title={title} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+      <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--depth-3)", boxShadow: "0 0 0 2px var(--ground)" }} />
+      <span style={cardStyle}>
+        <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
+        <Sparkline points={hydrograph} />
+        <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px" }}>{units}</span>
+      </span>
+    </div>
   );
 }
 
@@ -337,6 +400,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   const [hover, setHover] = useState<(Reading & { x: number; y: number; lon: number; lat: number }) | null>(null);
   const [pinned, setPinned] = useState<(Reading & { lon: number; lat: number }) | null>(null);
   const [wpReadings, setWpReadings] = useState<Record<number, Reading>>({});
+  const [wpSeries, setWpSeries] = useState<Record<number, PointSeries>>({});
   const [selectedWp, setSelectedWp] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; lon: number; lat: number } | null>(null);
   const cursor = useRef<{ x: number; y: number; lon: number; lat: number } | null>(null);
@@ -368,7 +432,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       const cur = cursor.current;
       if (!cur || !runId || pinnedRef.current || !inAoi(cur.lon, cur.lat)) { if (!pinnedRef.current) setHover(null); return; }
       const mine = ++seq;
-      const r = await fetchDepth(runId, cur.lon, cur.lat, tSRef.current);
+      const r = await fetchReading(runId, cur.lon, cur.lat, tSRef.current);
       if (mine !== seq || pinnedRef.current) return;
       setHover(r ? { ...r, ...cur } : null);
     };
@@ -377,7 +441,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       const p = pick(x, y);
       cursor.current = p ? { x, y, ...p } : null;
       if (tipEl.current) { tipEl.current.style.left = `${x + 16 + 236 > canvas.clientWidth ? x - 16 - 236 : x + 16}px`; tipEl.current.style.top = `${y - 10}px`; }
-      if (!timer) timer = setTimeout(process, 150);
+      if (!timer) timer = setTimeout(process, SERIES_DEBOUNCE_MS);
     };
     const onEnter = () => { over.current = true; };
     const onLeave = () => { over.current = false; seq++; if (!pinnedRef.current) setHover(null); };
@@ -390,7 +454,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
       if (moved) return;
       if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
-      if (h) { setPinned({ depth: h.depth, max: h.max, lon: h.lon, lat: h.lat }); setHover(null); }
+      if (h) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
     };
     let rdown: { x: number; y: number } | null = null;
     const onContext = (e: MouseEvent) => {
@@ -446,12 +510,27 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     return () => { clearTimeout(timer); ctl.abort(); };
   }, [runId, tS, wps]);
 
+  // Whole-run series per waypoint (first wet time); it does not change with the clock.
+  useEffect(() => {
+    setWpSeries({});
+    if (!runId) return;
+    let cancelled = false;
+    wps.forEach((w) => getPointSeries(runId, w.lon, w.lat).then((ser) => {
+      if (ser && !cancelled) setWpSeries((cur) => ({ ...cur, [w.id]: ser }));
+    }));
+    return () => { cancelled = true; };
+  }, [runId, wps]);
+
   // Inspect store: the pinned point wins over the hover.
   const shown = pinned ?? hover;
   useEffect(() => {
-    setInspect(shown ? { lon: shown.lon, lat: shown.lat, depth_m: shown.depth, max_m: shown.max, wet_t: null, impassable_t: null } : null);
-  }, [shown?.lon, shown?.lat, shown?.depth, shown?.max]);
+    setInspect(shown ? { lon: shown.lon, lat: shown.lat, depth_m: shown.depth, max_m: shown.max,
+      wet_t: shown.ser?.first_flooded_s ?? null, impassable_t: shown.ser?.first_impassable_s ?? null } : null);
+  }, [shown?.lon, shown?.lat, shown?.depth, shown?.max, shown?.ser]);
   useEffect(() => () => setInspect(null), []);
+  // The pinned point's depth series feeds the dock chart.
+  useEffect(() => { setPinnedSeries(pinned?.ser?.depth_m ?? null); }, [pinned?.ser]);
+  useEffect(() => () => setPinnedSeries(null), []);
 
   const dropWaypoint = useCallback((lon: number, lat: number) => {
     if (!inAoi(lon, lat)) return;
@@ -485,6 +564,10 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     return () => { cancelled = true; };
   }, [aoiId]);
   const place = useMemo(() => places.find((p) => p.name === selectedPlace), [places, selectedPlace]);
+  const { events: evJson, boundary, inflows } = useExtras();
+  const ev = evJson && evJson.run_id === runId ? evJson : null;
+  const evPlace = useMemo(() => new Map((ev?.places ?? []).map((p) => [p.place, p])), [ev]);
+  const selEv = place ? evPlace.get(place.name) : undefined;
   useEffect(() => {
     setArea(null);
     if (!runId || !selectedPlace) return;
@@ -534,6 +617,33 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     return () => { cancelled = true; };
   }, [runId, arrivalOn]);
 
+  // ----- lagoon / sea edge: clamped 2 px line, --depth-1 at 0.9 alpha -----
+  const boundaryOn = lay.boundary.on;
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !boundary || !boundaryOn) return;
+    const color = cssColor("--depth-1").withAlpha(0.9);
+    const made: Cesium.Entity[] = [];
+    for (const f of boundary.features) {
+      const lines: number[][][] = f.geometry.type === "MultiLineString" ? f.geometry.coordinates : [f.geometry.coordinates];
+      for (const line of lines) {
+        if (!Array.isArray(line) || line.length < 2) continue;
+        made.push(viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArray(line.flatMap((c) => [c[0], c[1]])), width: 2, clampToGround: true, material: color } }));
+      }
+    }
+    return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
+  }, [viewer, boundary, boundaryOn]);
+
+  // ----- fly to a point asked for by the dock -----
+  const focusReq = useFocus();
+  useEffect(() => {
+    if (!focusReq || !viewer || viewer.isDestroyed()) return;
+    const c = viewer.camera;
+    const h = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(focusReq.lon, focusReq.lat)) ?? 0;
+    c.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(focusReq.lon, focusReq.lat, h), 300),
+      { duration: 1, offset: new Cesium.HeadingPitchRange(c.heading, Cesium.Math.clamp(c.pitch, MIN_PITCH, MAX_PITCH), 900) });
+    setFocus(null);
+  }, [focusReq, viewer]);
+
   // ----- fullscreen -----
   const fullscreen = () => {
     const node = stage.current;
@@ -544,7 +654,13 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
 
   const tooltipLeft = (x: number) => (stage.current && x + 16 + 236 > stage.current.clientWidth ? x - 16 - 236 : x + 16);
   const kind = run?.backend === "fake" ? "placeholder" : "simulated";
-  const sub = (p: Place) => (selectedPlace === p.name && area ? `${area.road_km_impassable.toFixed(1)} km impassable` : undefined);
+  const sub = (p: Place) => {
+    const e = evPlace.get(p.name);
+    const lines: string[] = [];
+    if (e) lines.push(e.ten_pct_wet_s != null ? `10 % wet at ${fmtT(e.ten_pct_wet_s)}` : "Never 10 % wet");
+    if (selectedPlace === p.name && area) lines.push(`${area.road_km_impassable.toFixed(1)} km impassable`);
+    return lines;
+  };
   const baseline = !run?.scenario.interventions?.length;
 
   return (
@@ -553,17 +669,37 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
         onViewer={setViewer} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-        {lay.places.on && places.map((p) => (
-          <Anchored key={p.name} anchors={anchors} scene={scene} lon={p.lon} lat={p.lat}>
+        {lay.places.on && places.map((p) => {
+          const lp = evPlace.get(p.name)?.label_point;
+          return (
+          <Anchored key={p.name} anchors={anchors} scene={scene} lon={lp?.[0] ?? p.lon} lat={lp?.[1] ?? p.lat}>
             <div style={{ opacity: lay.places.opacity }}>
               <PlaceLabel name={p.name} sub={sub(p)} selected={selectedPlace === p.name} onClick={() => setSelectedPlace(selectedPlace === p.name ? null : p.name)} />
             </div>
+          </Anchored>
+          );
+        })}
+
+        {ev && ev.events.map((e, k) => {
+          const m = SERVER_EVENT[e.kind];
+          if (!e.point || !m) return null;
+          return (
+            <Anchored key={`${e.kind}-${k}`} anchors={anchors} scene={scene} lon={e.point[0]} lat={e.point[1]} dy={-22}>
+              <EventMarker color={EVENT_ICON[m.kind].color} name={m.label} sub={`${fmtT(e.t_s)}${e.place ? ` · ${e.place}` : ""}`} muted={e.t_s > tS} />
+            </Anchored>
+          );
+        })}
+
+        {inflows?.features.map((f) => (
+          <Anchored key={f.properties.name} anchors={anchors} scene={scene} lon={f.geometry.coordinates[0]} lat={f.geometry.coordinates[1]}>
+            <InflowMarker name={f.properties.name} hydrograph={f.properties.hydrograph} units={f.properties.units}
+              title={/south fork/i.test(f.properties.name) ? inflows.properties?.note : undefined} />
           </Anchored>
         ))}
 
         {wps.map((w) => (
           <Anchored key={w.id} anchors={anchors} scene={scene} lon={w.lon} lat={w.lat}>
-            <WaypointPin n={w.n} reading={wpReadings[w.id]} selected={selectedWp === w.id} onSelect={() => setSelectedWp(w.id)} />
+            <WaypointPin n={w.n} reading={wpReadings[w.id]} wetFrom={wpSeries[w.id] ? (wpSeries[w.id].first_flooded_s != null ? `Wet since ${fmtT(wpSeries[w.id].first_flooded_s as number)}` : "Never wet") : undefined} selected={selectedWp === w.id} onSelect={() => setSelectedWp(w.id)} />
           </Anchored>
         ))}
 
@@ -623,6 +759,12 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
                 <span style={{ fontSize: 20, lineHeight: "24px", fontWeight: 700, ...FIG }}>{area ? area.buildings_flooded.toLocaleString() : "…"}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>buildings flooded</span>
               </div>
+              {selEv && (
+                <div style={{ display: "flex", flexDirection: "column", padding: "8px 16px 9px", borderLeft: "1px solid var(--hairline)" }}>
+                  <span style={{ fontSize: 20, lineHeight: "24px", fontWeight: 700, ...FIG }}>{selEv.first_road_cut_s != null ? fmtT(selEv.first_road_cut_s) : "None"}</span>
+                  <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>first cut on it</span>
+                </div>
+              )}
               <span />
             </div>
           </div>

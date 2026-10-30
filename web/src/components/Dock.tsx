@@ -2,12 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { CaretDown, DotsThreeVertical, Plus } from "@phosphor-icons/react";
-import type { RunManifest } from "../lib/api";
+import type { RunEvents, RunManifest } from "../lib/api";
+import { setFocus } from "../lib/focus";
+import { useExtras } from "../lib/extras";
 import { clock, useClock } from "../lib/clock";
 import { fmtT } from "./ds";
-import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton } from "./rev5";
+import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT } from "./rev5";
 
-type Ev = { kind: EventKind; label: string; i: number; t: number };
+type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
 type TS = NonNullable<RunManifest["timeseries"]>;
 const SPEEDS = [300, 600, 1200];
 
@@ -18,15 +20,23 @@ const nearest = (ts: number[], t: number) => {
   return best;
 };
 
-function deriveEvents(ts: TS, rainStopS: number): Ev[] {
+function deriveEvents(ts: TS, rainStopS: number, server: RunEvents | null): Ev[] {
   const out: Ev[] = [];
-  const add = (kind: EventKind, label: string, i: number) => out.push({ kind, label, i, t: ts.t_s[i] });
-  const cut = ts.edges_cut.findIndex((c) => c > 0);
-  if (cut >= 0) add("cut", "First road impassable", cut);
-  let surge = -1, jump = 0;
-  ts.edges_cut.forEach((c, i) => { if (i && c - ts.edges_cut[i - 1] > jump) { jump = c - ts.edges_cut[i - 1]; surge = i; } });
-  if (surge >= 0) add("surge", "Route cuts surge", surge);
-  if (ts.flooded_area_km2.length) add("peak", "Peak flooded area", ts.flooded_area_km2.indexOf(Math.max(...ts.flooded_area_km2)));
+  const add = (kind: EventKind, label: string, i: number, extra?: Partial<Ev>) => out.push({ id: `${kind}-${out.length}`, kind, label, i, t: ts.t_s[i], ...extra });
+  if (server && server.events.length) {
+    // Server events carry exact times and places; snap the chart marker to the nearest frame.
+    server.events.forEach((e) => {
+      const m = SERVER_EVENT[e.kind];
+      if (m && e.t_s != null) add(m.kind, m.label, nearest(ts.t_s, e.t_s), { t: e.t_s, point: e.point, place: e.place });
+    });
+  } else {
+    const cut = ts.edges_cut.findIndex((c) => c > 0);
+    if (cut >= 0) add("cut", "First road impassable", cut);
+    let surge = -1, jump = 0;
+    ts.edges_cut.forEach((c, i) => { if (i && c - ts.edges_cut[i - 1] > jump) { jump = c - ts.edges_cut[i - 1]; surge = i; } });
+    if (surge >= 0) add("surge", "Route cuts surge", surge);
+    if (ts.flooded_area_km2.length) add("peak", "Peak flooded area", ts.flooded_area_km2.indexOf(Math.max(...ts.flooded_area_km2)));
+  }
   add("rainstop", "Rain stops", nearest(ts.t_s, rainStopS));
   add("standing", "Water still standing", ts.t_s.length - 1);
   return out.sort((a, b) => a.t - b.t);
@@ -88,7 +98,7 @@ function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, even
         <text key={h} x={L + (pw * h) / hours} y={H - 5} textAnchor={k === 0 ? "start" : h === hours ? "end" : "middle"} fill="var(--ink-muted)">T+{String(h).padStart(2, "0")}:00</text>
       ))}
       {events.map((e) => pts[e.i] && (
-        <g key={e.kind}>
+        <g key={e.id}>
           <line x1={pts[e.i][0]} y1={pts[e.i][1]} x2={pts[e.i][0]} y2={base} stroke={EVENT_ICON[e.kind].color} strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
           <circle cx={pts[e.i][0]} cy={pts[e.i][1]} r="3.5" fill={EVENT_ICON[e.kind].color} stroke="var(--surface)" strokeWidth="1.5" />
         </g>
@@ -172,7 +182,7 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed }: { ts: T
             boxShadow: "0 0 0 4px color-mix(in srgb, var(--danfo) 22%, transparent), 0 2px 4px var(--elev-drop)" }} />
           <div style={{ position: "absolute", left: 0, right: 0, top: 38 }}>
             {events.filter((e) => e.kind !== "standing" && e.kind !== "peak").map((e) => (
-              <span key={e.kind} title={e.label} style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span>
+              <span key={e.id} title={e.label} style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span>
             ))}
           </div>
           <div style={{ position: "absolute", left: 0, right: 0, top: 54 }}>
@@ -195,7 +205,7 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed }: { ts: T
 }
 
 function KeyEvents({ events, nowS }: { events: Ev[]; nowS: number }) {
-  const sel = [...events].reverse().find((e) => e.t <= nowS)?.kind;
+  const sel = [...events].reverse().find((e) => e.t <= nowS)?.id;
   return (
     <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0, background: "var(--surface)" }}>
       <Band title="Key events" right={
@@ -203,9 +213,9 @@ function KeyEvents({ events, nowS }: { events: Ev[]; nowS: number }) {
           <Plus size={12} weight="bold" />Note</button>} />
       <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none" }}>
         {events.map((e) => {
-          const fut = e.t > nowS, on = e.kind === sel;
+          const fut = e.t > nowS, on = e.id === sel;
           return (
-            <li key={e.kind} onClick={() => clock.set({ t_s: e.t, playing: false })}
+            <li key={e.id} title={e.place ?? undefined} onClick={() => { clock.set({ t_s: e.t, playing: false }); if (e.point) setFocus({ lon: e.point[0], lat: e.point[1] }); }}
               style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 32, padding: "0 12px 0 14px", cursor: "pointer",
                 ...(on ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--danfo), inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft)" } : {}), ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
               <Glyph kind={e.kind} muted={fut} /><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...(on ? { fontWeight: 600 } : {}) }}>{e.label}</span>
@@ -223,7 +233,9 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
   const { t_s, playing, speed } = useClock();
   const ts = run?.timeseries ?? null;
   const rainStopS = (run?.scenario.storm.duration_h ?? 3) * 3600;
-  const events = useMemo(() => (ts && ts.t_s.length > 1 ? deriveEvents(ts, rainStopS) : []), [ts, rainStopS]);
+  const { events: serverEvents } = useExtras();
+  const srv = serverEvents && serverEvents.run_id === run?.run_id ? serverEvents : null;
+  const events = useMemo(() => (ts && ts.t_s.length > 1 ? deriveEvents(ts, rainStopS, srv) : []), [ts, rainStopS, srv]);
   const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
   if (!ts || ts.t_s.length < 2) {
     return <div style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>

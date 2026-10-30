@@ -14,6 +14,13 @@ export const EVENT_ICON = {
   standing: { Icon: Waves, color: "var(--depth-2)" },
 } as const;
 
+/** events.json kind -> dock/map event kind and label. */
+export const SERVER_EVENT = {
+  first_cut: { kind: "cut", label: "First road impassable" },
+  cut_jump: { kind: "surge", label: "Route cuts surge" },
+  peak_area: { kind: "peak", label: "Peak flooded area" },
+} as const;
+
 export function Glyph({ kind, muted = false, size = 16 }: { kind: EventKind; muted?: boolean; size?: number }) {
   const { Icon, color } = EVENT_ICON[kind];
   return <Icon size={size} weight="fill" color={color} aria-hidden="true" style={{ flex: "none", opacity: muted ? 0.45 : 1 }} />;

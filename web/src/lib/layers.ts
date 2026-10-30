@@ -1,7 +1,7 @@
 // Map layer visibility and opacity, shared by the sidebar and the map stage.
 import { useSyncExternalStore } from "react";
 
-export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery";
+export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery" | "boundary";
 export type LayerState = { on: boolean; opacity: number };
 export type ImageryMode = "colour" | "greyscale";
 export type LayersState = Record<LayerKey, LayerState> & { imageryMode: ImageryMode };
@@ -16,6 +16,7 @@ let state: LayersState = {
   photos: { on: true, opacity: 1 },
   terrain: { on: true, opacity: 1 },
   imagery: { on: true, opacity: 1 },
+  boundary: { on: true, opacity: 1 },
   imageryMode: "colour",
 };
 const subs = new Set<() => void>();

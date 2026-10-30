@@ -115,3 +115,62 @@ export async function* askAgent(question: string, provider = "meta", aoi_id?: st
     }
   }
 }
+
+// ---- rev 5 read-only data endpoints. Each resolves to null when the server does not have it (404 while deploying). ----
+export type RunEvent = {
+  event: string; kind: "first_cut" | "cut_jump" | "peak_area"; t_s: number; t: string | null; count?: number; flooded_area_km2?: number;
+  point: [number, number] | null; place: string | null; new_cuts_by_place?: Record<string, number>; place_flooded_km2?: number;
+};
+export type EventPlace = {
+  place: string; kind: string; label_point: [number, number]; ten_pct_wet_s: number | null; ten_pct_wet: string | null;
+  first_road_cut_s: number | null; first_road_cut: string | null; peak_pct_wet: number;
+};
+export type RunEvents = {
+  run_id: string; aoi_id: string; threshold_m: { flooded: number; road_impassable: number }; frame_interval_s: number; note: string;
+  events: RunEvent[]; places: EventPlace[];
+};
+export type PointSeries = {
+  run_id: string; lon: number; lat: number; cell: [number, number]; cell_center: [number, number]; permanent_water: boolean;
+  t_s: number[]; depth_m: number[]; max_depth_m: number; first_flooded_s: number | null; first_impassable_s: number | null;
+  threshold_m: { flooded: number; road_impassable: number };
+};
+export type BoundaryCollection = {
+  type: "FeatureCollection";
+  features: { type: "Feature"; properties: { kind: string; default_level_m?: number; note?: string };
+    geometry: { type: "MultiLineString" | "LineString"; coordinates: any } }[];
+};
+export type InflowPoint = { name: string; gauges?: string[]; hydrograph: [number, number][]; units: string };
+export type InflowCollection = {
+  type: "FeatureCollection"; properties?: { t0_utc?: string; note?: string };
+  features: { type: "Feature"; properties: InflowPoint; geometry: { type: "Point"; coordinates: [number, number] } }[];
+};
+
+/** GET a JSON endpoint; any non-2xx (404 while the server deploys, 400/409 for series) or network failure gives null. */
+async function optional<T>(url: string): Promise<T | null> {
+  try {
+    const r = await fetch(url);
+    return r.ok ? ((await r.json()) as T) : null;
+  } catch { return null; }
+}
+
+export const getRunEvents = (runId: string) => optional<RunEvents>(`${API}/api/runs/${runId}/derived/events.json`);
+export const getBoundary = (aoiId: string) => optional<BoundaryCollection>(`${API}/api/aoi/${aoiId}/boundary.geojson`);
+export const getInflows = (aoiId: string) => optional<InflowCollection>(`${API}/api/aoi/${aoiId}/layer/inflows`);
+
+/** Callers debounce hover by this much before asking for a series. */
+export const SERIES_DEBOUNCE_MS = 200;
+// Coordinates are rounded to 4 decimals (about 10 m, finer than a cell) so repeated hovers over one cell are cache hits, in memory and in the browser.
+const seriesCache = new Map<string, Promise<PointSeries | null>>();
+export function getPointSeries(runId: string, lon: number, lat: number): Promise<PointSeries | null> {
+  const lo = lon.toFixed(4), la = lat.toFixed(4), key = `${runId}|${lo}|${la}`;
+  let p = seriesCache.get(key);
+  if (!p) {
+    p = optional<PointSeries>(`${API}/api/runs/${runId}/series?lon=${lo}&lat=${la}`).then((s) => {
+      if (!s) seriesCache.delete(key);
+      return s;
+    });
+    seriesCache.set(key, p);
+    if (seriesCache.size > 400) seriesCache.delete(seriesCache.keys().next().value as string);
+  }
+  return p;
+}
