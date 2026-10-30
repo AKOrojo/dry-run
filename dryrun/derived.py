@@ -85,9 +85,17 @@ def stack(run_id: str) -> tuple[np.ndarray, np.ndarray]:
 
 def _exclude(m) -> np.ndarray:
     """The run's own exclude mask (permanent water plus any pond the scenario adds), as the engine used."""
+    return _exclude_for(m.run_id, m.scenario.model_dump_json())
+
+
+@lru_cache(maxsize=16)  # per run: the hover route calls this on every request, and applying interventions is not free
+def _exclude_for(run_id: str, scenario_json: str) -> np.ndarray:
+    from dryrun.contracts import ScenarioSpec
     from dryrun.sim import engine
 
-    return engine._load_inputs(m.scenario)[1].exclude_mask
+    mask = engine._load_inputs(ScenarioSpec.model_validate_json(scenario_json))[1].exclude_mask
+    mask.setflags(write=False)
+    return mask
 
 
 def compute(run_id: str) -> dict[str, np.ndarray]:

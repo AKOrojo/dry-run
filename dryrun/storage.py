@@ -128,11 +128,23 @@ def run_exists(run_id: str) -> bool:
     return _exists("runs", f"{run_id}/manifest.json")
 
 
+_DONE_RUNS: dict[str, RunManifest] = {}  # finished runs never change (content-addressed), so cache them
+_DONE_RUNS_MAX = 256
+
+
 def load_run(run_id: str) -> RunManifest:
-    return RunManifest.model_validate_json(_read_bytes("runs", f"{run_id}/manifest.json"))
+    m = _DONE_RUNS.get(run_id)
+    if m is None:
+        m = RunManifest.model_validate_json(_read_bytes("runs", f"{run_id}/manifest.json"))
+        if m.status.value == "done":
+            if len(_DONE_RUNS) >= _DONE_RUNS_MAX:
+                _DONE_RUNS.pop(next(iter(_DONE_RUNS)), None)
+            _DONE_RUNS[run_id] = m
+    return m  # frozen model: sharing it is safe
 
 
 def save_run(manifest: RunManifest) -> None:
+    _DONE_RUNS.pop(manifest.run_id, None)
     _write_bytes(
         "runs", f"{manifest.run_id}/manifest.json",
         manifest.model_dump_json(indent=2).encode(), "application/json",
@@ -164,6 +176,7 @@ def clear_caches() -> None:
     """Drop in-memory AOI caches (e.g. after publishing a NEW aoi id). AOI ids are immutable."""
     load_aoi.cache_clear()
     load_raster.cache_clear()
+    _DONE_RUNS.clear()
     aoi_hash.cache_clear()
     from dryrun.sim import exposure
 

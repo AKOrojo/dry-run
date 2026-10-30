@@ -95,3 +95,21 @@ def test_warm_start_never_raises_and_reports(monkeypatch, tmp_path):
     bad = main.warm_start("no-such-aoi")
     assert all(str(v).startswith("failed") for k, v in bad.items() if k != "numba")
     storage.clear_caches()
+
+
+def test_done_runs_are_cached_and_running_ones_are_not(tmp_path, monkeypatch):
+    from dryrun.contracts import RunManifest, ScenarioSpec
+
+    monkeypatch.setattr(storage, "MODE", "local")
+    monkeypatch.setattr(storage, "LOCAL_RUNS", tmp_path)
+    storage._DONE_RUNS.clear()
+    spec = ScenarioSpec(aoi_id="fixture-synthetic", storm={"total_mm": 50, "duration_h": 1})
+    storage.save_run(RunManifest(run_id="r_00000000000000aa", scenario=spec, status="running"))
+    assert storage.load_run("r_00000000000000aa").status.value == "running"
+    assert "r_00000000000000aa" not in storage._DONE_RUNS
+    storage.save_run(RunManifest(run_id="r_00000000000000aa", scenario=spec, status="done"))
+    storage.load_run("r_00000000000000aa")
+    assert "r_00000000000000aa" in storage._DONE_RUNS
+    (tmp_path / "r_00000000000000aa" / "manifest.json").unlink()  # served from memory now
+    assert storage.load_run("r_00000000000000aa").status.value == "done"
+    storage._DONE_RUNS.clear()
