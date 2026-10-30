@@ -290,8 +290,9 @@ one way in a finished 2D run:
   velocity profiles are therefore indicative. The forcing is depth-averaged, so the inflow profile is uniform with
   depth. The 3D patch does not feed back into the 2D run.
 - **Cost:** solves take minutes to hours on CPUs, so the API never solves inside a request. Showcase patches are
-  precomputed; `POST /api/runs/{run_id}/patch3d` returns a stored patch or records it as queued (and starts the
-  `DRYRUN_PATCH3D_JOB` Cloud Run Job when one is configured).
+  precomputed; `POST /api/runs/{run_id}/patch3d` returns a stored patch to anyone. Queueing a new one (and starting
+  the `DRYRUN_PATCH3D_JOB` Cloud Run Job when one is configured) needs the team token or a judge key and is capped
+  per day (`DRYRUN_PATCH3D_PER_DAY`, default 20).
 
 ### The 3D map: model ground vs the terrain it is drawn on
 The solver's DEM uses EGM2008 heights; Cesium World Terrain uses ellipsoid heights. The geoid offset N is +22.0 to

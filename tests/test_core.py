@@ -609,14 +609,22 @@ def test_patch3d_case_and_routes(tmp_path, monkeypatch):
     back = (rgba[..., 0] * 256 + rgba[..., 1]) / 65535 * post.DEPTH_MAX_M
     assert np.allclose(back, depth, atol=1e-3) and rgba[0, 0, 3] == 0 and rgba[1, 1, 3] == 255
 
+    from dryrun.api import ratelimit
+
     monkeypatch.delenv("DRYRUN_PATCH3D_JOB", raising=False)
+    monkeypatch.setattr(ratelimit, "_TEAM", "t-key")
     c = TestClient(app)
     assert c.get(f"/api/runs/{m.run_id}/patch3d").json()["patches"] == []
     body = {"center": list(center), "size_m": 100, "cell_m": 2}
+    assert c.post(f"/api/runs/{m.run_id}/patch3d", json=body).status_code == 403  # anonymous: no queueing
+    assert c.get(f"/api/runs/{m.run_id}/patch3d").json()["patches"] == []  # and nothing written
+    c.headers["x-team-token"] = "t-key"
     r = c.post(f"/api/runs/{m.run_id}/patch3d", json=body)
     assert r.status_code == 202 and r.json()["status"] == "queued" and "precomputed" in r.json()["error"]
     pid = r.json()["patch_id"]
-    assert c.post(f"/api/runs/{m.run_id}/patch3d", json=body).status_code == 200  # stored manifest, no re-queue
+    del c.headers["x-team-token"]
+    assert c.post(f"/api/runs/{m.run_id}/patch3d", json=body).status_code == 200  # stored manifest: open to all
+    c.headers["x-team-token"] = "t-key"
     rows = c.get(f"/api/runs/{m.run_id}/patch3d").json()["patches"]
     assert [x["patch_id"] for x in rows] == [pid]
     assert c.post(f"/api/runs/{m.run_id}/patch3d", json={**body, "center": [w, s]}).status_code == 400

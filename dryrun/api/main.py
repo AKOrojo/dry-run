@@ -455,7 +455,10 @@ def patch3d_request(run_id: str, body: dict, request: Request):
         return JSONResponse(json.loads(P.load_manifest(run_id, pid).model_dump_json()))
     except Exception:  # noqa: BLE001 - not computed yet
         pass
+    # a queued patch writes to the public runs bucket and may start a paid Cloud Run Job: team or judge key only
+    ratelimit.require_paid_access(request)
     limit(request, "patch3d", per_hour=6)
+    ratelimit.limit_global("patch3d", per_day=int(os.getenv("DRYRUN_PATCH3D_PER_DAY", "20")), request=request)
     from dryrun.patch3d import geometry
 
     try:

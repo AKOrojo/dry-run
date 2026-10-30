@@ -50,7 +50,7 @@ def read_patch_values(path: Path, patch: str) -> np.ndarray | None:
 def _foam_list(path: Path) -> tuple[str, int]:
     txt = path.read_text()
     m = re.search(r"\n(\d+)\s*\n\(", txt)
-    return txt[m.end():], int(m.group(1))
+    return txt[m.end():].lstrip("\n"), int(m.group(1))
 
 
 def read_mesh(case: Path):

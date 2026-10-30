@@ -75,7 +75,9 @@ def load_manifest(run_id: str, pid: str) -> Patch3DManifest:
     return Patch3DManifest.model_validate_json(storage.read_run_file(run_id, rel(pid, run_id, "manifest.json")))
 
 
-def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False) -> Patch3DManifest:
+def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
+        post_only: bool = False) -> Patch3DManifest:
+    """post_only: the case in workdir is already solved; redo only the frames, forces and manifest."""
     t_start = time.time()
     pid = req.patch_id()
     man = Patch3DManifest(patch_id=pid, request=req, status=RunStatus.running)
@@ -100,16 +102,23 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False) ->
         p = geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.cell_m, max_wse)
         n_fluid = int((~p.solid()).sum())
         procs = C.procs_for(n_fluid)
-        info = C.write_case(tmp, p, forcing, t0, t1, procs)
-        of(tmp, "blockMesh", "log.blockMesh")
-        C.write_cellset(tmp, p)
-        of(tmp, "subsetMesh fluid -patch walls -overwrite", "log.subsetMesh")
-        (tmp / "0").mkdir(exist_ok=True)
-        of(tmp, "postProcess -func writeCellCentres -time 0", "log.cellCentres")
-        cc = C.read_cell_centres(tmp, n_fluid)
-        checks = C.write_initial_fields(tmp, p, forcing, t0, cc, info["roles"])
+        if post_only:
+            cc = C.read_cell_centres(tmp, n_fluid)
+            checks = {"sides": C.side_roles(p, forcing, t0, t1)}
+            procs = 0
+        else:
+            info = C.write_case(tmp, p, forcing, t0, t1, procs)
+            of(tmp, "blockMesh", "log.blockMesh")
+            C.write_cellset(tmp, p)
+            of(tmp, "subsetMesh fluid -patch walls -overwrite", "log.subsetMesh")
+            (tmp / "0").mkdir(exist_ok=True)
+            of(tmp, "postProcess -func writeCellCentres -time 0", "log.cellCentres")
+            cc = C.read_cell_centres(tmp, n_fluid)
+            checks = C.write_initial_fields(tmp, p, forcing, t0, cc, info["roles"])
         t_solve = time.time()
-        if procs > 1:
+        if post_only:
+            pass
+        elif procs > 1:
             of(tmp, "decomposePar -force", "log.decomposePar")
             of(tmp, f"mpirun -np {procs} interFoam -parallel", "log.interFoam")
             of(tmp, "reconstructPar", "log.reconstructPar")
@@ -117,13 +126,13 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False) ->
             of(tmp, "interFoam", "log.interFoam")
         solve_s = time.time() - t_solve
         man = post_process(tmp, p, forcing, req, pid, t0, t1, cc, man)
-        man.checks.update(checks, cells=n_fluid, procs=procs, solve_s=round(solve_s, 1),
-                          blocks=[p.nx, p.ny, p.nz], dz_m=p.dz)
-        man.cells = n_fluid
-        man.status = RunStatus.done
+        man = man.model_copy(update={
+            "checks": {**man.checks, **checks, "cells": n_fluid, "procs": procs, "solve_s": round(solve_s, 1),
+                       "blocks": [p.nx, p.ny, p.nz], "dz_m": p.dz},
+            "cells": n_fluid, "status": RunStatus.done})
     except Exception as exc:  # noqa: BLE001 - the manifest must say why
-        man.status, man.error = RunStatus.failed, str(exc)[-2000:]
-    man.elapsed_s = round(time.time() - t_start, 1)
+        man = man.model_copy(update={"status": RunStatus.failed, "error": str(exc)[-2000:]})
+    man = man.model_copy(update={"elapsed_s": round(time.time() - t_start, 1)})
     write_manifest(man)
     update_index(man)
     if not keep and workdir is None:
@@ -142,6 +151,7 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
     lon, lat = p.lonlat(X.ravel(), Y.ravel())
     open_cols = (p.building < 0).ravel()
     frames, depths, surf, mid, forces, vol3, vol2 = [], [], [], [], [], [], []
+    buildings = None
     for t, d in times:
         alpha = post.read_internal(d / "alpha.water", len(cc))
         U = post.read_internal(d / "U", len(cc))
@@ -173,22 +183,20 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
               "direction_deg": np.round(np.degrees(np.arctan2(F[kmax, nb, 0], F[kmax, nb, 1])) % 360, 0).tolist(),
               "method": "net horizontal pressure force on each footprint's wall faces from the 3D solve (pressure "
                         "relative to the open top); no shear; stair-stepped walls at cell_m"}
-        man.buildings = save(req.run_id, pid, "buildings.json", json.dumps(bl).encode(), "application/json")
+        buildings = save(req.run_id, pid, "buildings.json", json.dumps(bl).encode(), "application/json")
     w, s_, e, n_ = p.bounds_wgs84
-    man.bounds_wgs84 = (w, s_, e, n_)
-    man.nx, man.ny = p.nx, p.ny
-    man.t_window_s = (t0, t1)
-    man.frames = frames
-    man.encoding = {"surface": f"depth_m = (R*256 + G) / 65535 * {post.DEPTH_MAX_M}; A = 255 where depth >= 0.02 m; "
+    encoding = {"surface": f"depth_m = (R*256 + G) / 65535 * {post.DEPTH_MAX_M}; A = 255 where depth >= 0.02 m; "
                                "depth is the water column above the local floor (ground, or a roof); north-up",
                     "velocity": f"surface u = (R-128)*s, v = (G-128)*s; mid-depth u = (B-128)*s, v = (A-128)*s; "
                                 f"s = {vmax / 127:.6f} m/s; u east, v north; north-up",
                     "vmax_m_s": vmax, "depth_max_m": post.DEPTH_MAX_M,
                     "ground": "patch ground = the AOI DEM, bilinear; building tops = highest ground under the "
                               "footprint + height_m"}
-    man.checks.update(water_volume_3d_m3=[round(v, 1) for v in vol3], water_volume_2d_m3=[round(v, 1) for v in vol2],
-                      volume_diff_end_pct=round(100 * (vol3[-1] - vol2[-1]) / vol2[-1], 1) if vol2 and vol2[-1] > 0 else None)
-    return man
+    checks = {**man.checks, "water_volume_3d_m3": [round(v, 1) for v in vol3],
+              "water_volume_2d_m3": [round(v, 1) for v in vol2],
+              "volume_diff_end_pct": round(100 * (vol3[-1] - vol2[-1]) / vol2[-1], 1) if vol2 and vol2[-1] > 0 else None}
+    return man.model_copy(update={"buildings": buildings, "bounds_wgs84": (w, s_, e, n_), "nx": p.nx, "ny": p.ny,
+                                  "t_window_s": (t0, t1), "frames": frames, "encoding": encoding, "checks": checks})
 
 
 def _num(s: str) -> bool:
@@ -208,10 +216,11 @@ def main() -> None:
     ap.add_argument("--t0", type=float)
     ap.add_argument("--t1", type=float)
     ap.add_argument("--workdir")
+    ap.add_argument("--post-only", action="store_true", help="the case in --workdir is solved; redo the outputs")
     a = ap.parse_args()
     req = Patch3DRequest(run_id=a.run, center=tuple(a.center), size_m=a.size, cell_m=a.cell,
                          t_window_s=(a.t0, a.t1) if a.t0 is not None else None)
-    m = run(req, Path(a.workdir) if a.workdir else None, keep=bool(a.workdir))
+    m = run(req, Path(a.workdir) if a.workdir else None, keep=bool(a.workdir), post_only=a.post_only)
     print(json.dumps({k: v for k, v in json.loads(m.model_dump_json()).items() if k != "frames"}, indent=1))
 
 
