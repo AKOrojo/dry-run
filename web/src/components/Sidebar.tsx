@@ -315,7 +315,7 @@ export type SimBar =
   | { state: "cached" }
   | { state: "live"; estS: number | null }
   | { state: "running"; elapsedS: number; estS: number | null; fraction: number; simT: number; tEnd: number; measured: boolean;
-      frames: [number, number] | null; queued: boolean }
+      frames: [number, number] | null; queued: boolean; starting: boolean }
   | { state: "done"; tookS: number | null };
 
 function StormCard(p: ScenarioProps) {
@@ -440,7 +440,7 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
       <div ref={box} data-tour="simulate" role="status" aria-live="polite" style={simCard}>
         <div data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Spinner {...icon15} color="var(--depth-3)" />
-          <span style={{ fontWeight: 600 }}>{sim.queued ? "Waiting for the same run" : "Simulating live"}</span>
+          <span style={{ fontWeight: 600 }}>{sim.starting ? "Starting the solver…" : sim.queued ? "Waiting for the same run" : "Simulating live"}</span>
           <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{clock(sim.elapsedS)}{est}</span>
         </div>
         <span role="progressbar" aria-label="Simulation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sim.fraction * 100)}
@@ -449,13 +449,13 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
             borderRadius: "var(--radius-pill)", transition: "inset 0.8s linear" }} />
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)", fontSize: 12, ...FIG }}>
-          <span>{model}</span>
+          <span>{sim.starting ? "" : model}</span>
           <span style={{ marginLeft: "auto" }}>
             <button type="button" onClick={onStop} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Stop</button>
           </span>
         </div>
         <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>
-          Not cached: this storm runs on the 30 m solver now. Changing the area stops it.
+          {sim.starting ? "Waiting for the server to answer. Changing the area stops it." : "Not cached: this storm runs on the 30 m solver now. Changing the area stops it."}
         </p>
       </div>
     );

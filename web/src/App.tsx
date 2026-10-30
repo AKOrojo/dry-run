@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate, estimateSim, simulateStream, cancelSim } from "./lib/api";
 import type { ScenarioSpec, SimEstimate, SimProgress } from "./lib/api";
+import { getPresets } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
@@ -33,6 +34,10 @@ import { resetSim, setSim } from "./lib/simstate";
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
+/** The contract's Storm.pattern default: what the warmed presets use, so the first Simulate opens from cache. */
+const DEFAULT_PATTERN: Pattern = "center_peaked";
+/** How long Simulate waits for the server's first event before showing "Starting the solver…". */
+const STARTING_AFTER_MS = 600;
 // A shared link (?aoi=&run=&t=) opens on that area, run and time, paused.
 const shared = readSharedView();
 const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
@@ -64,13 +69,16 @@ export default function App() {
   const [run, setRun] = useState<RunManifest>();
   const [rain, setRain] = useState(120);
   const [durationH, setDurationH] = useState(3);
-  const [pattern, setPattern] = useState<Pattern>("uniform");
+  const [pattern, setPattern] = useState<Pattern>(DEFAULT_PATTERN);
+  // Model hours from the area's baseline preset (Queens 8, Texas 12); undefined = the contract default.
+  const [simHours, setSimHours] = useState<number>();
   const [level, setLevel] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [simErr, setSimErr] = useState<Failure | null>(null);
   // Simulate flow (board 8): the estimate for the scenario as set, the live run, and the last run Simulate made.
   const [est, setEst] = useState<SimEstimate | "failed" | null>(null);
-  const [live, setLive] = useState<{ startedAt: number; estS: number | null; tEnd: number; intervalS: number; framesTotal: number; prog: SimProgress | null } | null>(null);
+  const [live, setLive] = useState<{ startedAt: number; estS: number | null; tEnd: number; intervalS: number; framesTotal: number; prog: SimProgress | null;
+    /** No `started` from the server yet (a cold instance can take tens of seconds). */ starting?: boolean } | null>(null);
   const [lastSim, setLastSim] = useState<{ run_id: string; tookS: number | null } | null>(null);
   const [now, setNow] = useState(Date.now());
   const simAbort = useRef<AbortController>();
@@ -99,6 +107,24 @@ export default function App() {
   const { spatial, ready: rainReady } = spatialOf(rainState);
   const stormNow = stormKey(rain, durationH, pattern, spatial);
   useEffect(() => { if (aoi) initRain(aoi.aoi_id, aoi.grid.bounds_wgs84); }, [aoi?.aoi_id]);
+  // Each area starts from its baseline preset (warmed, so the first Simulate is instant): the first one in demo.json's
+  // order that the Scenario tab can reproduce (whole-area rain, no interventions). Skipped when a run is already shown
+  // (a shared link) or the user has edited the storm before /presets answered.
+  const runRef = useRef(run);
+  runRef.current = run;
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!aoiId) return;
+    touched.current = false;
+    let off = false;
+    getPresets(aoiId).then((ps) => {
+      const base = ps?.find((p) => !p.interventions?.length && !p.storm.spatial && p.storm.total_mm > 0);
+      if (off || !base || runRef.current || touched.current) return;
+      setRain(base.storm.total_mm); setDurationH(base.storm.duration_h);
+      setPattern(base.storm.pattern ?? DEFAULT_PATTERN); setSimHours(base.sim_hours);
+    });
+    return () => { off = true; };
+  }, [aoiId]);
   useRainPreview(aoiId, rain, durationH, pattern);
   // The preview is on the map until a run exists for this very storm; the Layers card can bring it back.
   const rainVisible = !!spatial && rainReady && (lay.rain.on || rainState.lastSimKey !== stormNow);
@@ -109,8 +135,8 @@ export default function App() {
   const justSimulated = useRef<string>();
   const adoptRun = (m: RunManifest) => {
     if (m.status !== "done" || m.scenario.aoi_id !== aoiId) return;
-    const st = m.scenario.storm, pat = st.pattern ?? "uniform";
-    setRain(st.total_mm); setDurationH(st.duration_h); setPattern(pat);
+    const st = m.scenario.storm, pat = st.pattern ?? DEFAULT_PATTERN;
+    setRain(st.total_mm); setDurationH(st.duration_h); setPattern(pat); setSimHours(m.scenario.sim_hours);
     patchRain(rainPatchOf(st.spatial));
     patchRain({ lastSimKey: stormKey(st.total_mm, st.duration_h, pat, spatialOf(rainStore.get()).spatial) });
   };
@@ -163,7 +189,7 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { stop(); setEst(null); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => { stop(); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {
     const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
@@ -185,6 +211,7 @@ export default function App() {
   const interventionsNow: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
   const specNow: ScenarioSpec | null = aoi && rainReady
     ? { aoi_id: aoi.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions: interventionsNow,
+      ...(simHours != null ? { sim_hours: simHours } : {}),
       ...(domainSwitchVisible(rainState, !!aoi.layers?.inflows) && rainState.domainOnly ? { domain: "rain_area" as const } : {}) } : null;
   const specKey = specNow ? JSON.stringify(specNow) : "";
   // The switch's note needs the rain-area window size whether or not it is on, so ask for that spec's estimate (free).
@@ -224,14 +251,23 @@ export default function App() {
     // The map's clouds and the dock's Rain now panel follow this store (Eng B, lib/simstate.ts).
     patchRain({ picking: null });  // a half-drawn area or centre pick ends: the rain area locks now
     setSim({ running: true, startedAt: t0, estS: est && est !== "failed" ? est.est_s : null, progress: null, modelT: null, storm: specNow.storm });
+    // Feedback while the server has not answered: after STARTING_AFTER_MS the card says "Starting the solver…" (a cached run
+    // answers well before that, so it never flashes).
+    const e0 = est && est !== "failed" ? est : null;
+    const slow = setTimeout(() => {
+      if (simAbort.current === ac && e0) setNow(Date.now());
+      if (simAbort.current === ac && e0) setLive((l) => l ?? { startedAt: t0, estS: e0.est_s, tEnd: e0.t_end_s, intervalS: e0.output_interval_s, framesTotal: e0.frames_total, prog: null, starting: true });
+    }, STARTING_AFTER_MS);
     try {
       for await (const e of simulateStream(specNow, ac.signal)) {
         if (e.kind === "started") {
+          clearTimeout(slow);
           cached = e.data.cached;
           simJob.current = { id: e.data.job_id, token: e.data.cancel_token };
           setSim({ estS: e.data.est_s });
           // A cached run opens at once: no progress card, no flash.
-          if (!cached) { setNow(Date.now()); setLive({ startedAt: t0, estS: e.data.est_s, tEnd: e.data.t_end_s, intervalS: e.data.output_interval_s, framesTotal: e.data.frames_total, prog: null }); }
+          if (cached) setLive(null);
+          else { setNow(Date.now()); setLive({ startedAt: t0, estS: e.data.est_s, tEnd: e.data.t_end_s, intervalS: e.data.output_interval_s, framesTotal: e.data.frames_total, prog: null }); }
         } else if (e.kind === "progress") {
           setLive((l) => l && { ...l, prog: e.data });
           setSim({ progress: e.data.fraction, modelT: e.data.sim_t_s });
@@ -258,6 +294,7 @@ export default function App() {
           : { message: "The server is busy. Try again.", retryable: true });
       }
     } finally {
+      clearTimeout(slow);
       if (simAbort.current === ac) { simAbort.current = undefined; simJob.current = undefined; setBusy(false); setLive(null); resetSim(); }
     }
     if (again && !ac.signal.aborted) go(true);
@@ -285,7 +322,7 @@ export default function App() {
     const p = live.prog, simT = p?.sim_t_s ?? 0, tEnd = p?.t_end_s ?? live.tEnd;
     return { state: "running" as const, elapsedS: (now - live.startedAt) / 1000,
       estS: p?.eta_s != null ? p.elapsed_s + p.eta_s : live.estS, fraction: p?.fraction ?? 0, simT, tEnd,
-      measured: p?.measured ?? false, queued: p?.phase === "queued",
+      measured: p?.measured ?? false, queued: p?.phase === "queued", starting: !!live.starting,
       frames: [Math.min(live.framesTotal, Math.floor(simT / live.intervalS) + 1), live.framesTotal] as [number, number] };
   })()
     : lastSim && run?.run_id === lastSim.run_id && est && est !== "failed" && est.run_id === lastSim.run_id ? { state: "done", tookS: lastSim.tookS }
@@ -430,7 +467,8 @@ export default function App() {
             {pair && <><DeltaCard a={pair.a} b={pair.b} /><WaterBudgetCard a={pair.a} b={pair.b} /></>}
           </>
         ) : undefined} scenario={{
-          rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
+          rain, onRain: (v) => { touched.current = true; setRain(v); }, durationH, onDuration: (v) => { touched.current = true; setDurationH(v); },
+          pattern, onPattern: (v) => { touched.current = true; setPattern(v); }, level, onLevel: setLevel,
           coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
         }} />
       </div>

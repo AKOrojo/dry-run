@@ -162,6 +162,9 @@ export async function* simulateStream(s: ScenarioSpec, signal: AbortSignal): Asy
   }
   if (!ended) throw new ApiError("The connection to the simulation dropped. Try again.", 0, "stream_closed", true);
 }
+/** GET /api/aoi/{id}/presets: the area's warmed scenarios, verbatim (null where the server has none). */
+export const getPresets = (aoiId: string) =>
+  fetch(`${API}/api/aoi/${aoiId}/presets`).then((r) => (r.ok ? (r.json() as Promise<ScenarioSpec[]>) : null)).catch(() => null);
 export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
   fetch(`${API}/api/aoi/${aoiId}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
 export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
