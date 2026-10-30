@@ -10,7 +10,9 @@ Fit: prod rev 00058 (2 vCPU Cloud Run), 7 forced runs through /simulate/stream o
 data/_scratch/prod_timings.json): Lagos 50/120/200 mm and the tide lock, Texas replay, Queens LaGuardia and the
 Queens hero (sewers full). Those ran 1.4-2.7x slower than the rev 00046 fit predicted; points not re-measured (the
 0 mm floors, Queens 67 mm) are the rev 00046 values times the measured ratio for their AOI. Repeat runs of one
-spec on prod vary by tens of percent, so SPREAD stays wide.
+spec on prod vary by tens of percent, so SPREAD stays wide. An out-of-sample check (4 fresh specs, rev 00061,
+data/_scratch/prod_timings_oos.json) ran 24-38 % under that fit, so SCALE is the geometric mean of actual / estimate
+over all 11 prod runs (0.88): est/actual - 1 is then -12 % on the 7 calibration runs and +15 to +42 % on the 4 checks.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ OVERHEAD_S = 0.0  # the calibration is on total elapsed_s, which already include
 OTHER_INTERVENTION = 0.85  # an intervention that removes water (drains, green, ponds): ~15 % less time (rev 00046)
 TIDE_HIGH = 1.54  # a held level above the default makes deeper water: the Lagos tide lock, 14.45 vs 9.39 ns
 EXTRAPOLATE_MAX = 1.5  # above the table, follow its last slope, at most this times its last value
+SCALE = 0.88  # all 11 prod runs (7 calibration + 4 out-of-sample): geometric mean of actual / estimate
 FAKE_S = 1.0
 SPREAD = 0.4  # +-: rev 00046 to 00058 moved the same specs by 1.4-2.7x; one prod sample per spec
 
@@ -115,7 +118,7 @@ def estimate_s(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", ce
         return FAKE_S
     n = cells if cells is not None else domain_cells(aoi, spec)
     drain, rain = _aoi_inputs(aoi, spec)
-    return round(OVERHEAD_S + ns_per_cell_s(aoi, spec, drain, rain) * 1e-9 * n * spec.sim_hours * 3600, 1)
+    return round(OVERHEAD_S + SCALE * ns_per_cell_s(aoi, spec, drain, rain) * 1e-9 * n * spec.sim_hours * 3600, 1)
 
 
 def estimate(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> dict:
