@@ -327,6 +327,13 @@ grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `doc
   2025) or when more than 25 % of the rain falls outside the grid.
 - The intensity profiles, radius range and track speeds come from radar studies elsewhere and the Texas event;
   there are no measured sub-hourly cell sizes or intensities for Lagos.
+- **Simulating only the rain area (contract 0.7.0):** `ScenarioSpec.domain = "rain_area"` solves only the bounding
+  box of the cells that get at least 1 % of the storm depth, plus 1 km; the window's edge is open (water that
+  reaches it leaves and is counted as outflow) and the result is padded back to the full grid. On Queens, a
+  1.5 km cell over Woodside ran 2.4× faster (77 % of the grid) and matched the whole-grid run on 96 % of wet cells
+  (0.03 km² less flooding, from flow paths cut at the window edge). A Gaussian cell's tail reaches 1.5 R, so cells
+  wider than ~2 km on a 5 km AOI cover the whole grid anyway. Not available on river AOIs (the river comes from
+  outside).
 
 ### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
 The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a

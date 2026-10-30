@@ -91,6 +91,10 @@ export type Interventions = (DrainUpgrade | GreenInfrastructure | RetentionPond 
 export type SimHours = number;
 export type OutputIntervalMin = number;
 /**
+ * aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.
+ */
+export type Domain = "aoi" | "rain_area";
+/**
  * human label; NOT part of run_id
  */
 export type Label = string | null;
@@ -158,6 +162,14 @@ export type RainGeneratedM3 = number | null;
  */
 export type RainInAoiM3 = number | null;
 /**
+ * cells simulated: the whole grid, or the rain-area window (domain rain_area); added in 0.7.0
+ */
+export type DomainCells = number | null;
+/**
+ * lon/lat [w, s, e, n] of the simulated window (domain rain_area); null for domain aoi. Outside it nothing was modelled: frames there hold the t=0 state, and point depths, series and building depths are null. Added in 0.7.0
+ */
+export type DomainBbox = [number, number, number, number] | null;
+/**
  * river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)
  */
 export type InflowVolumeM3 = number;
@@ -211,6 +223,7 @@ export interface ScenarioSpec {
   interventions?: Interventions;
   sim_hours?: SimHours;
   output_interval_min?: OutputIntervalMin;
+  domain?: Domain;
   label?: Label;
 }
 export interface Storm {
@@ -316,6 +329,8 @@ export interface RunStats {
   rain_volume_m3: RainVolumeM3;
   rain_generated_m3?: RainGeneratedM3;
   rain_in_aoi_m3?: RainInAoiM3;
+  domain_cells?: DomainCells;
+  domain_bbox?: DomainBbox;
   inflow_volume_m3?: InflowVolumeM3;
   drained_volume_m3: DrainedVolumeM3;
   infiltrated_volume_m3: InfiltratedVolumeM3;

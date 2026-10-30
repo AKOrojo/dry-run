@@ -79,11 +79,24 @@ def _aoi_inputs(aoi: AOIManifest, spec: ScenarioSpec) -> tuple[float, float | No
         return 0.0, None
 
 
+def domain_cells(aoi: AOIManifest, spec: ScenarioSpec) -> int:
+    """Cells the solver will simulate: the rain-area window it crops to (domain rain_area), else the whole grid."""
+    if spec.domain == "rain_area":
+        try:
+            from dryrun.sim import interventions
+
+            r, c = interventions.rain_window(spec, aoi.grid)
+            return (r.stop - r.start) * (c.stop - c.start)
+        except Exception:  # noqa: BLE001 - an estimate must never fail a request
+            pass
+    return aoi.grid.nx * aoi.grid.ny
+
+
 def estimate_s(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> float:
     """Expected wall seconds on prod. cells: the simulated domain (defaults to the whole grid)."""
     if backend == "fake":
         return FAKE_S
-    n = cells if cells is not None else aoi.grid.nx * aoi.grid.ny
+    n = cells if cells is not None else domain_cells(aoi, spec)
     drain, rain = _aoi_inputs(aoi, spec)
     return round(OVERHEAD_S + ns_per_cell_s(aoi, spec, drain, rain) * 1e-9 * n * spec.sim_hours * 3600, 1)
 

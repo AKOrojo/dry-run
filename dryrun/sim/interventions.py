@@ -6,6 +6,8 @@ the A/B difference the UI shows comes from the solver, not from a fudge factor.
 
 from __future__ import annotations
 
+import dataclasses
+import math
 from dataclasses import dataclass
 from typing import Callable
 
@@ -230,6 +232,66 @@ def pond_mask(spec: ScenarioSpec, grid: GridSpec, existing_water: np.ndarray | N
         if isinstance(iv, RetentionPond):
             m |= area_mask(spec, grid, iv)
     return m if existing_water is None else m & ~existing_water
+
+
+DOMAIN_BUFFER_M = 1000.0  # rain_area window: buffer around the wetted cells
+DOMAIN_RAIN_FRACTION = 0.01  # a cell is in the rain area if it gets >= 1 % of the storm's depth (total_mm)
+
+
+def rain_window(spec: ScenarioSpec, grid: GridSpec) -> tuple[slice, slice]:
+    """Rows/cols of the rain_area domain: the bounding box of the cells the storm wets, plus DOMAIN_BUFFER_M."""
+    total = rain_total_mm(spec, grid)
+    wet = total >= DOMAIN_RAIN_FRACTION * float(spec.storm.total_mm)
+    if not wet.any():
+        raise ValueError("the storm's rain area does not touch the model area")
+    rows, cols = np.nonzero(wet.any(axis=1))[0], np.nonzero(wet.any(axis=0))[0]
+    br, bc = int(math.ceil(DOMAIN_BUFFER_M / grid.dy_m)), int(math.ceil(DOMAIN_BUFFER_M / grid.dx_m))
+    return (slice(max(rows[0] - br, 0), min(rows[-1] + br + 1, grid.ny)),
+            slice(max(cols[0] - bc, 0), min(cols[-1] + bc + 1, grid.nx)))
+
+
+def window_bbox(win: tuple[slice, slice], grid: GridSpec) -> tuple[float, float, float, float]:
+    """lon/lat [w, s, e, n] of a rain window's outer cell edges (rows run north to south)."""
+    w, s, e, n = grid.bounds_wgs84
+    r, c = win
+    return (round(w + c.start / grid.nx * (e - w), 6), round(n - r.stop / grid.ny * (n - s), 6),
+            round(w + c.stop / grid.nx * (e - w), 6), round(n - r.start / grid.ny * (n - s), 6))
+
+
+def in_window(spec: ScenarioSpec, grid: GridSpec, row: int, col: int) -> bool:
+    """Whether a cell was simulated: always for domain aoi, inside the rain window for rain_area."""
+    if spec.domain != "rain_area":
+        return True
+    r, c = rain_window(spec, grid)
+    return r.start <= row < r.stop and c.start <= col < c.stop
+
+
+def crop(inp: SolverInputs, win: tuple[slice, slice], shape: tuple[int, int]) -> SolverInputs:
+    """Inputs for the window. Its edge ring joins the held boundary (open outflow at the default level), unless
+    the window edge is the grid edge."""
+    r, c = win
+    ny, nx = shape
+    edge = np.zeros((r.stop - r.start, c.stop - c.start), bool)
+    if r.start > 0:
+        edge[0, :] = True
+    if r.stop < ny:
+        edge[-1, :] = True
+    if c.start > 0:
+        edge[:, 0] = True
+    if c.stop < nx:
+        edge[:, -1] = True
+    bnd = inp.boundary_mask[r, c] if inp.boundary_mask is not None else np.zeros_like(edge)
+    rain = inp.rain
+    if rain is not None:
+        rain = RainField(lambda t, f=rain.shape: f(t)[r, c], rain.generated_m2, rain.moving)
+
+    def cut(a):
+        return None if a is None else np.ascontiguousarray(a[r, c])
+
+    return dataclasses.replace(
+        inp, dem=cut(inp.dem), manning=cut(inp.manning), infiltration_mm_h=cut(inp.infiltration_mm_h),
+        drain_sink_mm_h=cut(inp.drain_sink_mm_h), boundary_mask=np.ascontiguousarray(bnd | edge),
+        exclude_mask=cut(inp.exclude_mask), rain=rain)
 
 
 def validate_areas(spec: ScenarioSpec, grid: GridSpec) -> None:

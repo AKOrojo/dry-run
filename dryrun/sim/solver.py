@@ -43,6 +43,7 @@ from typing import Callable
 
 import numpy as np
 
+from dryrun import jobs
 from dryrun.contracts import ScenarioSpec
 from dryrun.sim.interventions import RAIN_UPDATE_S, SolverInputs, rain_cum_mm, t_end_s
 
@@ -50,6 +51,7 @@ G = 9.81
 ALPHA = 0.7  # Courant-type safety factor (Bates et al. 2010 recommend 0.3-0.7)
 DT_MAX = 60.0  # s
 H_MIN = 1e-3  # m: faces shallower than this carry no flow
+TICK_STEPS = 200  # progress / cancel check between output frames (long frame intervals, e.g. Texas)
 DEFAULT_TIDE_M = -0.5  # same default as the fake backend (assumption, see model card)
 
 
@@ -117,8 +119,12 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
         led.update(rain_generated_m3=0.0, rain_in_aoi_m3=0.0)
     frames: list[tuple[float, np.ndarray]] = [(0, h.astype(np.float32))]
     t, hmax = 0.0, float(h.max())
+    t_end, steps = float(out_times[-1]), 0
     for t_out in out_times:
         while t < t_out - 1e-9:
+            steps += 1
+            if steps % TICK_STEPS == 0:
+                jobs.tick(t, t_end)  # progress, and raises jobs.Cancelled once every viewer has left
             dt = DT_MAX if hmax <= H_MIN else min(DT_MAX, ALPHA * min(dx, dy) / math.sqrt(G * hmax))
             if t + dt >= t_out - 1e-6:  # land exactly on the output time
                 dt = t_out - t
@@ -146,6 +152,7 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
             t += dt
         t = float(t_out)
         frames.append((int(t_out) if float(t_out).is_integer() else t_out, h.astype(np.float32)))
+        jobs.tick(t, t_end)
     return frames, led
 
 

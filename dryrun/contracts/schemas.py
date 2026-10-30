@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.6.0"
+CONTRACT_VERSION = "0.7.0"
 
 
 class _Base(BaseModel):
@@ -215,9 +215,20 @@ class ScenarioSpec(_Base):
     interventions: list[Intervention] = Field(default_factory=list)
     sim_hours: float = Field(gt=0, le=12, default=6)
     output_interval_min: int = Field(ge=5, le=60, default=10)
+    domain: Literal["aoi", "rain_area"] = Field(
+        "aoi", description="aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets "
+                           "(storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and "
+                           "is counted. Faster for a small storm; flow from outside the window is not modelled. Not "
+                           "available on river AOIs (AOIManifest.layers has 'inflows'): 400.")
     # Stored in the PUBLIC runs bucket and reachable from public input: short, no URLs or markup.
     label: str | None = Field(None, max_length=60, pattern=r"^[\w .,+%()/×-]*$",
                               description="human label; NOT part of run_id")
+
+    @model_validator(mode="after")
+    def _domain_needs_rain_area(self):
+        if self.domain == "rain_area" and self.storm.spatial is None:
+            raise ValueError("domain rain_area needs storm.spatial (a cell or a polygon)")
+        return self
 
     def run_id(self) -> str:
         """Deterministic id => identical scenarios share cached results.
@@ -232,6 +243,8 @@ class ScenarioSpec(_Base):
         payload = self.model_dump(mode="json", exclude={"label"})
         if payload["storm"].get("spatial") is None:  # whole-area rain hashes as before the field existed
             payload["storm"].pop("spatial", None)
+        if payload.get("domain") == "aoi":  # likewise for the whole-grid domain
+            payload.pop("domain", None)
         payload["_solver"] = SOLVER_VERSION
         payload["_aoi"] = storage.aoi_hash(self.aoi_id)
         blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -273,6 +286,12 @@ class RunStats(_Base):
                                             "outside the AOI (spatial rain only; added in 0.6.0)")
     rain_in_aoi_m3: float | None = Field(None, description="rain falling inside the AOI on land and water; "
                                          "rain_volume_m3 is the part applied to land (added in 0.6.0)")
+    domain_cells: int | None = Field(None, description="cells simulated: the whole grid, or the rain-area window "
+                                     "(domain rain_area); added in 0.7.0")
+    domain_bbox: tuple[float, float, float, float] | None = Field(
+        None, description="lon/lat [w, s, e, n] of the simulated window (domain rain_area); null for domain aoi. "
+                          "Outside it nothing was modelled: frames there hold the t=0 state, and point depths, "
+                          "series and building depths are null. Added in 0.7.0")
     inflow_volume_m3: float = Field(0.0, description="river inflow entering the domain (gauge hydrograph); added in "
                                     "contract 0.5.0 (0 on older runs and on AOIs without inflows)")
     drained_volume_m3: float

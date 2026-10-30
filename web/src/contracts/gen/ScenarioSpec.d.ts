@@ -89,6 +89,10 @@ export type Interventions = (DrainUpgrade | GreenInfrastructure | RetentionPond 
 export type SimHours = number;
 export type OutputIntervalMin = number;
 /**
+ * aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.
+ */
+export type Domain = "aoi" | "rain_area";
+/**
  * human label; NOT part of run_id
  */
 export type Label = string | null;
@@ -100,6 +104,7 @@ export interface ScenarioSpec {
   interventions?: Interventions;
   sim_hours?: SimHours;
   output_interval_min?: OutputIntervalMin;
+  domain?: Domain;
   label?: Label;
 }
 export interface Storm {

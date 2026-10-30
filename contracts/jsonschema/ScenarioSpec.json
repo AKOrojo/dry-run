@@ -507,7 +507,7 @@
   "additionalProperties": false,
   "properties": {
     "contract_version": {
-      "default": "0.6.0",
+      "default": "0.7.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -564,6 +564,16 @@
       "minimum": 5,
       "title": "Output Interval Min",
       "type": "integer"
+    },
+    "domain": {
+      "default": "aoi",
+      "description": "aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.",
+      "enum": [
+        "aoi",
+        "rain_area"
+      ],
+      "title": "Domain",
+      "type": "string"
     },
     "label": {
       "anyOf": [

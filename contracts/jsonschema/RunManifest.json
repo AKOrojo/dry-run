@@ -488,6 +488,49 @@
           "description": "rain falling inside the AOI on land and water; rain_volume_m3 is the part applied to land (added in 0.6.0)",
           "title": "Rain In Aoi M3"
         },
+        "domain_cells": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "cells simulated: the whole grid, or the rain-area window (domain rain_area); added in 0.7.0",
+          "title": "Domain Cells"
+        },
+        "domain_bbox": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array",
+              "items": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "additionalItems": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "lon/lat [w, s, e, n] of the simulated window (domain rain_area); null for domain aoi. Outside it nothing was modelled: frames there hold the t=0 state, and point depths, series and building depths are null. Added in 0.7.0",
+          "title": "Domain Bbox"
+        },
         "inflow_volume_m3": {
           "default": 0.0,
           "description": "river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)",
@@ -567,7 +610,7 @@
       "additionalProperties": false,
       "properties": {
         "contract_version": {
-          "default": "0.6.0",
+          "default": "0.7.0",
           "title": "Contract Version",
           "type": "string"
         },
@@ -624,6 +667,16 @@
           "minimum": 5,
           "title": "Output Interval Min",
           "type": "integer"
+        },
+        "domain": {
+          "default": "aoi",
+          "description": "aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.",
+          "enum": [
+            "aoi",
+            "rain_area"
+          ],
+          "title": "Domain",
+          "type": "string"
         },
         "label": {
           "anyOf": [
@@ -814,7 +867,7 @@
   "description": "gs://<runs-bucket>/runs/<run_id>/manifest.json",
   "properties": {
     "contract_version": {
-      "default": "0.6.0",
+      "default": "0.7.0",
       "title": "Contract Version",
       "type": "string"
     },

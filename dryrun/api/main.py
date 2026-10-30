@@ -43,7 +43,7 @@ from dryrun.contracts import (
 )
 from dryrun.routing.evac import route as compute_route
 from dryrun.sim import BACKEND as SIM_BACKEND
-from dryrun.sim import exposure
+from dryrun.sim import exposure, interventions
 from dryrun.sim.engine import run_scenario
 
 ADMIN_TOKEN = "" if os.getenv("DRYRUN_ADMIN_TOKEN", "").strip() == "unset" else os.getenv("DRYRUN_ADMIN_TOKEN", "")
@@ -299,8 +299,10 @@ def depth_at(run_id: str, lon: float, lat: float, t_s: int):
     if not (0 <= row < g.ny and 0 <= col < g.nx):
         raise HTTPException(400, "point outside AOI")
     f = min(m.frames, key=lambda fr: abs(fr.t_s - t_s))
+    if not interventions.in_window(m.scenario, g, row, col):  # domain rain_area: not modelled here
+        return {"run_id": run_id, "t_s": f.t_s, "in_domain": False, "depth_m": None, "max_depth_m": None}
     d = storage.load_depth(run_id, f.depth)
-    return {"run_id": run_id, "t_s": f.t_s, "depth_m": round(float(d[row, col]), 3),
+    return {"run_id": run_id, "t_s": f.t_s, "in_domain": True, "depth_m": round(float(d[row, col]), 3),
             "max_depth_m": round(float(storage.load_depth(run_id, "max_depth.npy")[row, col]), 3)}
 
 

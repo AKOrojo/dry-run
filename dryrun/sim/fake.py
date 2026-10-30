@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from dryrun import jobs
 from dryrun.contracts import ScenarioSpec
 from dryrun.sim.interventions import SolverInputs, rain_rate_mm_h, t_end_s
 
@@ -71,6 +72,7 @@ def simulate(inp: SolverInputs, spec: ScenarioSpec, cell_m: float):
         t += int(dt)
         if t % out_every == 0 or t >= t_end:
             frames.append((t, h.copy()))
+            jobs.tick(t, t_end)
     if frames[-1][0] != t:  # CONTRACT: last frame is always the final state
         frames.append((t, h.copy()))
     return frames, led

@@ -696,5 +696,76 @@ def test_speed_estimate():
     small = base.model_copy(update={"storm": Storm(total_mm=120, duration_h=3, spatial=RainCell(
         center=((w + ee) / 2, (s + n) / 2), radius_m=1000))})
     assert speed.estimate_s(aoi, small) <= e  # the area mean of a small cell is below its centre depth
+    from dryrun.contracts import RainPolygon
+
+    sq = [(w + 0.1 * (ee - w), s + 0.1 * (n - s)), (w + 0.2 * (ee - w), s + 0.1 * (n - s)),
+          (w + 0.2 * (ee - w), s + 0.2 * (n - s)), (w + 0.1 * (ee - w), s + 0.2 * (n - s))]
+    poly = base.model_copy(update={"storm": Storm(total_mm=120, duration_h=3, spatial=RainPolygon(polygon=sq))})
+    assert speed.estimate_s(aoi, poly.model_copy(update={"domain": "rain_area"})) < speed.estimate_s(aoi, poly)
+    assert speed.domain_cells(aoi, poly) == aoi.grid.nx * aoi.grid.ny
+    assert speed.domain_cells(aoi, poly.model_copy(update={"domain": "rain_area"})) < aoi.grid.nx * aoi.grid.ny
     r = speed.estimate(aoi, base)
     assert r["low_s"] < r["est_s"] < r["high_s"]
+def test_rain_area_domain():
+    from pydantic import ValidationError
+
+    from dryrun.contracts import RainCell, RainPolygon
+    from dryrun.sim import exposure, interventions
+
+    g = storage.load_aoi(fixtures.AOI_ID).grid
+    w, s, e, n = g.bounds_wgs84
+    with pytest.raises(ValidationError):  # needs a rain area
+        ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=STORM, domain="rain_area")
+    sq = [(w + 0.1 * (e - w), s + 0.1 * (n - s)), (w + 0.3 * (e - w), s + 0.1 * (n - s)),
+          (w + 0.3 * (e - w), s + 0.3 * (n - s)), (w + 0.1 * (e - w), s + 0.3 * (n - s))]
+    whole = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=60, duration_h=1, spatial=RainPolygon(polygon=sq)))
+    win = whole.model_copy(update={"domain": "rain_area"})
+    assert whole.run_id() != win.run_id()
+    assert ScenarioSpec.model_validate(whole.model_dump()).run_id() == whole.run_id()  # "aoi" hashes as before
+    r, c = interventions.rain_window(win, g)
+    assert (r.stop - r.start) * (c.stop - c.start) < g.nx * g.ny  # a real crop
+    ma, mw = run_scenario(whole), run_scenario(win)
+    assert mw.status.value == "done" and mw.stats.domain_cells < ma.stats.domain_cells == g.nx * g.ny
+    assert abs(mw.stats.mass_balance_error_pct) < 1
+    assert abs(mw.stats.rain_volume_m3 - ma.stats.rain_volume_m3) / ma.stats.rain_volume_m3 < 0.01
+    dw = storage.load_depth(mw.run_id, "max_depth.npy").astype(float)
+    assert dw.shape == (g.ny, g.nx) and dw[r, c].max() > 0
+    outside = ~(storage.load_raster(fixtures.AOI_ID, "boundary_mask") > 0.5)  # land (boundary water: see engine)
+    outside[r, c] = False
+    assert dw[outside].max() <= storage.load_depth(ma.run_id, "max_depth.npy").astype(float)[outside].max() + 1e-6
+    # the window's lon/lat box, and "not modelled" (null) outside it for point reads and building depths
+    assert ma.stats.domain_bbox is None
+    bw, bs, be, bn = mw.stats.domain_bbox
+    assert w <= bw < be <= e and s <= bs < bn <= n and (be - bw) < (e - w)
+    from dryrun import derived
+
+    lon_in, lat_in = (bw + be) / 2, (bs + bn) / 2
+    lon_out = be + 0.5 * (e - be) if be < e else bw - 0.5 * (bw - w)
+    assert derived.series(mw.run_id, lon_in, lat_in)["in_domain"] is True
+    out = derived.series(mw.run_id, lon_out, lat_in)
+    assert out["in_domain"] is False and out["max_depth_m"] is None and set(out["depth_m"]) == {None}
+    assert derived.series(ma.run_id, lon_out, lat_in)["in_domain"] is True
+    bd = json.loads(storage.read_run_file(mw.run_id, "building_depths.json"))
+    _, bc = exposure.building_cells(fixtures.AOI_ID)
+    ins = (bc[:, 0] >= r.start) & (bc[:, 0] < r.stop) & (bc[:, 1] >= c.start) & (bc[:, 1] < c.stop)
+    assert [d is None for d in bd["max_depth_m"]] == (~ins).tolist()
+    far = whole.model_copy(update={"storm": Storm(total_mm=60, duration_h=1, spatial=RainCell(
+        center=(e + 1.0, n + 1.0), radius_m=1000)), "domain": "rain_area"})
+    with pytest.raises(ValueError):
+        run_scenario(far)  # rain area entirely outside the grid
+
+
+def test_cancelled_run_leaves_no_failed_manifest():
+    from dryrun import jobs
+
+    spec = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=77, duration_h=1))
+    job = jobs.Job(run_id=spec.run_id(), t_end_s=3600, est_s=None, writes_total=1)
+    job.cancelled = True
+    token = jobs.bind(job)
+    try:
+        with pytest.raises(jobs.Cancelled):
+            run_scenario(spec)
+    finally:
+        jobs.unbind(token)
+    assert not storage.run_exists(spec.run_id()) or storage.load_run(spec.run_id()).status.value != "failed"
+    assert run_scenario(spec).status.value == "done"  # re-runnable once nobody cancels

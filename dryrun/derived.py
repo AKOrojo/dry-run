@@ -34,7 +34,7 @@ import numpy as np
 from PIL import Image
 
 from dryrun import storage
-from dryrun.sim import exposure
+from dryrun.sim import exposure, interventions
 
 MAPS = ("arrival", "duration")
 KINDS = MAPS + ("events", "velocity", "hazard", "building_loads")
@@ -326,6 +326,14 @@ def series(run_id: str, lon: float, lat: float) -> dict:
     if not (0 <= row < g.ny and 0 <= col < g.nx):
         raise ValueError("point outside AOI")
     ts, depth = stack(run_id)
+    if not interventions.in_window(m.scenario, g, row, col):  # domain rain_area: this cell was not modelled
+        none = [None] * len(ts)
+        return {"run_id": run_id, "lon": lon, "lat": lat, "cell": [row, col], "cell_center": _lonlat(g, row, col),
+                "in_domain": False, "permanent_water": bool(_exclude(m)[row, col]), "t_s": ts.tolist(),
+                "depth_m": none, "max_depth_m": None, "u_m_s": none, "v_m_s": none, "speed_m_s": none,
+                "max_speed_m_s": None, "hazard": none, "profile": None, "first_flooded_s": None,
+                "first_impassable_s": None,
+                "threshold_m": {"flooded": exposure.FLOODED_M, "road_impassable": exposure.PASSABLE_M}}
     d = depth[:, row, col].astype(np.float64)
 
     def first(th):
@@ -335,7 +343,7 @@ def series(run_id: str, lon: float, lat: float) -> dict:
     u, v = _point_velocity(m, g, depth, row, col)
     speed = np.hypot(u, v)
     return {"run_id": run_id, "lon": lon, "lat": lat, "cell": [row, col], "cell_center": _lonlat(g, row, col),
-            "permanent_water": bool(_exclude(m)[row, col]),
+            "in_domain": True, "permanent_water": bool(_exclude(m)[row, col]),
             "t_s": ts.tolist(), "depth_m": np.round(d, 3).tolist(), "max_depth_m": round(float(d.max()), 3),
             "u_m_s": np.round(u, 3).tolist(), "v_m_s": np.round(v, 3).tolist(),
             "speed_m_s": np.round(speed, 3).tolist(), "max_speed_m_s": round(float(speed.max()), 3),

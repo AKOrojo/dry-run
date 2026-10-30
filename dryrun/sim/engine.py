@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from PIL import Image
 
-from dryrun import storage
+from dryrun import jobs, storage
 from dryrun.contracts import FrameRef, RunManifest, RunStats, RunStatus, ScenarioSpec, Timeseries
 from dryrun.sim import BACKEND, exposure, interventions
 
@@ -93,7 +93,12 @@ def _inflows(aoi_id: str, aoi) -> list[interventions.Inflow]:
 
 def validate(spec: ScenarioSpec) -> None:
     """Cheap checks before any run is created (raises ValueError -> HTTP 400 / tool error)."""
-    interventions.validate_areas(spec, storage.load_aoi(spec.aoi_id).grid)
+    aoi = storage.load_aoi(spec.aoi_id)
+    interventions.validate_areas(spec, aoi.grid)
+    if spec.domain == "rain_area":
+        if "inflows" in aoi.layers:
+            raise ValueError("domain rain_area is not available on a river AOI: the river comes from outside")
+        interventions.rain_window(spec, aoi.grid)
 
 
 def run_scenario(spec: ScenarioSpec, force: bool = False) -> RunManifest:
@@ -120,6 +125,8 @@ def _solve(spec: ScenarioSpec, run_id: str) -> RunManifest:
     storage.save_run(RunManifest(run_id=run_id, scenario=spec, status=RunStatus.running, backend=backend_name))
     try:  # EVERYTHING after the running manifest: a failure must never leave a run stuck in "running"
         return _solve_inner(spec, run_id, simulate, backend_name, t0)
+    except jobs.Cancelled:  # every viewer left: no failed manifest, the run stays re-runnable
+        raise
     except Exception as exc:  # noqa: BLE001 - surface any failure to the UI/agent
         m = RunManifest(run_id=run_id, scenario=spec, status=RunStatus.failed, error=repr(exc),
                         backend=backend_name)
@@ -127,9 +134,36 @@ def _solve(spec: ScenarioSpec, run_id: str) -> RunManifest:
         return m
 
 
+def _simulate_window(simulate, inp, spec, grid):
+    """domain rain_area: solve the rain window only, then pad every frame back to the full grid. Outside the
+    window the state is the t=0 one (dry land, boundary water at the default level), so it adds nothing to the
+    stored-volume change."""
+    win = interventions.rain_window(spec, grid)
+    frames, ledger = simulate(interventions.crop(inp, win, (grid.ny, grid.nx)), spec, grid.cell_size_m)
+    full0 = np.zeros((grid.ny, grid.nx), frames[0][1].dtype)
+    if inp.boundary_mask is not None:
+        from dryrun.sim.solver import DEFAULT_TIDE_M
+
+        level = DEFAULT_TIDE_M if inp.tide_level_m is None else inp.tide_level_m
+        full0 = np.where(inp.boundary_mask, np.maximum(level - inp.dem, 0), 0).astype(frames[0][1].dtype)
+    out = []
+    for t, d in frames:
+        f = full0.copy()
+        f[win] = d
+        out.append((t, f))
+    ledger["domain_cells"] = int((win[0].stop - win[0].start) * (win[1].stop - win[1].start))
+    return out, ledger, win
+
+
 def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
     aoi, inp = _load_inputs(spec)
-    frames, ledger = simulate(inp, spec, aoi.grid.cell_size_m)
+    if spec.domain == "rain_area":
+        frames, ledger, win = _simulate_window(simulate, inp, spec, aoi.grid)
+    else:
+        frames, ledger = simulate(inp, spec, aoi.grid.cell_size_m)
+        ledger["domain_cells"] = aoi.grid.nx * aoi.grid.ny
+        win = None
+    domain_cells = ledger.pop("domain_cells")
     if frames[-1][0] != interventions.t_end_s(spec):
         raise RuntimeError("backend must end on the final state")
 
@@ -158,6 +192,10 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
     ids, bc = exposure.building_cells(spec.aoi_id)
     bmax = exposure.neighbourhood_max(np.where(excl, 0.0, max_depth))
     bdep = np.round(bmax[bc[:, 0], bc[:, 1]].astype(np.float64), 2).tolist() if len(bc) else []
+    if win is not None and len(bc):  # outside the simulated window: not modelled (null), not dry
+        inside = ((bc[:, 0] >= win[0].start) & (bc[:, 0] < win[0].stop)
+                  & (bc[:, 1] >= win[1].start) & (bc[:, 1] < win[1].stop))
+        bdep = [d if ok else None for d, ok in zip(bdep, inside.tolist())]
     jobs.append(_IO.submit(storage.write_run_file, run_id, "building_depths.json",
                            json.dumps({"ids": ids, "max_depth_m": bdep}).encode(), "application/json"))
     for j in jobs:
@@ -173,7 +211,8 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
     stats = RunStats(
         run_id=run_id, peak_t_s=peak_t, stored_volume_end_m3=round(stored_end, 1),
         mass_balance_error_pct=round(100 * err / supplied, 4) if supplied else 0.0,
-        **{k: round(v, 1) for k, v in ledger.items()},
+        **{k: round(v, 1) for k, v in ledger.items()}, domain_cells=domain_cells,
+        domain_bbox=None if win is None else interventions.window_bbox(win, aoi.grid),
         **exposure.impact(spec.aoi_id, max_depth, area, excl, ponds),
     )
     m = RunManifest(
