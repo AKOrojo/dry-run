@@ -90,6 +90,9 @@ async function j<T>(r: Response): Promise<T> {
 /** The Google Map Tiles key, for judges (X-Judge-Key) and the team only; 403 without one, 404 when the server has none. */
 export const getGoogleTilesKey = () =>
   fetch(`${API}/api/tiles/google-key`, { headers: { ...team(), ...judge() }, cache: "no-store" }).then(j<{ key: string }>).then((r) => r.key);
+/** Precomputed lagoon/sea level sensitivity for an AOI (404 where there is none). */
+export type LevelSensitivity = { storm: string; datum: string; note: string; rows: { level_m: number; run_id: string; flooded_km2: number; buildings: number }[] };
+export const getLevelSensitivity = (aoiId: string) => fetch(`${API}/api/aoi/${aoiId}/level_sensitivity`).then(j<LevelSensitivity>);
 export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean; google_tiles_available?: boolean }>);
 export type Replay = { question: string; aoi_id: string; provider: string; model: string; recorded_at: string };
 export const getReplays = () => fetch(`${API}/api/replays`).then(j<Replay[]>);

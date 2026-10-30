@@ -4,7 +4,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
-import { getJudgeKey, setJudgeKey } from "../lib/api";
+import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
+import type { LevelSensitivity } from "../lib/api";
 import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import type { AerialSource } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
@@ -324,19 +325,25 @@ function StormCard(p: ScenarioProps) {
 }
 
 const PRESETS = [{ label: "Normal", v: null }, { label: "Spring high", v: 0.5 }, { label: "High + surge", v: 1.0 }, { label: "Extreme", v: 1.5 }] as const;
-/** Level sensitivity measured per area (120 mm / 3 h runs at each level): [level m, flooded km², buildings]. Only areas
- *  that were measured; any other area shows no table rather than another area's numbers. */
-const SENS: Record<string, [number, string, string][]> = {
-  "lagos-lekki-v1": [[-0.5, "23.2", "30,202"], [0.5, "29.0", "30,406"], [1.0, "29.8", "30,595"], [1.5, "31.4", "31,061"]],
-};
-
 function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onLevel"> & { aoiId?: string }) {
-  const sens = aoiId ? SENS[aoiId] : undefined;
+  // Measured per area (Eng A, /api/aoi/{id}/level_sensitivity); none (404) means no table, never another area's numbers.
+  const [sens, setSens] = useState<LevelSensitivity | null>(null);
+  useEffect(() => {
+    setSens(null);
+    if (!aoiId) return;
+    let off = false;
+    getLevelSensitivity(aoiId).then((t) => { if (!off) setSens(t); }, () => { /* no table for this area */ });
+    return () => { off = true; };
+  }, [aoiId]);
+  const km2 = sens?.rows.map((r) => r.flooded_km2) ?? [];
+  // Where the level barely changes the flood (Queens: high ground), the note says so instead of a table of equal rows.
+  const matters = km2.length > 1 && (Math.max(...km2) - Math.min(...km2)) / Math.max(Math.min(...km2), 1e-6) >= 0.02;
+  const note = sens?.note ? sens.note[0].toUpperCase() + sens.note.slice(1) + "." : null;
   const v = level ?? -0.5;
   const pct = ((v + 0.5) / 2.0) * 100;
   const active = PRESETS.find((p) => p.v === level)?.label ?? null;
   return (
-    <Card title="Lagoon / sea level" right={<span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12 }}><Waves size={16} weight="bold" />Assumption</span>}>
+    <Card title={aoiId?.startsWith("lagos") ? "Lagoon / sea level" : "Sea level"} right={<span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12 }}><Waves size={16} weight="bold" />Assumption</span>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "12px 14px 12px" }}>
         <Field label="Preset">
           <Segmented<string> size={11.5} active={active} onChange={(l) => onLevel(PRESETS.find((p) => p.label === l)!.v)}
@@ -357,23 +364,25 @@ function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onL
           Holds the lagoon and sea edge at one level for the whole run. A scenario level, not an observed tide. Coastal areas only.
         </p>
       </div>
-      {sens && <>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, borderTop: "1px solid var(--hairline)" }}>
-        <thead><tr style={{ color: "var(--ink-muted)" }}>
-          <th style={{ padding: "7px 0 4px 14px", textAlign: "left", fontWeight: 500 }}>Level</th>
-          <th style={{ padding: "7px 8px 4px", textAlign: "right", fontWeight: 500 }}>Flooded km²</th>
-          <th style={{ padding: "7px 14px 4px 8px", textAlign: "right", fontWeight: 500 }}>Buildings</th></tr></thead>
-        <tbody>{sens.map(([lv, km2, nb]) => (
-          <tr key={lv} style={Math.abs(lv - v) < 0.05 ? { background: "var(--surface-raised)" } : undefined}>
-            <td style={{ padding: "5px 0 5px 14px", ...FIG }}>{lv > 0 ? "+" : lv < 0 ? "−" : ""}{Math.abs(lv).toFixed(1)} m</td>
-            <td style={{ padding: "5px 8px", textAlign: "right", ...FIG }}>{km2}</td>
-            <td style={{ padding: "5px 14px 5px 8px", textAlign: "right", ...FIG }}>{nb}</td></tr>))}
-        </tbody>
-      </table>
-      <p style={{ margin: 0, padding: "8px 14px 10px", color: "var(--ink-muted)", fontSize: 11, lineHeight: "15px" }}>
-        Sensitivity on 120 mm / 3 h. Ground height error (about 2 m) is larger than one step, so read this as a trend, not who floods.
-      </p>
-      </>}
+      {sens && matters && (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, borderTop: "1px solid var(--hairline)" }}>
+          <thead><tr style={{ color: "var(--ink-muted)" }}>
+            <th style={{ padding: "7px 0 4px 14px", textAlign: "left", fontWeight: 500 }}>Level</th>
+            <th style={{ padding: "7px 8px 4px", textAlign: "right", fontWeight: 500 }}>Flooded km²</th>
+            <th style={{ padding: "7px 14px 4px 8px", textAlign: "right", fontWeight: 500 }}>Buildings</th></tr></thead>
+          <tbody>{sens.rows.map((r) => (
+            <tr key={r.level_m} style={Math.abs(r.level_m - v) < 0.05 ? { background: "var(--surface-raised)" } : undefined}>
+              <td style={{ padding: "5px 0 5px 14px", ...FIG }}>{r.level_m > 0 ? "+" : r.level_m < 0 ? "−" : ""}{Math.abs(r.level_m).toFixed(1)} m</td>
+              <td style={{ padding: "5px 8px", textAlign: "right", ...FIG }}>{r.flooded_km2.toFixed(1)}</td>
+              <td style={{ padding: "5px 14px 5px 8px", textAlign: "right", ...FIG }}>{r.buildings.toLocaleString("en-US")}</td></tr>))}
+          </tbody>
+        </table>
+      )}
+      {sens && (
+        <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: matters ? undefined : "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11, lineHeight: "15px" }}>
+          {matters ? <>Sensitivity on {sens.storm}. {note} Ground height error (about 2 m) is larger than one step, so read this as a trend, not who floods.</> : note}
+        </p>
+      )}
     </Card>
   );
 }
