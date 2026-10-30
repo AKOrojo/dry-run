@@ -677,3 +677,24 @@ def test_level_sensitivity_route():
         base = next(s for s in presets.scenarios(aoi) if not s.get("interventions") and "spatial" not in s["storm"])
         assert t["rows"][0]["flooded_km2"] > 0 and base  # the -0.5 m row is the reference storm itself
     assert c.get("/api/aoi/texas-guadalupe-v0/level_sensitivity").status_code == 404
+
+
+def test_speed_estimate():
+    from dryrun import speed
+    from dryrun.contracts import DrainUpgrade, RainCell
+
+    aoi = storage.load_aoi(fixtures.AOI_ID)
+    base = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=120, duration_h=3))
+    e = speed.estimate_s(aoi, base)
+    assert e > 0 and speed.estimate_s(aoi, base, backend="fake") == speed.FAKE_S
+    assert abs(speed.estimate_s(aoi, base, cells=aoi.grid.nx * aoi.grid.ny // 2) - e / 2) < 0.2  # scales with cells
+    longer = base.model_copy(update={"sim_hours": base.sim_hours * 2})
+    assert speed.estimate_s(aoi, longer) > e
+    drained = base.model_copy(update={"interventions": [DrainUpgrade(add_mm_h=40)]})
+    assert speed.estimate_s(aoi, drained) < e  # less water, larger steps
+    w, s, ee, n = aoi.grid.bounds_wgs84
+    small = base.model_copy(update={"storm": Storm(total_mm=120, duration_h=3, spatial=RainCell(
+        center=((w + ee) / 2, (s + n) / 2), radius_m=1000))})
+    assert speed.estimate_s(aoi, small) <= e  # the area mean of a small cell is below its centre depth
+    r = speed.estimate(aoi, base)
+    assert r["low_s"] < r["est_s"] < r["high_s"]
