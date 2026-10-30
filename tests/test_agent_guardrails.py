@@ -208,8 +208,10 @@ def test_api_forwarded_prefix_shares_bucket(client):
 def test_api_team_token(client, monkeypatch):
     monkeypatch.setattr(ratelimit, "_TEAM", "secret")
     assert [post(client, {"X-Team-Token": "secret"}) for _ in range(14)] == [200] * 14
-    assert [post(client, {"X-Team-Token": "wrong"}) for _ in range(12)] == [200] * 12
+    # A wrong team token is a wrong key: the free path still answers, until 5 wrong keys lock this IP (authguard).
+    assert [post(client, {"X-Team-Token": "wrong"}) for _ in range(5)] == [200] * 5
     assert post(client, {"X-Team-Token": "wrong"}) == 429
+    assert post(client, {"X-Team-Token": "secret"}) == 429  # locked: even the right key is refused
 
 
 def test_api_empty_token_does_not_bypass(client):

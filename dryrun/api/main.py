@@ -422,6 +422,16 @@ def aoi_point(aoi_id: str, lon: float, lat: float, request: Request):
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/api/admin/auth")
+def admin_auth(request: Request):
+    """Current key-auth lockouts (team token only): global window and locked IPs, hashed. Never shows any key."""
+    from dryrun.api import authguard
+
+    if not ratelimit._is_team(request):
+        raise HTTPException(403, "team only")
+    return JSONResponse(authguard.status(), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/aoi/{aoi_id}/presets")
 def aoi_presets(aoi_id: str):
     """This AOI's demo ScenarioSpecs, verbatim (a verbatim copy has the warmed run_id, so it opens instantly). [] when

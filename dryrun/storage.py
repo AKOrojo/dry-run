@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -84,6 +85,64 @@ def _write_bytes(kind: str, rel: str, data: bytes, content_type: str) -> None:
     immutable = kind == "runs" and not rel.endswith("manifest.json")
     blob.cache_control = "public, max-age=31536000, immutable" if immutable else "no-store"
     blob.upload_from_string(data, content_type=content_type)
+
+
+_LOCAL_JSON_LOCK = threading.Lock()
+
+
+def read_json(kind: str, rel: str) -> dict | None:
+    """Small mutable JSON state (e.g. auth lockouts). None when absent."""
+    try:
+        return json.loads(_read_bytes(kind, rel))
+    except FileNotFoundError:
+        return None
+    except Exception as exc:  # noqa: BLE001 - GCS NotFound without importing google libs here
+        if type(exc).__name__ == "NotFound":
+            return None
+        raise
+
+
+def update_json(kind: str, rel: str, fn, attempts: int = 8) -> dict:
+    """Atomic read-modify-write of a small JSON object: fn(current or None) -> new. In GCS the write is conditional on
+    the generation read (0 = must not exist), so concurrent instances retry instead of overwriting each other."""
+    rel = _safe_rel(rel)
+    local, bucket, prefix = _where(kind)
+    if MODE == "local":
+        with _LOCAL_JSON_LOCK:
+            p = local / rel
+            new = fn(json.loads(p.read_text()) if p.exists() else None)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(new))
+            return new
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
+    b = _gcs().bucket(bucket)
+    for _ in range(attempts):
+        blob = b.blob(prefix + rel)
+        try:
+            blob.reload()
+            gen = blob.generation
+            cur = json.loads(blob.download_as_bytes(if_generation_match=gen))
+        except (NotFound, PreconditionFailed):
+            gen, cur = 0, None
+        new = fn(cur)
+        out = b.blob(prefix + rel)
+        out.cache_control = "no-store"
+        try:
+            out.upload_from_string(json.dumps(new), content_type="application/json", if_generation_match=gen)
+            return new
+        except PreconditionFailed:
+            continue  # another instance wrote in between: re-read and re-apply
+    raise RuntimeError(f"update_json: {rel} stayed contended after {attempts} attempts")
+
+
+def list_rel(kind: str, prefix_rel: str) -> list[str]:
+    """Keys under a prefix (relative to the kind's root)."""
+    local, bucket, prefix = _where(kind)
+    if MODE == "local":
+        root = local / prefix_rel
+        return sorted(str(q.relative_to(local)) for q in root.rglob("*") if q.is_file()) if root.exists() else []
+    return sorted(bl.name[len(prefix):] for bl in _gcs().bucket(bucket).list_blobs(prefix=prefix + prefix_rel))
 
 
 def _exists(kind: str, rel: str) -> bool:
