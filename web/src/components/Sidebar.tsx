@@ -361,7 +361,7 @@ function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onL
         </div>
         <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
           {level == null ? "No tide intervention. " : `Level ${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)} m. `}
-          Holds the lagoon and sea edge at one level for the whole run. A scenario level, not an observed tide. Coastal areas only.
+          Holds the {aoiId?.startsWith("lagos") ? "lagoon and sea edge" : "sea edge"} at one level for the whole run. A scenario level, not an observed tide. Coastal areas only.
         </p>
       </div>
       {sens && matters && (
