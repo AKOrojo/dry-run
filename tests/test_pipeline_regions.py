@@ -260,3 +260,38 @@ def test_nyc_footprints_reader(tmp_path):
     index, geo = osm.buildings_layers(grid, recs)
     assert index["ids"] == ["nyc-1", "nyc-2"]
     assert geo["features"][1]["properties"]["height_m"] == osm.DEFAULT_HEIGHT_M
+
+
+def test_edge_outflow_build(tmp_path, monkeypatch):
+    """Inland box with no river (NYC): outer ring drains freely, inside water is open boundary, lidar DEM
+    unsmoothed, uniform combined-sewer sink on land."""
+    grid, transform = ee_export.grid_for_bbox((0, 0, 8 / 3600, 8 / 3600))
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    rng = np.random.default_rng(0)
+    dem = (5 + rng.random((grid.ny, grid.nx))).astype(np.float32)
+    jrc = np.zeros((grid.ny, grid.nx), np.float32)
+    jrc[3:5, 3:5] = 100  # a pond inside
+    arrays = {"dem": dem, "worldcover": np.full(dem.shape, 50, np.uint8), "jrc_occurrence": jrc,
+              "population": np.ones(dem.shape, np.float32)}
+    for k, a in arrays.items():
+        np.save(raw / f"{k}.npy", a)
+    meta = {**grid.model_dump(mode="json"), "transform": transform, "sources": {}}
+    storage.write_local_file(raw / "grid.json", json.dumps(meta).encode())
+    monkeypatch.setattr(storage, "MODE", "local")
+    monkeypatch.setattr(storage, "LOCAL_DATA", tmp_path / "serving")
+    m = build_layers.build("edge", str(raw), coastal=False, edge_outflow=True, smooth_dem=False,
+                           land_drain_mm_h=13.0, dem_credit="3DEP lidar (test)")
+    r = lambda k: storage.load_raster("edge", k)  # noqa: E731
+    b, z, sink = r("boundary_mask") > 0.5, r("dem"), r("drain_sink_mm_h")
+    ring = np.zeros(b.shape, bool)
+    ring[0, :] = ring[-1, :] = ring[:, 0] = ring[:, -1] = True
+    assert b[ring].all() and b[3:5, 3:5].all() and b.sum() == ring.sum() + 4
+    inner_land = ~b
+    np.testing.assert_array_equal(z[inner_land], dem[inner_land])  # unsmoothed
+    assert (z[ring] < dem[ring]).all() and (z[ring] > build_layers.WATER_BED_M).all()  # outlet drop, no water bed
+    assert (z[3:5, 3:5] <= build_layers.WATER_BED_M).all()
+    assert (sink[inner_land] == 13.0).all() and (sink[b] == 0).all()
+    assert m.sources["dem"].startswith("3DEP lidar (test)") and "unsmoothed" in m.sources["dem"]
+    assert "outer cell ring" in m.sources["boundary_mask"] and "13 mm/h" in m.sources["drain_sink_mm_h"]
+    storage.clear_caches()

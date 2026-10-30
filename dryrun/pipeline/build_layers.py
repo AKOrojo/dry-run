@@ -173,17 +173,21 @@ def carve_rivers(dem: np.ndarray, river: np.ndarray, outlet: np.ndarray) -> np.n
 
 
 def treat_dem(dem: np.ndarray, boundary: np.ndarray, exclude: np.ndarray,
-              outlet: np.ndarray | None = None) -> np.ndarray:
+              outlet: np.ndarray | None = None, smooth: bool = True) -> np.ndarray:
     """Raw GLO-30 heights on the grid -> serving DEM (float32), per DEM_TREATMENT above.
 
-    outlet: boundary cells that are a river exit, not sea; their bed is not lowered to WATER_BED_M.
+    outlet: boundary cells that are a river exit (or an edge-outflow ring), not sea; their bed is not lowered
+    to WATER_BED_M. smooth=False for lidar DEMs (no DSM noise to remove, and smoothing would fill street gutters).
     """
     z = np.asarray(dem, np.float64)
     land = ~exclude
-    # Normalised convolution: smooth land with land only, so water heights never bleed into the shore.
-    w = _gauss(land.astype(np.float64), DEM_SMOOTH_SIGMA_CELLS)
-    zs = _gauss(np.where(land, z, 0.0), DEM_SMOOTH_SIGMA_CELLS) / np.where(w > 0, w, 1.0)
-    out = np.where(land, zs, z)
+    if smooth:
+        # Normalised convolution: smooth land with land only, so water heights never bleed into the shore.
+        w = _gauss(land.astype(np.float64), DEM_SMOOTH_SIGMA_CELLS)
+        zs = _gauss(np.where(land, z, 0.0), DEM_SMOOTH_SIGMA_CELLS) / np.where(w > 0, w, 1.0)
+        out = np.where(land, zs, z)
+    else:
+        out = z.copy()
     ny, nx = z.shape
     canal = exclude & ~boundary
     if canal.any():  # never above its own surface or the lowest adjacent bank, then burned
@@ -222,13 +226,20 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           building_source: str = "open_buildings", debug_layers: bool = False,
           place_tags: dict | None = None, corridor_tags: dict | None = None,
           coastal: bool = True, outlet_side: str | None = None, inflows_config: dict | None = None,
-          shelter_min_above_river_m: float | None = None) -> AOIManifest:
+          shelter_min_above_river_m: float | None = None, edge_outflow: bool = False, smooth_dem: bool = True,
+          land_drain_mm_h: float | None = None, dem_credit: str | None = None) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write.
 
     Inland AOIs: coastal=False plus outlet_side ("east", ...): the OSM river (waterway=river|stream from
     osm_files["features"]) is burned like a canal and exits through river_outlet() on that edge.
     inflows_config ({gauges: path, t0_utc, hours, sources, note}): river inflows from USGS gauges, written as the
     `inflows` layer by Eng A's inflows.build_inflows() (needs the river mask, so outlet_side or debug_layers).
+    edge_outflow (inland boxes with no river, e.g. NYC Queens): the solver's outer faces are walls, so the outer
+    1-cell ring becomes boundary (free outflow, treated like a river outlet: ground level less OUTLET_DROP_M), and
+    all JRC permanent water inside becomes open-water boundary too.
+    smooth_dem=False for lidar DEMs. land_drain_mm_h: a uniform sink on every land cell (combined sewers),
+    combined with the OSM drain sink by max. dem_credit: the DEM's credit when grid.json has none (dem supplied
+    by another workstream, e.g. `ee_export --skip dem`).
     """
     if inflows_config and not (outlet_side or debug_layers):
         raise ValueError("inflows need the river mask: pass outlet_side (or debug_layers)")
@@ -276,15 +287,23 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         exclude |= river_mask  # the channel is burned like a canal and never counts as flooding
         outlet = river_outlet(river_mask, outlet_side)
         boundary |= outlet
-    dem = treat_dem(raw["dem"], boundary, exclude, outlet)
-    if outlet is not None:
-        dem = carve_rivers(dem, river_mask, outlet)
+    river_outlet_mask = outlet
+    if edge_outflow:
+        ring = np.zeros((grid.ny, grid.nx), bool)
+        ring[0, :] = ring[-1, :] = ring[:, 0] = ring[:, -1] = True
+        boundary |= exclude | ring
+        outlet = ring if outlet is None else outlet | ring
+    dem = treat_dem(raw["dem"], boundary, exclude, outlet, smooth=smooth_dem)
+    if river_outlet_mask is not None:
+        dem = carve_rivers(dem, river_mask, river_outlet_mask)
     if not np.isfinite(dem).all():
         raise ValueError("treated DEM must be finite")
     manning, infiltration = landcover_layers(raw["worldcover"])
-    if outlet is not None:
+    if river_outlet_mask is not None:
         manning[river_mask] = RIVER_MANNING
     sink = drain_sink(waterway_cells(grid, lines))
+    if land_drain_mm_h:
+        sink = np.maximum(sink, np.where(exclude | boundary, 0.0, land_drain_mm_h)).astype(np.float32)
     population = np.nan_to_num(raw["population"].astype(np.float32), nan=0.0)
     rasters = {"dem": dem, "manning": manning, "infiltration_mm_h": infiltration,
                "drain_sink_mm_h": sink, "boundary_mask": boundary, "exclude_mask": exclude,
@@ -299,15 +318,19 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
 
     wc_rule = "derived: WorldCover -> LANDCOVER_LUT (assumed values, see README model card)"
     sources = {
-        "dem": f"{credit('dem')}; derived: treat_dem / DEM_TREATMENT (see README model card)",
+        "dem": f"{dem_credit or credit('dem')}; derived: treat_dem / DEM_TREATMENT"
+               f"{'' if smooth_dem else ', unsmoothed (lidar)'} (see README model card)",
         "manning": f"{credit('worldcover')}; {wc_rule}",
         "infiltration_mm_h": f"{credit('worldcover')}; {wc_rule}",
-        "boundary_mask": f"{credit('jrc_occurrence')}; derived: water_masks / BOUNDARY rules",
+        "boundary_mask": f"{credit('jrc_occurrence')}; derived: water_masks / BOUNDARY rules"
+                         f"{'; plus the outer cell ring (edge outflow)' if edge_outflow else ''}",
         "exclude_mask": f"{credit('jrc_occurrence')}; derived: water_masks / JRC_PERMANENT_PCT",
         "population": credit("population"),
         "drain_sink_mm_h": ("© OpenStreetMap contributors, ODbL 1.0; " if features_path else
                             "empty: no OSM waterways supplied; ") +
-                           "derived: BASELINE_DRAIN_MM_H (assumed values, see README model card)",
+                           "derived: BASELINE_DRAIN_MM_H (assumed values, see README model card)" +
+                           (f"; plus {land_drain_mm_h:g} mm/h on all land (combined sewers, assumed)" if land_drain_mm_h
+                            else ""),
     }
     for key, arr in rasters.items():
         buf = io.BytesIO()
@@ -418,9 +441,13 @@ def main() -> None:
     parser.add_argument("--outlet-side", choices=("north", "south", "east", "west"),
                         help="edge where the OSM river leaves the AOI (free outflow)")
     parser.add_argument("--inflows-config", help="JSON: {gauges, t0_utc, hours, sources, note} (pipeline/inflows.py)")
+    parser.add_argument("--edge-outflow", action="store_true", help="outer cell ring drains freely (inland, no river)")
+    parser.add_argument("--no-smooth", action="store_true", help="lidar DEM: skip the land smoothing")
+    parser.add_argument("--land-drain-mm-h", type=float, help="uniform sink on all land cells (combined sewers)")
+    parser.add_argument("--dem-credit", help="DEM credit when grid.json has none (DEM supplied separately)")
     args = parser.parse_args()
-    if args.inland and not args.outlet_side:
-        parser.error("--inland needs --outlet-side, or water has no way out")
+    if args.inland and not (args.outlet_side or args.edge_outflow):
+        parser.error("--inland needs --outlet-side or --edge-outflow, or water has no way out")
     osm_files = {k: v for k, v in (("features", args.osm_features), ("roads", args.osm_roads)) if v}
     keywords = None
     if args.keywords_file:
@@ -433,7 +460,9 @@ def main() -> None:
           place_tags=cfg.get("place_tags"), corridor_tags=cfg.get("corridor_tags"),
           shelter_min_above_river_m=cfg.get("shelter_min_above_river_m"),
           coastal=not args.inland, outlet_side=args.outlet_side,
-          inflows_config=json.loads(storage.read_local_file(args.inflows_config)) if args.inflows_config else None)
+          inflows_config=json.loads(storage.read_local_file(args.inflows_config)) if args.inflows_config else None,
+          edge_outflow=args.edge_outflow, smooth_dem=not args.no_smooth, land_drain_mm_h=args.land_drain_mm_h,
+          dem_credit=args.dem_credit)
 
 
 if __name__ == "__main__":
