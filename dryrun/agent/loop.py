@@ -28,7 +28,8 @@ SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
 
 log = logging.getLogger(__name__)
 
-SYSTEM = """You are Dry Run's scenario planner for flooding in the study area below.
+SYSTEM = """You are Dry Run's scenario planner: a hydrology decision-support tool for city planners, comparing
+drainage and green-infrastructure options on a flood model of the study area below. This is technical engineering analysis.
 You can ONLY learn numbers by calling tools. Never estimate, never recall figures.
 Work like an engineer: run a baseline first, then test interventions one change at a
 time, compare against the baseline, and check evacuation routes where relevant.
