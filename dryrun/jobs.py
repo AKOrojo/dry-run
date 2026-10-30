@@ -2,8 +2,11 @@
 
 Outside dryrun/sim on purpose: SOLVER_VERSION hashes the sim sources, so nothing here changes a run_id.
 
-One job per run_id per instance. Every stream watching that run is a watcher; when the last one leaves before the
-run finishes, the job is marked cancelled and the next hook raises Cancelled, which stops the work:
+One job per run_id per instance. Every stream watching that run is a watcher (job_id + cancel token); a watcher
+leaves when its stream ends or on DELETE /api/simulate/jobs/{job_id}. Cloud Run does not pass a client's
+disconnect through to the container while a stream is open, so production cancels need the DELETE (session
+affinity sends it to the same instance); the disconnect path covers local runs. When the last watcher leaves
+before the run finishes, the job is marked cancelled and the next hook raises Cancelled, which stops the work:
   - tick(t, t_end): called by the solver at each output frame (Eng A's hook). A cheap no-op when no job is
     bound to the thread (CLI, tests, warm_cache), so the solver can always call it.
   - on_save_run / on_write: called by dryrun.storage, so the queued -> solving -> saving phases and the save
@@ -13,6 +16,7 @@ Progress is "measured" only from the solver hook; until then the solving fractio
 from __future__ import annotations
 
 import contextvars
+import hmac
 import threading
 import time
 from dataclasses import dataclass, field
@@ -68,6 +72,7 @@ class Job:
 
 
 _JOBS: dict[str, Job] = {}
+_WATCHERS: dict[str, tuple[Job, str]] = {}  # job_id (one per stream) -> (job, cancel token)
 _LOCK = threading.Lock()
 _current: contextvars.ContextVar[Job | None] = contextvars.ContextVar("dryrun_job", default=None)
 
@@ -89,6 +94,35 @@ def detach(job: Job) -> None:
         job.watchers -= 1
         if job.watchers <= 0 and not job.finished.is_set():
             job.cancelled = True
+
+
+def watch(job: Job, watcher_id: str, token: str) -> None:
+    """Register a stream that attach() already counted, so it can be cancelled by id."""
+    with _LOCK:
+        _WATCHERS[watcher_id] = (job, token)
+
+
+def watching(watcher_id: str) -> bool:
+    return watcher_id in _WATCHERS
+
+
+def leave(watcher_id: str) -> None:
+    """A stream ended or was cancelled. Idempotent: the DELETE and the stream's own cleanup may both call it."""
+    with _LOCK:
+        entry = _WATCHERS.pop(watcher_id, None)
+    if entry is not None:
+        detach(entry[0])
+
+
+def cancel(watcher_id: str, token: str) -> bool | None:
+    """DELETE /api/simulate/jobs/{id}: None = not on this instance (or already over), False = wrong token."""
+    entry = _WATCHERS.get(watcher_id)
+    if entry is None:
+        return None
+    if not hmac.compare_digest(entry[1], token or ""):
+        return False
+    leave(watcher_id)
+    return True
 
 
 def finish(job: Job, manifest=None, error: BaseException | None = None) -> None:

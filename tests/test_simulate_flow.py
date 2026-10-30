@@ -116,3 +116,32 @@ def test_display_name_drops_the_version_only():
     assert storage.display_name("Lekki-Ajah, Lagos (v2)") == "Lekki-Ajah, Lagos"
     assert storage.display_name("Guadalupe River, Hunt to Kerrville (Texas)").endswith("(Texas)")
     assert storage.display_name("Queens, New York (Ida 2021)").endswith("(Ida 2021)")
+
+
+def test_cancel_by_id_needs_the_token_and_counts_watchers():
+    a, _ = jobs.attach("r_cancel", 3600, None, 10)
+    b, _ = jobs.attach("r_cancel", 3600, None, 10)
+    jobs.watch(a, "w1", "tok1")
+    jobs.watch(b, "w2", "tok2")
+    assert jobs.cancel("nope", "tok1") is None
+    assert jobs.cancel("w1", "tok2") is False and not a.cancelled
+    assert jobs.cancel("w1", "tok1") is True and not a.cancelled  # w2 still watching
+    jobs.leave("w1")  # the stream's own cleanup after a DELETE: idempotent
+    assert not a.cancelled and jobs.watching("w2")
+    assert jobs.cancel("w2", "tok2") is True and a.cancelled
+    jobs.finish(a)
+
+
+def test_cancel_route(client):
+    assert client.delete("/api/simulate/jobs/nope", headers={"X-Cancel-Token": "x"}).status_code == 404
+    job, _ = jobs.attach("r_route", 3600, None, 10)
+    jobs.watch(job, "wr", "right")
+    assert client.delete("/api/simulate/jobs/wr", headers={"X-Cancel-Token": "wrong"}).status_code == 403
+    r = client.delete("/api/simulate/jobs/wr", headers={"X-Cancel-Token": "right"})
+    assert r.status_code == 202 and r.json() == {"cancelled": True} and job.cancelled
+    jobs.finish(job)
+
+
+def test_started_carries_a_cancel_token(client):
+    evs = events(client.post("/api/simulate/stream", json=spec(43)).text)
+    assert len(evs[0]["data"]["cancel_token"]) >= 16

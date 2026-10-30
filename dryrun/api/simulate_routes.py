@@ -4,14 +4,17 @@ POST /api/simulate/estimate  ScenarioSpec ->
     {run_id, cached, status: done|running|failed|none, est_s, est_basis: cached|speed_model|history|null, t_end_s,
      output_interval_s, frames_total}
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
-    started   {job_id, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}  always first
+    started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
     progress  {phase: queued|solving|saving, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}  ~1/s
     done      {manifest}                                              terminal
     cancelled {reason}                                                terminal
     error     {code, message, retryable}                              terminal
-Cancel = close the stream (AbortController). Viewers of one run_id share one job, and the work stops when the last
-one leaves. A stream, not start-and-poll: Cloud Run gives CPU only while a request is open, and the stream's own
-connection always reaches the instance doing the work (a DELETE could land on another instance).
+DELETE /api/simulate/jobs/{job_id}  X-Cancel-Token: <cancel_token>  -> 202 {cancelled: true} | 403 | 404
+Cancel = DELETE, then close the stream (AbortController). Cloud Run does not pass a client disconnect through to
+the container while the stream is open, so closing alone does not stop work in production; session affinity sends
+the DELETE to the instance holding the job, and a 404 means the job already ended there. Viewers of one run_id share
+one job, and the work stops when the last one leaves. A stream, not start-and-poll: Cloud Run gives CPU only while a
+request is open.
 POST /api/simulate (synchronous) is unchanged for the agent and older clients.
 """
 from __future__ import annotations
@@ -20,12 +23,13 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import statistics
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from dryrun import jobs, storage
@@ -145,21 +149,25 @@ async def stream(spec: ScenarioSpec, request: Request):
     limit(request, "simulate", per_hour=60)  # the same budget as POST /api/simulate
     await asyncio.to_thread(_validate, spec)
     est = await asyncio.to_thread(estimate_for, spec)
-    job_id = uuid.uuid4().hex[:12]
+    job_id, cancel_token = uuid.uuid4().hex[:12], secrets.token_urlsafe(16)
 
     async def sse():
         keys = ("run_id", "cached", "est_s", "est_basis", "t_end_s", "output_interval_s", "frames_total")
-        started = {"job_id": job_id, **{k: est[k] for k in keys}}
+        started = {"job_id": job_id, "cancel_token": cancel_token, **{k: est[k] for k in keys}}
         yield _event("started", started)
         if est["cached"]:
             m = await asyncio.to_thread(storage.load_run, est["run_id"])
             yield _event("done", {"manifest": json.loads(m.model_dump_json())})
             return
         job, created = jobs.attach(est["run_id"], est["t_end_s"], est["est_s"], _writes_total(est["frames_total"]))
+        jobs.watch(job, job_id, cancel_token)
         try:
             if created:
                 _WORK.submit(_work, job, spec)
             while not job.finished.is_set():
+                if not jobs.watching(job_id):  # this viewer cancelled (DELETE)
+                    yield _event("cancelled", {"reason": "cancelled by this client"})
+                    return
                 yield _event("progress", job.progress())
                 if await request.is_disconnected():
                     return
@@ -174,7 +182,18 @@ async def stream(spec: ScenarioSpec, request: Request):
                 yield _event("error", {"code": "simulate_failed", "retryable": True,
                                        "message": "The simulation failed. Try again, or change the storm."})
         finally:  # runs on normal end, on disconnect (CancelledError) and on errors
-            jobs.detach(job)
+            jobs.leave(job_id)
 
     return StreamingResponse(sse(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.delete("/jobs/{job_id}", status_code=202)
+def cancel_job(job_id: str, request: Request, x_cancel_token: str = Header("")):
+    limit(request, "simulate_cancel", per_hour=600)
+    ok = jobs.cancel(job_id, x_cancel_token)
+    if ok is None:
+        raise HTTPException(404, "no running job with that id on this instance (it may already have ended)")
+    if ok is False:
+        raise HTTPException(403, "wrong cancel token")
+    return {"cancelled": True}
