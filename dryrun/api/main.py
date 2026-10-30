@@ -286,14 +286,33 @@ def aoi_vector_layer(aoi_id: str, layer: str):
     _check_aoi(aoi_id)
     """Vector layers for the globe. Large footprint sets may instead be served gzipped from the
     public bucket or Cesium ion (see doc 04)."""
-    if layer not in {"buildings_geojson", "shelters", "places"}:
+    if layer not in {"buildings_geojson", "shelters", "places", "inflows"}:
         raise HTTPException(404, "not a public vector layer")
     m = storage.load_aoi(aoi_id)
     rel = m.layers.get(layer)
+    if layer == "inflows" and rel:
+        return Response(json.dumps(_inflows_geojson(m, json.loads(storage.load_aoi_file(aoi_id, layer)))),
+                        media_type="application/geo+json", headers={"Cache-Control": "public, max-age=3600"})
     if not rel or not rel.endswith(".geojson"):
         raise HTTPException(404, f"{layer} has no GeoJSON form for this AOI")
     return Response(storage.load_aoi_file(aoi_id, layer), media_type="application/geo+json",
                     headers={"Cache-Control": "public, max-age=3600"})
+
+
+def _inflows_geojson(m, raw: dict) -> dict:
+    """River sources as points: the mean centre of each source's entry cells, plus its gauge hydrograph
+    ([t_s, m3/s] from t0_utc) for the UI's sparkline. Cell (r, c) spans [r, r+1) x [c, c+1) from the NW corner."""
+    w, s_, e, n = m.grid.bounds_wgs84
+    feats = []
+    for src in raw.get("sources", []):
+        rows, cols = zip(*src["cells"])
+        lon = w + (sum(cols) / len(cols) + 0.5) / m.grid.nx * (e - w)
+        lat = n - (sum(rows) / len(rows) + 0.5) / m.grid.ny * (n - s_)
+        feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(lon, 6), round(lat, 6)]},
+                      "properties": {"name": src["name"], "gauges": sorted(src.get("gauges", {})),
+                                     "hydrograph": src["hydrograph"], "units": "m3/s"}})
+    return {"type": "FeatureCollection", "features": feats,
+            "properties": {"t0_utc": raw.get("t0_utc"), "note": raw.get("note", "")}}
 
 
 @app.get("/api/runs/{run_id}/derived/{name}")
