@@ -208,7 +208,7 @@ function KeyEvents({ events, nowS }: { events: Ev[]; nowS: number }) {
             <li key={e.kind} onClick={() => clock.set({ t_s: e.t, playing: false })}
               style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 32, padding: "0 12px 0 14px", cursor: "pointer",
                 ...(on ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--danfo), inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft)" } : {}), ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
-              <Glyph kind={e.kind} muted={fut} /><span style={on ? { fontWeight: 600 } : undefined}>{e.label}</span>
+              <Glyph kind={e.kind} muted={fut} /><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...(on ? { fontWeight: 600 } : {}) }}>{e.label}</span>
               <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(e.t)}</span>
             </li>
           );

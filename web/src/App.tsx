@@ -74,7 +74,6 @@ export default function App() {
         <div className="dr-map">
           {aoi && <MapStage aoi={aoi} run={run} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
           <div className="dr-badges">
-            {!!frames?.length && <ProvenanceBadge kind={run?.backend === "fake" ? "placeholder" : "simulated"} />}
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
