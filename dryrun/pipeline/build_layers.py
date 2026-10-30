@@ -341,6 +341,9 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
             ob = f"Google Open Buildings v3, CC BY 4.0; height {osm.DEFAULT_HEIGHT_M:g} m assumed"
             if building_source == "ms":
                 ob = "Microsoft Global ML Building Footprints, ODbL"
+            elif building_source == "nyc_footprints":
+                ob = ("NYC Open Data BUILDING footprints (5zhs-2jue), City of New York, NYC Open Data terms of use; "
+                      "height from HEIGHT_ROOF")
             vector_sources.update(buildings=ob, buildings_geojson=ob)
     layers.update(vector_layers)
     sources.update(vector_sources)
@@ -408,7 +411,7 @@ def main() -> None:
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--name")
     parser.add_argument("--keywords-file")
-    parser.add_argument("--building-source", choices=("open_buildings", "ms"), default="open_buildings")
+    parser.add_argument("--building-source", choices=("open_buildings", "ms", "nyc_footprints"), default="open_buildings")
     parser.add_argument("--debug-layers", action="store_true")
     parser.add_argument("--place-config", help="JSON: {keywords, place_aliases, place_tags, corridor_tags}")
     parser.add_argument("--inland", action="store_true", help="no sea: no JRC boundary (needs --outlet-side)")

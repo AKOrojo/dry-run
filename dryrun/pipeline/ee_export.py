@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -86,23 +87,42 @@ SOURCES = {
 }
 
 
-def grid_for_bbox(bbox_wgs84: tuple[float, float, float, float], step_arcsec: int = 1) -> tuple[GridSpec, tuple]:
-    """Cover a non-wrapping WGS84 bbox with cells snapped to step_arcsec multiples."""
-    if type(step_arcsec) is not int or step_arcsec < 1:
-        raise ValueError("step_arcsec must be a positive integer")
+def _step(value) -> Fraction:
+    if type(value) is Fraction and value > 0:
+        return value
+    if type(value) is not int or value < 1:
+        raise ValueError("step_arcsec must be a positive integer (or a Fraction for sub-arcsecond grids)")
+    return Fraction(value)
+
+
+def grid_for_bbox(bbox_wgs84: tuple[float, float, float, float], step_arcsec: int | Fraction = 1,
+                  lon_step_arcsec: int | Fraction | None = None) -> tuple[GridSpec, tuple]:
+    """Cover a non-wrapping WGS84 bbox with cells snapped to step_arcsec multiples.
+
+    step_arcsec is the cell height (and width unless lon_step_arcsec is given). Fractions give exact
+    sub-arcsecond grids, e.g. NYC at 10 m: Fraction(1, 3) high by Fraction(4, 9) wide (~10.3 x 10.4 m at 40.7 N).
+    """
+    sy = _step(step_arcsec)
+    sx = sy if lon_step_arcsec is None else _step(lon_step_arcsec)
     w, s, e, n = bbox_wgs84
     if not all(math.isfinite(v) for v in bbox_wgs84) or not (-180 <= w < e <= 180 and -90 <= s < n <= 90):
         raise ValueError("expected finite W S E N within WGS84, without antimeridian crossing")
-    west = math.floor(w * 3600 / step_arcsec)
-    north = math.ceil(n * 3600 / step_arcsec)
-    nx = math.ceil(e * 3600 / step_arcsec) - west
-    ny = north - math.floor(s * 3600 / step_arcsec)
-    bounds = tuple(v * step_arcsec / 3600 for v in (west, north - ny, west + nx, north))
-    step = step_arcsec / 3600
-    dx = step * 111320 * math.cos(math.radians((s + n) / 2))
-    dy = step * 110574
+    if sx.denominator == sy.denominator == 1:  # integer grids keep their float arithmetic (live metadata unchanged)
+        ix, iy = int(sx), int(sy)
+        west, north = math.floor(w * 3600 / ix), math.ceil(n * 3600 / iy)
+        nx, ny = math.ceil(e * 3600 / ix) - west, north - math.floor(s * 3600 / iy)
+        bounds = (west * ix / 3600, (north - ny) * iy / 3600, (west + nx) * ix / 3600, north * iy / 3600)
+        step_x, step_y = ix / 3600, iy / 3600
+    else:
+        fw, fs, fe, fn = (Fraction(str(v)) * 3600 for v in bbox_wgs84)  # exact decimal degrees, in arc-seconds
+        west, north = math.floor(fw / sx), math.ceil(fn / sy)
+        nx, ny = math.ceil(fe / sx) - west, north - math.floor(fs / sy)
+        bounds = tuple(float(v / 3600) for v in (west * sx, (north - ny) * sy, (west + nx) * sx, north * sy))
+        step_x, step_y = float(sx / 3600), float(sy / 3600)
+    dx = step_x * 111320 * math.cos(math.radians((s + n) / 2))
+    dy = step_y * 110574
     grid = GridSpec(nx=nx, ny=ny, dx_m=dx, dy_m=dy, cell_size_m=math.sqrt(dx * dy), bounds_wgs84=bounds)
-    return grid, (step, 0, bounds[0], 0, -step, bounds[3])
+    return grid, (step_x, 0, bounds[0], 0, -step_y, bounds[3])
 
 
 def source_urls(layer: str, bounds: tuple, country: str = "NGA") -> list[str]:
@@ -193,17 +213,22 @@ def resample_population(path: str, grid: GridSpec, transform: tuple) -> np.ndarr
 
 
 def download(aoi_id: str, bbox_wgs84: tuple[float, float, float, float], out_dir: str,
-             country: str = "NGA", step_arcsec: int = 1) -> dict:
-    """Write offline scratch files directly; these are not serving storage objects."""
+             country: str = "NGA", step_arcsec: int | Fraction = 1, lon_step_arcsec: int | Fraction | None = None,
+             skip: tuple[str, ...] = ()) -> dict:
+    """Write offline scratch files directly; these are not serving storage objects.
+
+    skip: layers another source provides on this grid (NYC: "dem" comes from Eng A's lidar resample)."""
     import rasterio
     from affine import Affine
 
-    grid, transform = grid_for_bbox(bbox_wgs84, step_arcsec)
+    grid, transform = grid_for_bbox(bbox_wgs84, step_arcsec, lon_step_arcsec)
     folder = Path(out_dir)
     folder.mkdir(parents=True, exist_ok=True)
     report = {"aoi_id": aoi_id, "layers": {}}
     sources = {}
     for layer in ("dem", "worldcover", "jrc_occurrence", "population"):
+        if layer in skip:
+            continue
         urls = source_urls(layer, grid.bounds_wgs84, country)
         fill = {"dem": np.nan, "worldcover": 0, "jrc_occurrence": 255, "population": 0}[layer]
         array = np.full((grid.ny, grid.nx), fill, np.float32)
@@ -232,7 +257,11 @@ def download(aoi_id: str, bbox_wgs84: tuple[float, float, float, float], out_dir
             sources[layer]["url"] = urls[0]
     metadata = {**grid.model_dump(mode="json"), "transform": transform, "sources": sources, "aoi_id": aoi_id}
     if step_arcsec != 1:  # absent means native; keep the live Lagos metadata byte-identical
-        metadata["step_arcsec"] = step_arcsec
+        metadata["step_arcsec"] = step_arcsec if type(step_arcsec) is int else str(step_arcsec)
+    if lon_step_arcsec is not None:
+        metadata["lon_step_arcsec"] = str(lon_step_arcsec)
+    if skip:
+        metadata["provided_elsewhere"] = list(skip)
     storage.write_local_file(folder / "grid.json", json.dumps(metadata, indent=2).encode())
     return report
 
@@ -271,16 +300,24 @@ def download_vectors(out_dir: str) -> dict[str, str]:
             for name, filename in (("buildings", "103b_buildings.csv.gz"), ("osm", "nigeria-latest.osm.pbf"))}
 
 
+def _cli_step(text: str) -> int | Fraction:
+    f = Fraction(text)
+    return int(f) if f.denominator == 1 else f
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--aoi-id", required=True)
     parser.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("W", "S", "E", "N"))
     parser.add_argument("--out", required=True)
     parser.add_argument("--country", default="NGA")
-    parser.add_argument("--step-arcsec", type=int, default=1)
+    parser.add_argument("--step-arcsec", type=_cli_step, default=1, help="cell height in arc-seconds: 2 or 1/3")
+    parser.add_argument("--lon-step-arcsec", type=_cli_step, default=None, help="cell width, if not square in degrees")
+    parser.add_argument("--skip", nargs="*", default=[], choices=["dem", "worldcover", "jrc_occurrence", "population"])
     parser.add_argument("--vectors", action="store_true")
     args = parser.parse_args()
-    report = download(args.aoi_id, tuple(args.bbox), args.out, country=args.country, step_arcsec=args.step_arcsec)
+    report = download(args.aoi_id, tuple(args.bbox), args.out, country=args.country, step_arcsec=args.step_arcsec,
+                      lon_step_arcsec=args.lon_step_arcsec, skip=tuple(args.skip))
     if args.vectors:
         report["vectors"] = download_vectors(args.out)
     print(json.dumps(report, indent=2))

@@ -443,6 +443,26 @@ def _read_open_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]
                        "confidence": conf, "ring": list(geom.exterior.coords)}
 
 
+def _largest_exterior(geom: dict) -> tuple[float, float, float, list] | None:
+    """GeoJSON Polygon/MultiPolygon -> (area m2, centroid lon, lat, ring) of the largest exterior ring."""
+    polygons = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+    parts = []
+    for polygon in polygons:
+        ring = np.asarray(polygon[0], float)
+        # Shift before shoelace to avoid cancellation at large longitude/latitude.
+        origin = ring[0]
+        xy = ring - origin
+        cross = xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]
+        twice_area = cross.sum()
+        if twice_area == 0:
+            continue
+        centroid = ((xy + np.roll(xy, -1, axis=0)) * cross[:, None]).sum(0) / (3 * twice_area)
+        lon, lat = centroid + origin
+        area = abs(twice_area) / 2 * _m_per_deg_lon(lat) * M_PER_DEG_LAT
+        parts.append((area, float(lon), float(lat), ring.tolist()))
+    return max(parts, key=lambda p: p[0]) if parts else None
+
+
 def _read_ms_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
     """Read Microsoft newline GeoJSON, retaining the largest exterior of each footprint."""
     import gzip
@@ -456,24 +476,10 @@ def _read_ms_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
                 continue
             feature = json.loads(line)
             geom, props = feature["geometry"], feature.get("properties", {})
-            polygons = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
-            parts = []
-            for polygon in polygons:
-                ring = np.asarray(polygon[0], float)
-                # Shift before shoelace to avoid cancellation at large longitude/latitude.
-                origin = ring[0]
-                xy = ring - origin
-                cross = xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]
-                twice_area = cross.sum()
-                if twice_area == 0:
-                    continue
-                centroid = ((xy + np.roll(xy, -1, axis=0)) * cross[:, None]).sum(0) / (3 * twice_area)
-                lon, lat = centroid + origin
-                area = abs(twice_area) / 2 * _m_per_deg_lon(lat) * M_PER_DEG_LAT
-                parts.append((area, float(lon), float(lat), ring.tolist()))
-            if not parts:
+            part = _largest_exterior(geom)
+            if part is None:
                 continue
-            area, lon, lat, ring = max(parts, key=lambda p: p[0])
+            area, lon, lat, ring = part
             confidence = props.get("confidence", -1)
             if (confidence != -1 and confidence < MIN_CONFIDENCE) or area < MIN_AREA_M2 or not in_grid(grid, lon, lat):
                 continue
@@ -485,10 +491,42 @@ def _read_ms_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
             yield record
 
 
+# NYC BUILDING (5zhs-2jue) feature codes that stand on the ground and take floodwater. Dropped: parking (1000), gas
+# station canopies (1001), storage tanks (1002), placeholder triangles (1003), auxiliary structures (1004),
+# temporary structures (1005) and skybridges (2110).
+NYC_KEEP_CODES = {"2100", "5110", "5100", "1006"}  # building, garage, under construction, cantilevered
+FT_TO_M = 0.3048
+
+
+def _read_nyc_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
+    """NYC Open Data BUILDING footprints as GeoJSON (Socrata export): id from DOITT_ID (BINs repeat: "million
+    BINs"), height_m from HEIGHT_ROOF (US ft above ground; 0/NULL = unknown, so the default height applies)."""
+    from dryrun import storage
+
+    for path in paths:
+        for feature in json.loads(storage.read_local_file(path))["features"]:
+            props, geom = feature.get("properties") or {}, feature.get("geometry")
+            if geom is None or str(props.get("feature_code")) not in NYC_KEEP_CODES:
+                continue
+            part = _largest_exterior(geom)
+            if part is None:
+                continue
+            area, lon, lat, ring = part
+            if area < MIN_AREA_M2 or not in_grid(grid, lon, lat):
+                continue
+            record = {"id": f"nyc-{props['doitt_id']}", "lon": lon, "lat": lat, "area_m2": area, "confidence": -1,
+                      "ring": ring}
+            height_ft = float(props.get("height_roof") or 0)
+            if height_ft > 0:
+                record["height_m"] = round(height_ft * FT_TO_M, 2)
+            yield record
+
+
 def building_reader(source: str):
-    if source not in {"open_buildings", "ms"}:
+    readers = {"open_buildings": _read_open_buildings, "ms": _read_ms_buildings, "nyc_footprints": _read_nyc_buildings}
+    if source not in readers:
         raise ValueError(f"unknown building source: {source}")
-    return _read_ms_buildings if source == "ms" else _read_open_buildings
+    return readers[source]
 
 
 def _fetch_shelter_candidates(grid: GridSpec, features_xml: str | None = None) -> list[dict]:

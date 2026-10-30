@@ -237,3 +237,26 @@ def test_coarse_osm_helpers():
     np.testing.assert_allclose(places["All"], [
         (1 / 3600, 1 / 3600), (7 / 3600, 1 / 3600), (7 / 3600, 7 / 3600),
         (1 / 3600, 7 / 3600), (1 / 3600, 1 / 3600)])
+
+
+def test_nyc_footprints_reader(tmp_path):
+    grid, _ = ee_export.grid_for_bbox((-73.91, 40.72, -73.90, 40.73))
+    sq = lambda x, y, d=2e-4: [[[x, y], [x + d, y], [x + d, y + d], [x, y + d], [x, y]]]  # noqa: E731
+    feats = [
+        {"type": "Feature", "properties": {"doitt_id": "1", "feature_code": "2100", "height_roof": "33.0"},
+         "geometry": {"type": "MultiPolygon", "coordinates": [sq(-73.905, 40.725)]}},
+        {"type": "Feature", "properties": {"doitt_id": "2", "feature_code": "5110", "height_roof": "0"},
+         "geometry": {"type": "Polygon", "coordinates": sq(-73.904, 40.725)}},
+        {"type": "Feature", "properties": {"doitt_id": "3", "feature_code": "1001", "height_roof": "15"},  # canopy
+         "geometry": {"type": "Polygon", "coordinates": sq(-73.903, 40.725)}},
+        {"type": "Feature", "properties": {"doitt_id": "4", "feature_code": "2100", "height_roof": "20"},  # outside
+         "geometry": {"type": "Polygon", "coordinates": sq(-73.80, 40.725)}},
+    ]
+    path = tmp_path / "nyc.geojson"
+    storage.write_local_file(path, json.dumps({"type": "FeatureCollection", "features": feats}).encode())
+    recs = list(osm.building_reader("nyc_footprints")(grid, [str(path)]))
+    assert [r["id"] for r in recs] == ["nyc-1", "nyc-2"]
+    assert recs[0]["height_m"] == round(33 * 0.3048, 2) and "height_m" not in recs[1]
+    index, geo = osm.buildings_layers(grid, recs)
+    assert index["ids"] == ["nyc-1", "nyc-2"]
+    assert geo["features"][1]["properties"]["height_m"] == osm.DEFAULT_HEIGHT_M

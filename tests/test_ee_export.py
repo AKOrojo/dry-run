@@ -127,3 +127,20 @@ def test_fetch_resume_and_skip(tmp_path, monkeypatch, honour_range):
     assert path.read_bytes() == b'abcdef'
     ee.fetch_file('https://example.test/vector', str(path))
     assert [request.method for request in requests] == ['HEAD', 'GET', 'HEAD']
+
+
+def test_sub_arcsecond_grid_is_exact():
+    from fractions import Fraction
+
+    grid, transform = ee.grid_for_bbox((-73.905, 40.720, -73.846, 40.765), Fraction(1, 3), Fraction(4, 9))
+    assert (grid.nx, grid.ny) == (479, 486)
+    w, s, e, n = grid.bounds_wgs84
+    assert w <= -73.905 and s <= 40.720 and e >= -73.846 and n >= 40.765
+    assert transform[0] == pytest.approx(4 / 9 / 3600) and transform[4] == pytest.approx(-1 / 3 / 3600)
+    assert (e - w) / transform[0] == pytest.approx(grid.nx) and (n - s) / -transform[4] == pytest.approx(grid.ny)
+    assert 10 < grid.dx_m < 10.6 and 10 < grid.dy_m < 10.6
+
+
+def test_float_steps_are_rejected():
+    with pytest.raises(ValueError, match="positive integer"):
+        ee.grid_for_bbox((0, 0, 1, 1), 0.5)
