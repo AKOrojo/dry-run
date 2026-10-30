@@ -50,9 +50,9 @@ function niceMax(v: number) {
 }
 const tickLabel = (v: number) => String(+v.toFixed(2));
 
-function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, events = [], ymaxMin = 0 }: {
+function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, baseline, events = [], ymaxMin = 0 }: {
   series: number[]; color: string; playI: number; tTotal: number; width: number; aria: string; gid: string;
-  threshold?: [number, string]; events?: Ev[]; ymaxMin?: number;
+  threshold?: [number, string]; baseline?: [number, string]; events?: Ev[]; ymaxMin?: number;
 }) {
   const W = width, H = 104, L = 32, R = 6, T = 8, B = 20;
   const pw = W - L - R, ph = H - T - B, base = T + ph;
@@ -87,6 +87,13 @@ function Chart({ series, color, playI, tTotal, width, aria, gid, threshold, even
         <path d={path(fut)} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.6" />
         <path d={path(past)} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" />
       </>}
+      {baseline && (
+        // Level an intervention sets from t=0 (roads a planned pond closes): danfo, so the rise above it reads as flooding.
+        <g>
+          <line x1={L} y1={Y(baseline[0])} x2={W - R} y2={Y(baseline[0])} stroke="var(--danfo)" strokeWidth="1" strokeDasharray="2 2" />
+          <text x={W - R} y={Y(baseline[0]) - 4} textAnchor="end" fill="var(--danfo-text)" fontSize="10">{baseline[1]}</text>
+        </g>
+      )}
       {threshold && (
         <g>
           <line x1={L} y1={Y(threshold[0])} x2={W - R} y2={Y(threshold[0])} stroke="var(--hazard)" strokeWidth="1" strokeDasharray="4 3" />
@@ -236,6 +243,8 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
   const { events: serverEvents } = useExtras();
   const srv = serverEvents && serverEvents.run_id === run?.run_id ? serverEvents : null;
   const events = useMemo(() => (ts && ts.t_s.length > 1 ? deriveEvents(ts, rainStopS, srv) : []), [ts, rainStopS, srv]);
+  const pond = srv?.events.find((e) => e.kind === "pond_closure");
+  const pondKm = pond ? (pond.road_km ?? ts?.road_km_impassable[0] ?? null) : null;
   const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
   if (!ts || ts.t_s.length < 2) {
     return <div style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
@@ -253,7 +262,7 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
           <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
             aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />
-          <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} {...common}
+          <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
             aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />
           <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map"
             color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />

@@ -118,7 +118,7 @@ export async function* askAgent(question: string, provider = "meta", aoi_id?: st
 
 // ---- rev 5 read-only data endpoints. Each resolves to null when the server does not have it (404 while deploying). ----
 export type RunEvent = {
-  event: string; kind: "pond_closure" | "first_cut" | "cut_jump" | "peak_area"; t_s: number; t: string | null; count?: number; flooded_area_km2?: number;
+  event: string; kind: "pond_closure" | "first_cut" | "cut_jump" | "peak_area"; t_s: number; t: string | null; count?: number; road_km?: number; flooded_area_km2?: number;
   point: [number, number] | null; place: string | null; new_cuts_by_place?: Record<string, number>; place_flooded_km2?: number;
 };
 export type EventPlace = {
