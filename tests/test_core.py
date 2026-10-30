@@ -1,5 +1,6 @@
 """Core tests that must stay green on main. Eng A adds tests/test_solver.py (see solver.py docstring)."""
 
+import json
 import os
 
 import pytest
@@ -303,7 +304,7 @@ def test_derived_maps_from_stored_frames():
     assert np.nanmin(arr) == first / 60
     assert np.nanmax(dur) <= m.frames[-1].t_s / 60 and np.nanmin(dur) >= 0
     derived.derive(m.run_id)
-    for kind in derived.KINDS:
+    for kind in derived.MAPS:
         img = np.array(Image.open(_io.BytesIO(storage.read_run_file(m.run_id, derived.rel(kind, "png")))))
         assert img.shape[:2] == arr.shape and img.shape[2] == 4
         assert ((img[..., 3] > 0) == ~np.isnan(arr)).all()
@@ -327,3 +328,63 @@ def test_derived_route():
     assert r.status_code == 302 and r.headers["location"].endswith(f"{m.run_id}/derived/arrival.png")
     r = c.get(f"/api/runs/{m.run_id}/derived/duration.json", follow_redirects=False)
     assert r.headers["location"].endswith("derived/duration.json")
+
+
+def test_events_series_boundary():
+    import numpy as np
+
+    from dryrun import derived
+    from dryrun.sim import exposure
+
+    m = run_scenario(spec())
+    ev = derived.events(m.run_id)
+    kinds = {e["kind"]: e for e in ev["events"]}
+    ts = m.timeseries
+    if any(ts.edges_cut):
+        first = kinds["first_cut"]
+        assert first["t_s"] == ts.t_s[next(i for i, c in enumerate(ts.edges_cut) if c)]
+        assert first["count"] == next(c for c in ts.edges_cut if c)  # engine count, not the float16 recount
+    peak = kinds["peak_area"]
+    assert peak["flooded_area_km2"] == max(ts.flooded_area_km2) and "deepest" not in json.dumps(ev)
+    for p in ev["places"]:
+        if p["ten_pct_wet_s"] is not None:
+            assert p["ten_pct_wet_s"] in ts.t_s
+    s = derived.series(m.run_id, *ev["places"][0]["label_point"])
+    assert s["t_s"] == ts.t_s and len(s["depth_m"]) == len(ts.t_s)
+    assert s["max_depth_m"] == max(s["depth_m"])
+    if s["first_flooded_s"] is not None:
+        assert s["depth_m"][s["t_s"].index(s["first_flooded_s"])] >= exposure.FLOODED_M
+    with pytest.raises(ValueError):
+        derived.series(m.run_id, 0.0, 0.0)
+    # outline tracing: a lone cell is one closed square; a block on the grid edge is an open line
+    one = np.zeros((3, 3), bool)
+    one[1, 1] = True
+    (ring,) = derived._trace(one)
+    assert ring[0] == ring[-1] and len(ring) == 5
+    edge = np.zeros((4, 4), bool)
+    edge[:, :2] = True
+    (line,) = derived._trace(edge)
+    assert line[0] != line[-1] and {p[1] for p in line} == {2}
+    b = json.loads(derived.boundary_geojson(fixtures.AOI_ID))
+    assert b["type"] == "FeatureCollection"
+
+
+def test_events_series_boundary_routes():
+    from fastapi.testclient import TestClient
+
+    from dryrun import derived
+    from dryrun.api.main import app
+
+    m = run_scenario(spec())
+    c = TestClient(app)
+    r = c.get(f"/api/runs/{m.run_id}/derived/events.json", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"].endswith("derived/events.json")
+    assert c.get(f"/api/runs/{m.run_id}/derived/events.png").status_code == 404
+    assert all(derived.exists(m.run_id, k) for k in derived.KINDS)
+    lon, lat = json.loads(storage.read_run_file(m.run_id, "derived/events.json"))["places"][0]["label_point"]
+    r = c.get(f"/api/runs/{m.run_id}/series", params={"lon": lon, "lat": lat})
+    assert r.status_code == 200 and len(r.json()["depth_m"]) == len(m.frames)
+    assert c.get(f"/api/runs/{m.run_id}/series", params={"lon": 0, "lat": 0}).status_code == 400
+    assert c.get(f"/api/runs/{m.run_id}/series", params={"lon": "nan", "lat": lat}).status_code == 400
+    r = c.get(f"/api/aoi/{fixtures.AOI_ID}/boundary.geojson")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/geo+json")
