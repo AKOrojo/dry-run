@@ -11,6 +11,8 @@ import { fmtT } from "./ds";
 import { depthByPlace, hyetograph, isCell, useRain } from "../lib/rain";
 import { RainNow } from "./RainNow";
 import { useWeatherSource } from "../lib/weather";
+import { useLayers } from "../lib/layers";
+import { LoadsPanel, ProfileDock } from "./FlowHazard";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
@@ -384,6 +386,7 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   const { t_s, playing, speed } = useClock();
   const ts = run?.timeseries ?? null;
   const rainStopS = (run?.scenario.storm.duration_h ?? 3) * 3600;
+  const lay = useLayers();
   const { events: serverEvents } = useExtras();
   const srv = serverEvents && serverEvents.run_id === run?.run_id ? serverEvents : null;
   const events = useMemo(() => (ts && ts.t_s.length > 1 ? deriveEvents(ts, rainStopS, srv) : []), [ts, rainStopS, srv]);
@@ -412,16 +415,16 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
     <div data-tour="timeline" style={shell}>
       <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
         <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
+        {lay.profile.on && !ghost ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
           <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
             aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />
           <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
             aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />
           {third ?? <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map"
             color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />}
-        </div>
+        </div>}
       </div>
-      {side ?? (rainNow && wsrc?.live ? rainNow : rainNow
+      {side ?? (lay.loads.on && !ghost ? <LoadsPanel /> : rainNow && wsrc?.live ? rainNow : rainNow
         ? <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
             {rainNow}<KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />
           </div>

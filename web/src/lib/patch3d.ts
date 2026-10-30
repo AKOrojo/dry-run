@@ -109,7 +109,8 @@ async function decodeCanvas(buf: ArrayBuffer): Promise<{ w: number; h: number; r
   return { w: c.width, h: c.height, rgba: new Uint8Array(g.getImageData(0, 0, c.width, c.height).data.buffer) };
 }
 const pngCache = new Map<string, Promise<{ w: number; h: number; rgba: Uint8Array }>>();
-function decodePng(url: string) {
+/** Exact RGBA of a PNG, cached by url (non-premultiplied: velocity frames keep data under alpha 0). */
+export function decodePng(url: string) {
   let p = pngCache.get(url);
   if (!p) {
     p = fetch(url).then((r) => { if (!r.ok) throw new Error(`${r.status} ${url}`); return r.arrayBuffer(); })

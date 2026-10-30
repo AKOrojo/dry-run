@@ -26,6 +26,8 @@ import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
+import { FlowHazardMap, FlowLegend } from "./FlowHazard";
+import { flowStore } from "../lib/flowhazard";
 import { Anchored } from "./Anchored";
 import { CloudsRain } from "./CloudsRain";
 import { CoordChip } from "./CoordChip";
@@ -479,7 +481,7 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
   const e = legend.edges_min;
   const labels = legend.alphas.map((_, i) => i === 0 ? `≤${e[0]} min` : i < e.length ? `${e[i - 1]}–${e[i]}` : `>${e[e.length - 1]}`);
   return (
-    <div className="ft-legend" style={{ position: "absolute", left: 16, bottom: "var(--map-arrival-legend-bottom, 188px)", pointerEvents: "auto", boxShadow: "var(--shadow-float)" }}>
+    <div className="ft-legend" style={{ pointerEvents: "auto", boxShadow: "var(--shadow-float)" }}>
       <span className="ft-stat-label">Time to flood</span>
       <div style={{ display: "flex", border: "var(--stroke-hairline) solid var(--hairline)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
         {legend.alphas.map((a, i) => <span key={i} style={{ width: 52, height: 14, background: `color-mix(in srgb, var(--hazard) ${Math.round(a * 100)}%, transparent)` }} />)}
@@ -689,7 +691,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       const c = Cesium.Cartographic.fromCartesian(p);
       return { lon: Cesium.Math.toDegrees(c.longitude), lat: Cesium.Math.toDegrees(c.latitude) };
     };
-    const hoverAllowed = () => modeRef.current !== "free" && !flyPlayingRef.current && !drawRef.current.drawing && !rainStore.get().picking;
+    const hoverAllowed = () => !flowStore.get().drawing && modeRef.current !== "free" && !flyPlayingRef.current && !drawRef.current.drawing && !rainStore.get().picking;
     const process = async () => {
       timer = undefined;
       const cur = cursor.current;
@@ -1166,12 +1168,14 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         )}
 
         <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
-        {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
         {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} />}
+        {/* One bottom-left slot for every map legend, stacked so they never overlap. */}
+        <div data-declutter-block style={{ position: "absolute", left: 16, bottom: viewState.coords ? 84 : 44, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
+          {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rs.visible && rs.preview && (
-          <div className="ft-legend" style={{ position: "absolute", left: 16, bottom: viewState.coords ? 84 : 44, pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
+          <div className="ft-legend" style={{ pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
             <span className="ft-stat-label">Rain over the storm</span>
             <span style={{ width: 168, height: 10, borderRadius: "var(--radius-pill)", border: "var(--stroke-hairline) solid var(--hairline)",
               background: "linear-gradient(90deg, color-mix(in srgb, var(--depth-3) 6%, transparent), var(--depth-3))" }} />
@@ -1179,6 +1183,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               <span>0</span><span>{Math.round(rs.preview.vmax_mm / 2)}</span><span>{Math.round(rs.preview.vmax_mm)} mm</span></span>
           </div>
         )}
+          <FlowLegend runId={run?.status === "done" ? run.run_id : undefined} />
+        </div>
+        <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />
 
         {place && (
           <div style={{ position: "absolute", left: "50%", bottom: 74, transform: "translateX(-50%)", display: "flex", flexDirection: "column", minWidth: 520, background: "var(--surface-raised)",

@@ -1,7 +1,7 @@
 // Map layer visibility and opacity, shared by the sidebar and the map stage.
 import { useSyncExternalStore } from "react";
 
-export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery" | "boundary" | "rain" | "closeups" | "weather";
+export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery" | "boundary" | "rain" | "closeups" | "flow" | "hazard" | "loads" | "profile" | "weather";
 export type LayerState = { on: boolean; opacity: number };
 export type ImageryMode = "colour" | "greyscale";
 /** Aerial: Bing imagery on World Terrain. Photoreal: Google Photorealistic 3D Tiles (via ion), water draped on it. */
@@ -31,6 +31,11 @@ let state: LayersState = {
   closeups: { on: true, opacity: 1 },
   /** Clouds and rain over the storm: always shown while a run simulates; "on" keeps them during playback of a finished run. */
   weather: { on: true, opacity: 1 },
+  /** Flow and hazard (board 9): flow arrows, AIDR flood hazard, loads on buildings, the depth profile along a drawn line. All off until asked for. */
+  flow: { on: false, opacity: 1 },
+  hazard: { on: false, opacity: 1 },
+  loads: { on: false, opacity: 1 },
+  profile: { on: false, opacity: 1 },
   imageryMode: "colour",
   basemap: "photoreal",
   aerial: "bing",

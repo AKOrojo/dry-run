@@ -6,6 +6,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
 import type { LevelSensitivity } from "../lib/api";
+import { FlowHazardCard } from "./FlowHazard";
 import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import type { AerialSource } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
@@ -454,7 +455,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       <Tabs tabs={comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS} active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
-        {tab === "Layers" && <LayersCard />}
+        {tab === "Layers" && <><LayersCard /><FlowHazardCard /></>}
         {tab === "Inspect" && inspect}
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (

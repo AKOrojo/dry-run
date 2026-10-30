@@ -38,7 +38,7 @@ export function buildingIndex(url: string) {
   return p;
 }
 
-const inRing = (lon: number, lat: number, ring: Ring) => {
+export const inRing = (lon: number, lat: number, ring: Ring) => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const [xi, yi] = ring[i], [xj, yj] = ring[j];
@@ -47,7 +47,7 @@ const inRing = (lon: number, lat: number, ring: Ring) => {
   return inside;
 };
 const placesCache = new Map<string, Promise<{ name: string; ring: Ring }[]>>();
-const placesOf = (aoiId: string) => {
+export const placesOf = (aoiId: string) => {
   let p = placesCache.get(aoiId);
   if (!p) {
     p = fetch(`${API}/api/aoi/${aoiId}/layer/places`).then((r) => (r.ok ? r.json() : { features: [] }))
