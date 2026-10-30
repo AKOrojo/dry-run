@@ -217,6 +217,30 @@ def health():
     return {"ok": True, "contract": CONTRACT_VERSION}
 
 
+# Old AOI id -> the id that replaces it. Old ids stay published (old runs, replays and ?run= links need them); the UI
+# sends an old ?aoi= without ?run= to the successor. A successor is only offered once it is published.
+AOI_SUCCESSORS = {"lagos-lekki-v1": "lagos-lekki-v3", "lagos-lekki-v2": "lagos-lekki-v3", "nyc-queens-v0": "nyc-queens-v1"}
+
+
+_SUCC_CACHE: tuple[float, dict[str, str]] = (0.0, {})
+
+
+def _aoi_successors() -> dict[str, str]:
+    """Cached for a minute: /api/config is on every page load, and an unpublished id would cost a storage miss."""
+    global _SUCC_CACHE
+    if time.time() - _SUCC_CACHE[0] < 60:
+        return _SUCC_CACHE[1]
+    out = {}
+    for old, new in AOI_SUCCESSORS.items():
+        try:
+            storage.load_aoi(new)
+        except Exception:  # noqa: BLE001 - not published yet
+            continue
+        out[old] = new
+    _SUCC_CACHE = (time.time(), out)
+    return out
+
+
 @app.get("/api/config")
 def config():
     return {"contract": CONTRACT_VERSION, "storage": storage.MODE,
@@ -237,7 +261,9 @@ def config():
             "google_tiles_available": bool(_secret("GOOGLE_TILES_KEY")),
             # Optional: large footprint file served gzipped from the public bucket (or ion). Empty = use
             # /api/aoi/{id}/layer/buildings_geojson.
-            "buildings_url": os.getenv("DRYRUN_BUILDINGS_URL", "")}
+            "buildings_url": os.getenv("DRYRUN_BUILDINGS_URL", ""),
+            # Superseded AOI ids -> their replacement (only published ones): follow it for ?aoi= links without ?run=.
+            "aoi_successors": _aoi_successors()}
 
 
 @app.get("/api/tiles/google-key")
