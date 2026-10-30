@@ -4,6 +4,8 @@
 // Delete them once gen/ exists and import from "../contracts/gen/..." instead.
 import { noteLockout } from "./lockout";
 import type { LockScope } from "./lockout";
+import type { DrainageDefault } from "../contracts/gen/AOIManifest";
+import type { Drainage } from "../contracts/gen/ScenarioSpec";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -35,19 +37,27 @@ export type ScenarioSpec = {
   sim_hours?: number; output_interval_min?: number; label?: string | null;
   /** "rain_area": simulate only the rain window (needs storm.spatial; not on AOIs with river inflows). */
   domain?: "aoi" | "rain_area";
+  /** Contract 0.8.0: the drainage system; omitted or null = the area's default (lib/drainage.ts). */
+  drainage?: Drainage | null;
 };
 export type FrameRef = { t_s: number; png: string; depth: string };
 export type RunStats = Record<string, number | boolean | string> & { run_id: string };
 export type RunManifest = {
   run_id: string; building_depths: string | null; intervention_cells: number[];
-  timeseries: { t_s: number[]; flooded_area_km2: number[]; road_km_impassable: number[]; edges_cut: number[] } | null; status: "queued" | "running" | "done" | "failed"; frames: FrameRef[];
+  timeseries: { t_s: number[]; flooded_area_km2: number[]; road_km_impassable: number[]; edges_cut: number[];
+    /** 0.8.0, null on legacy runs: share of the drain network running full (0-100), outfall and surcharge flow. */
+    drain_full_pct?: number[] | null; drain_outfall_m3_s?: number[] | null; surcharge_m3_s?: number[] | null } | null; status: "queued" | "running" | "done" | "failed"; frames: FrameRef[];
   max_depth_png: string | null; stats: RunStats | null; backend: "fake" | "solver" | "surrogate";
   colormap: { depth_m: number[] }; error: string | null; scenario: ScenarioSpec;
+  /** 0.8.0: run file with the per-frame fill of every drain line and sewer zone, and the run's limits (null on legacy runs). */
+  drain_fill?: string | null; drainage_limits?: string[] | null;
 };
 export type AOIManifest = {
   aoi_id: string; name: string; is_synthetic: boolean; layers?: Record<string, string>; sources?: Record<string, string>;
   /** True where Google Photorealistic 3D has real buildings; the twin then draws only flooded ones over the mesh. */
   photoreal_buildings?: boolean;
+  /** 0.8.0: the area's drainage system and design values; null on areas without a drain model (no Drainage card). */
+  drainage_default?: DrainageDefault | null;
   grid: { bounds_wgs84: [number, number, number, number]; nx: number; ny: number; cell_size_m: number };
 };
 export type AgentEvent = { kind: "thought" | "tool_call" | "tool_result" | "run_ready" | "brief" | "error" | "done"; data: any };

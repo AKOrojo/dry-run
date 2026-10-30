@@ -22,6 +22,8 @@ import { LockoutNote } from "./LockoutNote";
 import { useLockout } from "../lib/lockout";
 import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
+import { DrainageCard } from "./Drainage";
+import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
 import { GpuCard } from "./GpuCard";
@@ -68,6 +70,7 @@ const ARRIVAL_T = svgThumb(<><rect width="30" height="30" fill="var(--hazard)" o
 
 const RAIN_T = svgThumb(<><rect width="30" height="30" fill="var(--depth-3)" opacity=".18" /><circle cx="15" cy="15" r="9" fill="var(--depth-3)" opacity=".5" /><circle cx="15" cy="15" r="4" fill="var(--depth-3)" /><circle cx="15" cy="15" r="12" fill="none" stroke="var(--danfo)" strokeWidth="1.2" strokeDasharray="3 2" /></>);
 const CLOSEUP_T = svgThumb(<><rect x="6" y="6" width="18" height="18" fill="var(--depth-3)" opacity=".28" /><rect x="6" y="6" width="18" height="18" fill="none" stroke="var(--ink)" strokeWidth="1.2" strokeDasharray="3 2" /><rect x="12" y="11" width="7" height="7" fill="var(--ink-muted)" /></>);
+const DRAINS_T = svgThumb(<><path d="M-2 20 L32 12" stroke="var(--ground)" strokeWidth="6" /><path d="M-2 20 L32 12" stroke="var(--danfo)" strokeWidth="3.5" /><path d="M14 -2 L19 16" stroke="var(--depth-3)" strokeWidth="3" strokeDasharray="4 2.5" /><circle cx="14" cy="6" r="3" fill="var(--ground)" stroke="var(--ink)" strokeWidth="1.2" /></>);
 const BOUNDARY_T = svgThumb(<path d="M-2 21 C7 13 15 23 32 9" stroke="var(--depth-1)" strokeWidth="2" fill="none" opacity=".9" />);
 
 const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; note?: string }[] = [
@@ -84,6 +87,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "boundary", name: "Lagoon / sea edge", thumb: BOUNDARY_T },
   { key: "closeups", name: "3D close-ups", thumb: CLOSEUP_T, note: "Outlines" },
   { key: "weather", name: "Clouds and rain", thumb: RAIN_T, note: "While simulating" },
+  { key: "drains", name: "Drains", thumb: DRAINS_T, note: "How full" },
 ];
 
 const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit",
@@ -137,9 +141,10 @@ function LayersCard() {
   const rainSet = useRain().mode !== "whole";
   const patches = useCloseUp().patches;
   const hasCloseups = patches.length > 0;
+  const hasDrains = useDrainage().def != null;
   return (
     <section style={{ display: "flex", flexDirection: "column", flex: "none", padding: "4px 0", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
-      {ROWS.filter((r) => (r.key !== "boundary" || boundary) && (r.key !== "rain" || rainSet) && (r.key !== "closeups" || hasCloseups)).map((r) => {
+      {ROWS.filter((r) => (r.key !== "boundary" || boundary) && (r.key !== "rain" || rainSet) && (r.key !== "closeups" || hasCloseups) && (r.key !== "drains" || hasDrains)).map((r) => {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
@@ -557,6 +562,9 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
             <RainPreviewCard />
             <CardLock.Provider value={locked ? "Locked" : null}>
               {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} aoiId={aoi?.aoi_id} />}
+            </CardLock.Provider>
+            <CardLock.Provider value={locked ? "Locked" : null}>
+              {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
             <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
             {scenario.err && (

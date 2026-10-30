@@ -13,6 +13,7 @@ const ALL_STEPS = [
   { id: "scenario", title: "Set up a storm", body: "Choose rain total, duration and pattern, and the lagoon level on coastal areas." },
   { id: "rain", title: "Choose where it rains", body: "Place a storm cell, draw an area or pick a place, and see the rain before you simulate." },
   { id: "rain-domain", title: "Simulate just the rain area", body: "With a storm cell, drawn area or place, simulate only where it rains for a faster run. Outside that area is dimmed after the run." },
+  { id: "drainage", title: "Set the drains", body: "Choose the drain system, how much rain it takes, how blocked it is and where it empties; the Drains layer and the timeline then show it filling." },
   { id: "simulate", title: "Run the flood model", body: "Simulate runs the storm on the 30 m model and fills the map and timeline." },
   { id: "coords", title: "Watch the storm", body: "While it simulates, the cloud and rain follow your storm. The coordinates show where you point; type a lat, lon to go there." },
   { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
@@ -31,7 +32,7 @@ const ALL_STEPS = [
 ] as const;
 type Step = (typeof ALL_STEPS)[number];
 /** Steps whose anchor is only on the page sometimes (a run with a 3D close-up) are left out when it is not there. */
-const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d"]);
+const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d", "drainage"]);
 /** Steps whose card sits on another sidebar tab: the tour opens that tab (a click on this anchor) when it gets there. */
 const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers" };
 const stepsOnPage = (): readonly Step[] => ALL_STEPS.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.id}"]`) || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)));
@@ -87,6 +88,8 @@ export function Tour({ onClose }: { onClose: () => void }) {
       document.querySelector<HTMLElement>(`[data-tour="${via}"]`)?.click();
       requestAnimationFrame(() => requestAnimationFrame(() => { const t2 = findTarget(step.id); setTarget(t2); setPos(place(t2, cardRef.current?.offsetHeight ?? 190)); }));
     }
+    // A card low in the sidebar (Drainage, the Simulate bar) scrolls into view before it is measured.
+    document.querySelector<HTMLElement>(`[data-tour="${step.id}"]`)?.scrollIntoView({ block: "nearest" });
     const t = findTarget(step.id);
     setTarget(t);
     setPos(place(t, cardRef.current?.offsetHeight ?? 190));

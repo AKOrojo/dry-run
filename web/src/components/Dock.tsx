@@ -13,6 +13,8 @@ import { RainNow } from "./RainNow";
 import { useWeatherSource } from "../lib/weather";
 import { useLayers } from "../lib/layers";
 import { LoadsPanel, ProfileDock } from "./FlowHazard";
+import { drainNote, drainSeries, SideSwitch, WaterWent } from "./Drainage";
+import { drainStats, FULL_PCT } from "../lib/drainage";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
@@ -139,13 +141,18 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
   );
 }
 
-export function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest }: {
+export type ChartPick = { label: string; on: boolean; onPick: () => void };
+
+export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
   /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
   ab?: ReactNode;
+  /** The ⋮ button then picks which chart this slot shows. */
+  menu?: ChartPick[];
 } & Omit<React.ComponentProps<typeof Chart>, "series" | "width">) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
+  const [open, setOpen] = useState(false);
   const ch = ab ? 84 : 104;  // the A / B line takes the difference
   useEffect(() => {
     const el = ref.current;
@@ -159,7 +166,23 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
         <span style={{ fontWeight: 600 }}>{title}</span><span style={{ color: "var(--ink-muted)" }}>({unit})</span>
         {!ab && <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>}
-        <span style={{ display: "flex", alignSelf: "center", color: "var(--ink-muted)" }}><DotsThreeVertical size={14} weight="bold" /></span>
+        {menu ? (
+          <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
+            <button type="button" aria-label="Choose chart" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
+              onBlur={(e) => { if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setOpen(false); }}
+              style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}><DotsThreeVertical size={14} weight="bold" /></button>
+            {open && (
+              <span role="menu" style={{ position: "absolute", right: 0, top: 22, zIndex: 5, display: "flex", flexDirection: "column", padding: 4, background: "var(--surface-raised)",
+                border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)" }}>
+                {menu.map((m) => (
+                  <button key={m.label} type="button" role="menuitemradio" aria-checked={m.on} onClick={() => { m.onPick(); setOpen(false); }}
+                    style={{ height: 28, padding: "0 10px", textAlign: "left", whiteSpace: "nowrap", background: m.on ? "var(--ground)" : "transparent", border: 0, borderRadius: 3,
+                      color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: m.on ? 600 : 400, cursor: "pointer" }}>{m.label}</button>
+                ))}
+              </span>
+            )}
+          </span>
+        ) : <span style={{ display: "flex", alignSelf: "center", color: "var(--ink-muted)" }}><DotsThreeVertical size={14} weight="bold" /></span>}
       </figcaption>
       {ab}
       <div ref={ref} style={{ height: ch, position: "relative", minWidth: 0 }}>
@@ -258,7 +281,7 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
 
 const NOTE_MAX = 200;
 
-function KeyEvents({ events, nowS, runId }: { events: Ev[]; nowS: number; runId?: string }) {
+function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number; runId?: string; /** Before + Note in the band. */ extra?: ReactNode }) {
   const sel = [...events].reverse().find((e) => e.t <= nowS)?.id;
   const notes = useNotes(runId);
   const [draft, setDraft] = useState<{ t: number; text: string } | null>(null);
@@ -273,12 +296,12 @@ function KeyEvents({ events, nowS, runId }: { events: Ev[]; nowS: number; runId?
   const seek = (t: number) => clock.set({ t_s: t, playing: false });
   return (
     <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0, background: "var(--surface)" }}>
-      <Band title="Key events" right={
+      <Band title="Key events" right={<>{extra}
         <button type="button" data-tour="marks" disabled={!runId} title={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}
           onClick={() => { clock.set({ playing: false }); setDraft({ t: nowS, text: "" }); }}
           style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500,
             ...(runId ? {} : { opacity: 0.45, cursor: "not-allowed" }) }}>
-          <Plus size={12} weight="bold" />Note</button>} />
+          <Plus size={12} weight="bold" />Note</button></>} />
       {draft && (
         <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
           <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
@@ -385,6 +408,9 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   third?: ReactNode; side?: ReactNode; note?: string }) {
   const { t_s, playing, speed } = useClock();
   const ts = run?.timeseries ?? null;
+  // Drainage runs: the third chart can show the drain network, and the side panel where the water went (shown first).
+  const [thirdPick, setThirdPick] = useState<"drains" | "depth">("drains");
+  const [sidePick, setSidePick] = useState<"water" | "events">("water");
   const rainStopS = (run?.scenario.storm.duration_h ?? 3) * 3600;
   const lay = useLayers();
   const { events: serverEvents } = useExtras();
@@ -411,24 +437,36 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   const gts = ghost?.timeseries;
   const onB = (k: "flooded_area_km2" | "road_km_impassable") => (gts && gts.t_s.length > 1 ? ts.t_s.map((t) => gts[k][nearest(gts.t_s, t)]) : undefined);
   const gfa = onB("flooded_area_km2"), grk = onB("road_km_impassable");
+  const ds = !ghost ? drainSeries(ts) : null;
+  const menu = ds ? [{ label: "Drain network running full", on: thirdPick === "drains", onPick: () => setThirdPick("drains") },
+    { label: "Depth at selected point", on: thirdPick !== "drains", onPick: () => setThirdPick("depth") }] : undefined;
+  const water = !ghost && drainStats(run) != null;
+  const runKey = run?.status === "done" ? run.run_id : undefined;
+  const events$ = (extra?: ReactNode) => <KeyEvents events={events} nowS={t_s} runId={runKey} extra={extra} />;
+  const eventsOrWater = water && run && sidePick === "water" ? <WaterWent run={run} onEvents={() => setSidePick("events")} />
+    : events$(water ? <SideSwitch to="water" onClick={() => setSidePick("water")} /> : undefined);
   return (
     <div data-tour="timeline" style={shell}>
       <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
-        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note} />
+        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note ?? (!ghost ? drainNote(run) : undefined)} />
         {lay.profile.on && !ghost ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
           <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
             aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />
           <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
             aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />
-          {third ?? <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map"
-            color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />}
+          {third ?? (ds && thirdPick === "drains"
+            ? <ChartFigure last title="Drain network running full" unit="%" now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
+                color="var(--depth-3)" gid="dn" ymaxMin={100} threshold={[FULL_PCT, `Full ${FULL_PCT} %`]} {...common}
+                aria={`Share of the drain network running full over time; ${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} % at the playhead`} />
+            : <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
+                color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />)}
         </div>}
       </div>
       {side ?? (lay.loads.on && !ghost ? <LoadsPanel /> : rainNow && wsrc?.live ? rainNow : rainNow
         ? <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
-            {rainNow}<KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />
+            {rainNow}{eventsOrWater}
           </div>
-        : <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />)}
+        : eventsOrWater)}
     </div>
   );
 }

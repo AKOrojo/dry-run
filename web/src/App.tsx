@@ -30,6 +30,7 @@ import { CloseUpCards, CloseUpDock } from "./components/CloseUp";
 import { useCloseUp } from "./lib/patch3d";
 import type { Spatial } from "./lib/api";
 import { resetSim, setSim } from "./lib/simstate";
+import { adoptDrainage, drainageSpec, resetDrainage, useDrainage } from "./lib/drainage";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -133,12 +134,15 @@ export default function App() {
   // A loaded run (shared link, agent run, Compare pick) puts its storm and rain area back in the editor, so the area
   // matches what the run used and the water layers show instead of the preview. A run made by Simulate already matches.
   const justSimulated = useRef<string>();
+  // A new area starts from its own drainage default, untouched (declared before the run effect, which may then adopt the run's).
+  useEffect(() => { resetDrainage(aoi?.aoi_id ?? null, aoi?.drainage_default); }, [aoi?.aoi_id]);  // eslint-disable-line react-hooks/exhaustive-deps
   const adoptRun = (m: RunManifest) => {
     if (m.status !== "done" || m.scenario.aoi_id !== aoiId) return;
     const st = m.scenario.storm, pat = st.pattern ?? DEFAULT_PATTERN;
     setRain(st.total_mm); setDurationH(st.duration_h); setPattern(pat); setSimHours(m.scenario.sim_hours);
     patchRain(rainPatchOf(st.spatial));
     patchRain({ lastSimKey: stormKey(st.total_mm, st.duration_h, pat, spatialOf(rainStore.get()).spatial) });
+    adoptDrainage(m.scenario.drainage);
   };
   useEffect(() => {
     if (!run) return;
@@ -211,9 +215,10 @@ export default function App() {
   };
 
   const interventionsNow: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
+  const drainage = drainageSpec(useDrainage());
   const specNow: ScenarioSpec | null = aoi && rainReady
     ? { aoi_id: aoi.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions: interventionsNow,
-      ...(simHours != null ? { sim_hours: simHours } : {}),
+      ...(simHours != null ? { sim_hours: simHours } : {}), ...(drainage ? { drainage } : {}),
       ...(domainSwitchVisible(rainState, !!aoi.layers?.inflows) && rainState.domainOnly ? { domain: "rain_area" as const } : {}) } : null;
   const specKey = specNow ? JSON.stringify(specNow) : "";
   // The switch's note needs the rain-area window size whether or not it is on, so ask for that spec's estimate (free).

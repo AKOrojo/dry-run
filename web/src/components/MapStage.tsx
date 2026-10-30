@@ -27,6 +27,7 @@ import { clock } from "../lib/clock";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { FlowHazardMap, FlowLegend } from "./FlowHazard";
+import { DrainsLegend, DrainsMap } from "./Drainage";
 import { flowStore } from "../lib/flowhazard";
 import { Anchored } from "./Anchored";
 import { CloudsRain } from "./CloudsRain";
@@ -1194,7 +1195,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         )}
           <FlowLegend runId={run?.status === "done" ? run.run_id : undefined} />
+          {!closeUp.active && <DrainsLegend aoi={aoi} run={run} runsBase={runsBase} />}
         </div>
+        <DrainsMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} runsBase={runsBase} hidden={!!closeUp.active} />
         <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />
 
         {place && (
