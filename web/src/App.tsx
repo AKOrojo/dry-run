@@ -413,7 +413,7 @@ export default function App() {
       </div>
       {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
       <div style={{ display: view.sidebar ? "contents" : "none" }}>
-      <Sidebar aoi={aoi} run={mapRun} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
+      <Sidebar aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
           inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={

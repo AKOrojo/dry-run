@@ -22,6 +22,7 @@ const ALL_STEPS = [
   { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
   { id: "flow", title: "Read flow and hazard", body: "Turn on flow arrows, the AIDR hazard rating and loads on buildings, or draw a line to see depth along it." },
+  { id: "gpu3d", title: "3D on your GPU", body: "Solve a 3D close-up of any box on your own graphics card. Choose how much GPU memory to use; nothing is uploaded." },
   { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "plan", title: "Inspect a building", body: "Switch to the 2D plan view and click a building for its depths and the street beside it." },
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
@@ -30,9 +31,9 @@ const ALL_STEPS = [
 ] as const;
 type Step = (typeof ALL_STEPS)[number];
 /** Steps whose anchor is only on the page sometimes (a run with a 3D close-up) are left out when it is not there. */
-const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain"]);
+const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d"]);
 /** Steps whose card sits on another sidebar tab: the tour opens that tab (a click on this anchor) when it gets there. */
-const VIA: Record<string, string> = { flow: "layers" };
+const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers" };
 const stepsOnPage = (): readonly Step[] => ALL_STEPS.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.id}"]`) || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)));
 
 export function tourDone(): boolean {

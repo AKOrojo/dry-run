@@ -14,7 +14,7 @@ import { clock, useClock } from "../lib/clock";
 import { layers, setLayer, useLayers } from "../lib/layers";
 import { compassOf } from "../lib/rain";
 import {
-  PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, listPatches, loadPatch, setCloseUp, setShow, useCloseUp, volumeCaveat,
+  PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, listPatches, loadPatch, closeup, setCloseUp, setShow, useCloseUp, volumeCaveat,
 } from "../lib/patch3d";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
@@ -110,7 +110,8 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
   const scn = useRef<Scn | null>(null);
   const [ready, setReady] = useState(0);
   const saved = useRef<{ pos: Cesium.Cartesian3; dir: Cesium.Cartesian3; up: Cesium.Cartesian3; t_s: number; playing: boolean; water: boolean } | null>(null);
-  const row = patches.find((p) => p.patch_id === active);
+  const local = cu.local;
+  const row = local ? local.data.row : patches.find((p) => p.patch_id === active);
   const fi = data ? frameIndex(data.manifest, t_s) : 0;
 
   // ----- which patches this run has -----
@@ -125,7 +126,7 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
     const ink = cssColor("--ink");
-    const made = patches.filter((p) => lay.closeups.on || p.patch_id === active).map((p) => {
+    const made = (local ? [local.data.row] : patches.filter((p) => lay.closeups.on || p.patch_id === active)).map((p) => {
       const [w, s, e, n] = p.bounds_wgs84;
       return viewer.entities.add({ polyline: {
         positions: Cesium.Cartesian3.fromDegreesArray([w, s, e, s, e, n, w, n, w, s]), width: 2, clampToGround: true,
@@ -133,7 +134,7 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
       } });
     });
     return () => { if (!viewer.isDestroyed()) made.forEach((m) => viewer.entities.remove(m)); };
-  }, [viewer, patches, lay.closeups.on, active]);
+  }, [viewer, patches, lay.closeups.on, active, local]);
 
   // ----- entering and leaving: camera, clock, 2D water, credit, data -----
   useEffect(() => {
@@ -145,10 +146,10 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
     const [w, s, e, n] = row.bounds_wgs84, cx = (w + e) / 2, cy = (s + n) / 2;
     const h0 = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(cx, cy)) ?? 0;
     cam.flyToBoundingSphere(new Cesium.BoundingSphere(Cesium.Cartesian3.fromDegrees(cx, cy, h0), 70), { duration: 1.8, offset: new Cesium.HeadingPitchRange(HEADING, PITCH, 230) });
-    const credit = new Cesium.Credit("OpenFOAM");
+    const credit = new Cesium.Credit(local ? "Dry Run WebGPU" : "OpenFOAM");
     viewer.creditDisplay.addStaticCredit(credit);
     setCloseUp({ status: "loading", data: null, playing: false });
-    loadPatch(runsBase, runId ?? "", row, buildingsUrl).then((d) => {
+    (local ? Promise.resolve(local.data) : loadPatch(runsBase, runId ?? "", row, buildingsUrl)).then((d) => {
       if (off) return;
       setCloseUp({ data: d, status: "ready" });
       clock.set({ t_s: d.manifest.frames[firstSettledIndex(d.manifest, d.spinup_s)].t_s, playing: false });
@@ -163,8 +164,9 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
       }
       if (sv) { setLayer("water", { on: sv.water }); clock.set({ t_s: sv.t_s, playing: sv.playing }); }
       setCloseUp({ status: "idle", data: null, playing: false, fly: null });
+      if (local) { local.release(); if (closeup.get().local === local) setCloseUp({ local: null }); }  // a browser solve frees its frame blobs
     };
-  }, [viewer, active, row?.patch_id]);
+  }, [viewer, active, row?.patch_id, local]);
   useEffect(() => { if (active) setLayer("water", { on: show.twoD }); }, [active, show.twoD]);
   useEffect(() => {  // Esc leaves the close-up
     if (!active) return;
@@ -263,7 +265,7 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
   const settling = !!data && frameT - data.manifest.frames[0].t_s < data.spinup_s;
   const lmax = data ? legendMax(data) : 1;
   const pill: CSSProperties = { display: "flex", flexDirection: "column", gap: 1, padding: "5px 9px", background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", textAlign: "left", font: "inherit", color: "var(--ink)", whiteSpace: "nowrap" };
-  const chips = patches.filter((p) => (active ? p.patch_id === active : lay.closeups.on));
+  const chips = local ? [local.data.row] : patches.filter((p) => (active ? p.patch_id === active : lay.closeups.on));
   return (
     <>
       {chips.map((p) => {
@@ -272,7 +274,7 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
           <Anchored key={p.patch_id} anchors={anchors} scene={scene} lon={e} lat={active ? n : (n + p.bounds_wgs84[1]) / 2} dx={10} dy={-14}
             clamp={active ? undefined : CHIP_CLAMP}>
             {active ? (
-              <div style={pill}><span style={{ fontWeight: 600 }}>3D close-up</span>
+              <div style={pill}><span style={{ fontWeight: 600 }}>{p.label ?? "3D close-up"}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>{p.size_m} m box · {p.cell_m} m cells</span></div>
             ) : (
               <button type="button" data-tour="closeup" title="Open the 3D close-up" onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
@@ -284,11 +286,13 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
         );
       })}
       {active && data && show.forces && data.buildings.map((b, k) => {
+        // Under 0.5 kN reads as "0 kN": a big box has dozens of those, so only the arrow stays (the dock lists every building).
+        if (Math.round(b.kN) < 1) return null;
         const tip = scn.current?.tips[k] ?? [b.lon, b.lat];
         const em = emphasised(b, frameT);
         return (
           <Anchored key={b.id} anchors={anchors} scene={scene} lon={tip[0]} lat={tip[1]} dx={4} dy={-22}>
-            <span style={{ display: "block", padding: "1px 6px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", color: "var(--hazard)", borderRadius: "var(--radius-sm)",
+            <span data-declutter={em ? 4 : 1} style={{ display: "block", padding: "1px 6px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", color: "var(--hazard)", borderRadius: "var(--radius-sm)",
               border: em ? "1px solid var(--hazard)" : "1px solid transparent", fontSize: 11, lineHeight: "16px", fontWeight: 700, whiteSpace: "nowrap", ...FIG }}>{Math.round(b.kN)} kN</span>
           </Anchored>
         );
@@ -346,7 +350,7 @@ export function CloseUpCards() {
   }
   const m = data.manifest, w = m.t_window_s, cav = volumeCaveat(m.checks.volume_diff_end_pct);
   const dl: [string, string][] = [
-    ["Solver", m.solver.split(",")[0]],
+    ["Solver", m.solver.startsWith("Dry Run WebGPU") ? "Solved on your GPU" : m.solver.split(",")[0]],
     ["Driven by", "the 2D run at its edges"],
     ["Box", `${data.row.size_m} × ${data.row.size_m} m · ${data.row.cell_m} m cells`],
     ["Time", `${fmtT(w[0])} → ${fmtT(w[1])}`],
@@ -367,7 +371,7 @@ export function CloseUpCards() {
           <div style={{ display: "flex", gap: 10, margin: "0 14px 14px", padding: "10px 12px", background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--inset-shadow)" }}>
             <Info size={14} weight="bold" color="var(--ink-muted)" style={{ flex: "none", marginTop: 2 }} />
             <p style={{ margin: 0, fontSize: 12, lineHeight: "17px" }}>
-              Holds about {cav.pct} % {cav.word} water than the 2D run in the same box. It resolves the ground at 2 m, so water drains {cav.word === "less" ? "lower" : "differently"}.</p>
+              Holds about {cav.pct} % {cav.word} water than the 2D run in the same box. It resolves the ground at {data?.row.cell_m ?? 2} m, so water drains {cav.word === "less" ? "lower" : "differently"}.</p>
           </div>
         )}
       </Card>

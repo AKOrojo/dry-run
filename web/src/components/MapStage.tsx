@@ -34,6 +34,7 @@ import { CoordChip } from "./CoordChip";
 import { useSim } from "../lib/simstate";
 import { useWeatherSource } from "../lib/weather";
 import { CloseUpMap } from "./CloseUp";
+import { GpuBoxMap } from "./GpuBoxMap";
 import { DomainMap, domainBbox, outsideDomain } from "./DomainMap";
 import { useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
@@ -346,19 +347,19 @@ function Tooltip({ r, tS, cellM, pinned, outside, style }: { r: Reading; tS: num
   const permanent = !!ser?.permanent_water;
   const since = (t: number | null | undefined) => (!ser ? "" : t == null ? "never" : `since ${fmtT(t)}`);
   if (outside) return (
-    <div role="tooltip" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block role="tooltip" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
       Outside the simulated area
     </div>
   );
   if (r.loading) return (
-    <div role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
       Loading depth… the first point on a run can take a few seconds.
     </div>
   );
   return (
-    <div role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", overflow: "hidden", ...style }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "8px 10px 6px" }}>
         {permanent ? (
@@ -1175,6 +1176,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         )}
 
         <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
+        <GpuBoxMap viewer={viewer} scene={scene} anchors={anchors} hidden={!!closeUp.active} runKey={runId} />
         <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />

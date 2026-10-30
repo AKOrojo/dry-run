@@ -6,12 +6,14 @@ import { API } from "./api";
 export type PatchRow = {
   patch_id: string; status: string; center: [number, number]; size_m: number; cell_m: number;
   bounds_wgs84: [number, number, number, number]; t_window_s: [number, number];
+  /** Set for a patch solved in the browser ("Your GPU · 100 m"). */
+  label?: string;
 };
 export type PatchManifest = {
   patch_id: string; solver: string; bounds_wgs84: [number, number, number, number]; nx: number; ny: number; t_window_s: [number, number];
   frames: { t_s: number; surface: string; velocity: string }[];
   encoding: { surface?: string; velocity?: string; vmax_m_s?: number; depth_max_m?: number };
-  checks: { spinup_s?: number; water_volume_3d_m3?: number[]; water_volume_2d_m3?: number[]; volume_diff_end_pct?: number };
+  checks: { spinup_s?: number; water_volume_3d_m3?: number[]; water_volume_2d_m3?: number[]; volume_diff_end_pct?: number | null };
   request?: { size_m?: number; cell_m?: number };
 };
 export type PatchForces = { ids: string[]; peak_force_kN: number[]; t_s: number[]; direction_deg: number[]; method?: string };
@@ -29,13 +31,15 @@ export type CloseUpState = {
   runId: string | null; patches: PatchRow[];
   /** The patch being viewed (set when the chip is clicked), and its data once loaded. */
   active: string | null; status: "idle" | "loading" | "ready" | "error"; data: PatchData | null;
+  /** A patch solved in the browser (lib/patch3d-gpu): opened instead of loading `active` from the server. release() frees its frame blobs. */
+  local: { data: PatchData; release: () => void } | null;
   show: Show; channel: "surface" | "mid"; playing: boolean;
   /** A request for the map to fly to a building (set by the dock, consumed by the map layer). */
   fly: { lon: number; lat: number; height_m: number } | null;
 };
 
 let state: CloseUpState = {
-  runId: null, patches: [], active: null, status: "idle", data: null,
+  runId: null, patches: [], active: null, status: "idle", data: null, local: null,
   show: { water: true, arrows: true, forces: true, twoD: false }, channel: "surface", playing: false, fly: null,
 };
 const subs = new Set<() => void>();
@@ -209,6 +213,6 @@ export const firstSettledIndex = (m: PatchManifest, spinup: number) => {
   return i < 0 ? 0 : i;
 };
 /** "less" or "more", and the rounded percentage, for the volume caveat. */
-export const volumeCaveat = (pct: number | undefined) => (typeof pct === "number" && pct !== 0 ? { word: pct < 0 ? "less" : "more", pct: Math.abs(Math.round(pct)) } : null);
+export const volumeCaveat = (pct: number | null | undefined) => (typeof pct === "number" && pct !== 0 ? { word: pct < 0 ? "less" : "more", pct: Math.abs(Math.round(pct)) } : null);
 /** Extra metres of ground lift so the water sits just above the terrain mesh. */
 export const WATER_LIFT_M = 0.1;

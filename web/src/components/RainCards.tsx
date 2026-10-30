@@ -13,7 +13,7 @@ const textBtn: CSSProperties = { padding: "3px 6px", background: "transparent", 
 const hint: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
 
 /** Slider drawn in danfo (a value the user sets), driven by an invisible native range input. */
-function Slider({ label, value, min, max, step, text, lo, hi, onChange }: { label: string; value: number; min: number; max: number; step: number; text: string; lo: string; hi: string; onChange: (v: number) => void }) {
+export function Slider({ label, value, min, max, step, text, lo, hi, onChange }: { label: string; value: number; min: number; max: number; step: number; text: string; lo: string; hi: string; onChange: (v: number) => void }) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
