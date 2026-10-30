@@ -29,13 +29,24 @@
     {"label": "Guadalupe 4 Jul 2025 replay", "aoi_id": "texas-guadalupe-v0", "storm": {"total_mm": 85, "duration_h": 12},
      "sim_hours": 12},
     {"label": "Guadalupe 4 Jul 2025, river only", "aoi_id": "texas-guadalupe-v0", "storm": {"total_mm": 0, "duration_h": 1},
-     "sim_hours": 12}
+     "sim_hours": 12},
+    {"label": "Ida 1 Sep 2021 (LaGuardia gauge)", "aoi_id": "nyc-queens-v0",
+     "storm": {"total_mm": 118, "duration_h": 4, "pattern": "center_peaked"}, "sim_hours": 8},
+    {"label": "Ida at the Central Park rate", "aoi_id": "nyc-queens-v0",
+     "storm": {"total_mm": 181, "duration_h": 4.5, "pattern": "center_peaked"}, "sim_hours": 8},
+    {"label": "Ida core over Woodside", "aoi_id": "nyc-queens-v0",
+     "storm": {"total_mm": 181, "duration_h": 4.5, "pattern": "center_peaked",
+               "spatial": {"kind": "cell", "place": "Woodside", "radius_m": 5000, "profile": "gaussian"}}, "sim_hours": 8},
+    {"label": "Ida (LaGuardia) with sewers x2", "aoi_id": "nyc-queens-v0",
+     "storm": {"total_mm": 118, "duration_h": 4, "pattern": "center_peaked"},
+     "interventions": [{"type": "drain_upgrade", "capacity_factor": 2.0}], "sim_hours": 8}
   ],
   "agent_questions": [
     "Find the smallest set of interventions that keeps the Lekki-Epe Expressway passable in a 120 mm / 3 h storm.",
     "With the lagoon held 1 m high (tide lock), how do flooded buildings and the evacuation route to the nearest shelter change?",
     "Does increasing existing drain capacity by 40% help Lekki Phase 1 in a 120 mm / 3 h storm, and if not, what does?",
     "Replay the 4 July 2025 Guadalupe flood: which camps and places along the South Fork flood, how deep, and which shelters stay reachable?",
-    "In the 4 July 2025 Guadalupe replay, how much of the damage comes from the river versus rain falling on the valley itself?"
+    "In the 4 July 2025 Guadalupe replay, how much of the damage comes from the river versus rain falling on the valley itself?",
+    "Replay Hurricane Ida's 1 September 2021 rain over Queens: which neighbourhoods flood, how deep, and would doubling sewer capacity have helped?"
   ]
 }
