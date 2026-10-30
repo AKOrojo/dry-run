@@ -13,6 +13,7 @@ const ALL_STEPS = [
   { id: "scenario", title: "Set up a storm", body: "Choose rain total, duration and pattern, and the lagoon level on coastal areas." },
   { id: "rain", title: "Choose where it rains", body: "Place a storm cell, draw an area or pick a place, and see the rain before you simulate." },
   { id: "simulate", title: "Run the flood model", body: "Simulate runs the storm on the 30 m model and fills the map and timeline." },
+  { id: "coords", title: "Watch the storm", body: "While it simulates, the cloud and rain follow your storm. The coordinates show where you point; type a lat, lon to go there." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen." },

@@ -1,7 +1,7 @@
 // Map layer visibility and opacity, shared by the sidebar and the map stage.
 import { useSyncExternalStore } from "react";
 
-export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery" | "boundary" | "rain" | "closeups";
+export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | "route" | "photos" | "terrain" | "imagery" | "boundary" | "rain" | "closeups" | "weather";
 export type LayerState = { on: boolean; opacity: number };
 export type ImageryMode = "colour" | "greyscale";
 /** Aerial: Bing imagery on World Terrain. Photoreal: Google Photorealistic 3D Tiles (via ion), water draped on it. */
@@ -29,6 +29,8 @@ let state: LayersState = {
   rain: { on: false, opacity: 1 },
   /** Dashed outlines and chips of the 3D close-ups a run has. */
   closeups: { on: true, opacity: 1 },
+  /** Clouds and rain over the storm: always shown while a run simulates; "on" keeps them during playback of a finished run. */
+  weather: { on: true, opacity: 1 },
   imageryMode: "colour",
   basemap: "photoreal",
   aerial: "bing",

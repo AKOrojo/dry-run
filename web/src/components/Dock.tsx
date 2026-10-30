@@ -9,6 +9,8 @@ import { clock, useClock } from "../lib/clock";
 import { addNote, removeNote, useNotes } from "../lib/notes";
 import { fmtT } from "./ds";
 import { depthByPlace, hyetograph, isCell, useRain } from "../lib/rain";
+import { RainNow } from "./RainNow";
+import { useWeatherSource } from "../lib/weather";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
@@ -336,7 +338,7 @@ function abNow(a: number, b: number, digits: number) {
 type RainStorm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
 
 /** Before a run, with a rain area set: the rain at the storm centre over time, and the preview depth inside each place. */
-function RainDock({ storm }: { storm: RainStorm }) {
+function RainDock({ storm, now }: { storm: RainStorm; now?: ReactNode }) {
   const r = useRain();
   const f = r.preview;
   const [rows, setRows] = useState<{ name: string; mm: number }[]>([]);
@@ -357,7 +359,7 @@ function RainDock({ storm }: { storm: RainStorm }) {
         <ChartFigure last title="Rain intensity" unit="mm/h" now={`${Math.max(...series).toFixed(0)} peak`} series={series} color="var(--depth-3)" gid="rn" playI={-1} ymaxMin={Math.max(...series) * 1.2} tTotal={storm.duration_h * 3600}
           aria="Rain intensity at the storm centre over the storm duration" />
       </div>
-      <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
+      {now ?? <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
         <Band title="Where it rains" />
         {rows.length === 0 ? <p style={{ margin: 0, padding: 14, color: "var(--ink-muted)", fontSize: 12 }}>{r.places.length ? "Waiting for the preview" : "No places in this area"}</p> : (
           <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none", minHeight: 0, overflowY: "auto" }}>
@@ -370,7 +372,7 @@ function RainDock({ storm }: { storm: RainStorm }) {
             ))}
           </ol>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -389,10 +391,13 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   const pondKm = pond ? (pond.road_km ?? ts?.road_km_impassable[0] ?? null) : null;
   const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
   const rainSet = useRain();
-  if ((!ts || ts.t_s.length < 2) && storm && rainSet.mode !== "whole" && rainSet.visible) return <RainDock storm={storm} />;
+  // While a run simulates, or the finished run plays with "Clouds and rain" on, the side panel is Rain now.
+  const wsrc = useWeatherSource(run);
+  const rainNow = wsrc ? <RainNow src={wsrc} /> : null;
+  if ((!ts || ts.t_s.length < 2) && storm && rainSet.mode !== "whole" && rainSet.visible) return <RainDock storm={storm} now={rainNow ?? undefined} />;
   if (!ts || ts.t_s.length < 2) {
     return <div data-tour="timeline" style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
-      <KeyEvents events={[]} nowS={0} /></div>;
+      {rainNow ?? <KeyEvents events={[]} nowS={0} />}</div>;
   }
   const durS = ts.t_s[ts.t_s.length - 1];
   const pi = nearest(ts.t_s, t_s);
@@ -416,7 +421,11 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
             color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />}
         </div>
       </div>
-      {side ?? <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />}
+      {side ?? (rainNow && wsrc?.live ? rainNow : rainNow
+        ? <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
+            {rainNow}<KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />
+          </div>
+        : <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />)}
     </div>
   );
 }

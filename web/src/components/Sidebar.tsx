@@ -79,6 +79,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "rain", name: "Rain area", thumb: RAIN_T, slider: true },
   { key: "boundary", name: "Lagoon / sea edge", thumb: BOUNDARY_T },
   { key: "closeups", name: "3D close-ups", thumb: CLOSEUP_T, note: "Outlines" },
+  { key: "weather", name: "Clouds and rain", thumb: RAIN_T, note: "While simulating" },
 ];
 
 const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit",

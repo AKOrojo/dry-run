@@ -5,7 +5,7 @@ import { CaretDown, ChatTeardropText, Check, CloudRain, Columns, DownloadSimple,
 import type { Icon } from "@phosphor-icons/react";
 import { Checkbox, FIG } from "./rev5";
 import { applyTheme, getTheme, Theme } from "../lib/theme";
-import { setImageryMode, useLayers } from "../lib/layers";
+import { setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { setView, useView } from "../lib/view";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
@@ -84,7 +84,8 @@ function Menu({ name, Ic, children }: { name: string; Ic: Icon; children: (close
 
 function ViewMenu({ theme, onTheme, onTour }: { theme: Theme; onTheme: (t: Theme) => void; onTour: () => void }) {
   const v = useView();
-  const { imageryMode } = useLayers();
+  const lay = useLayers();
+  const { imageryMode } = lay;
   const check = (label: string, on: boolean, flip: () => void) => (
     <button type="button" role="menuitemcheckbox" aria-checked={on} onClick={flip} style={menuItem}><Checkbox on={on} />{label}</button>
   );
@@ -97,6 +98,8 @@ function ViewMenu({ theme, onTheme, onTour }: { theme: Theme; onTheme: (t: Theme
         <>
           {check("Show sidebar", v.sidebar, () => setView({ sidebar: !v.sidebar }))}
           {check("Show timeline", v.timeline, () => setView({ timeline: !v.timeline }))}
+          {check("Coordinates", v.coords, () => setView({ coords: !v.coords }))}
+          {check("Clouds and rain", lay.weather.on, () => setLayer("weather", { on: !lay.weather.on }))}
           {menuRule}
           <div style={menuLabel}>Imagery</div>
           {radio("Colour", imageryMode === "colour", () => setImageryMode("colour"))}

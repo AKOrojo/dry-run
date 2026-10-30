@@ -2,9 +2,9 @@
 import { useSyncExternalStore } from "react";
 import type * as Cesium from "cesium";
 
-export type ViewState = { sidebar: boolean; timeline: boolean };
+export type ViewState = { sidebar: boolean; timeline: boolean; coords: boolean };
 
-let state: ViewState = { sidebar: true, timeline: true };
+let state: ViewState = { sidebar: true, timeline: true, coords: true };
 const subs = new Set<() => void>();
 
 export const view = {

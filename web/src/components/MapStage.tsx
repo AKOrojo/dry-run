@@ -17,7 +17,7 @@ import { setInspect, setPinnedSeries } from "../lib/inspect";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
-import { setMapViewer } from "../lib/view";
+import { setMapViewer, useView } from "../lib/view";
 import { clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
 import type { LonLat } from "../lib/flyroute";
 import { useFlyAlong, useFreeCamera } from "./camera";
@@ -27,6 +27,10 @@ import { clock } from "../lib/clock";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { Anchored } from "./Anchored";
+import { CloudsRain } from "./CloudsRain";
+import { CoordChip } from "./CoordChip";
+import { useSim } from "../lib/simstate";
+import { useWeatherSource } from "../lib/weather";
 import { CloseUpMap } from "./CloseUp";
 import { useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
@@ -511,6 +515,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const lay = useLayers();
   const wps = useWaypoints();
   const rs = useRain();
+  const simNow = useSim();
+  const weather = useWeatherSource(run);
+  const viewState = useView();
   const closeUp = useCloseUp();
   const runId = run?.run_id;
   const tSRef = useRef(tS);
@@ -1134,7 +1141,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         </div>
         {/* Below the route and camera controls, so it never covers them. */}
         <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: 62, transform: "translateX(-50%)", maxWidth: "calc(100% - 32px)" }}>
-          {rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
+          {simNow.running ? (rs.mode === "cell" ? "Simulating · the cloud follows the storm cell and rains harder as the pattern peaks" : "Simulating · the rain grows and eases with the time pattern")
+            : rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
             : rs.picking === "centre" ? "Click the map to place the storm centre · Esc to cancel"
             : rs.visible && rs.mode === "cell" && !drawing && mode === "orbit" ? "Click to place the storm · drag the ring to resize · drag the arrow to steer"
             : drawing ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
@@ -1160,8 +1168,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
         {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
+        <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
+        {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} />}
         {rs.visible && rs.preview && (
-          <div className="ft-legend" style={{ position: "absolute", left: 16, bottom: 44, pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
+          <div className="ft-legend" style={{ position: "absolute", left: 16, bottom: viewState.coords ? 84 : 44, pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
             <span className="ft-stat-label">Rain over the storm</span>
             <span style={{ width: 168, height: 10, borderRadius: "var(--radius-pill)", border: "var(--stroke-hairline) solid var(--hairline)",
               background: "linear-gradient(90deg, color-mix(in srgb, var(--depth-3) 6%, transparent), var(--depth-3))" }} />

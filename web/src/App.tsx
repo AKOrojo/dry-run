@@ -26,6 +26,7 @@ import { Tour, tourDisabled, tourDone } from "./components/Tour";
 import { CloseUpCards, CloseUpDock } from "./components/CloseUp";
 import { useCloseUp } from "./lib/patch3d";
 import type { Spatial } from "./lib/api";
+import { resetSim, setSim } from "./lib/simstate";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -174,6 +175,7 @@ export default function App() {
 
   const go = async () => {
     setBusy(true); setSimErr(null);
+    setSim({ running: true, startedAt: Date.now(), estS: 40, progress: null, modelT: null, storm: buildStorm(rain, durationH, pattern, spatial) });
     const interventions: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
     try {
       const m = await simulate({ aoi_id: aoi!.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions });
@@ -185,7 +187,7 @@ export default function App() {
     } catch (e) {
       setSimErr(e instanceof ApiError ? { message: e.message, retryable: e.retryable }
         : { message: "The server is busy. Try again.", retryable: true });
-    } finally { setBusy(false); }
+    } finally { setBusy(false); resetSim(); }
   };
 
   // ---- Agent mode: the session's runs in the order the planner made them.
