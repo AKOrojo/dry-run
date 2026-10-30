@@ -34,6 +34,7 @@ import { CoordChip } from "./CoordChip";
 import { useSim } from "../lib/simstate";
 import { useWeatherSource } from "../lib/weather";
 import { CloseUpMap } from "./CloseUp";
+import { DomainMap, domainBbox, outsideDomain } from "./DomainMap";
 import { useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
 
@@ -338,12 +339,18 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   );
 }
 
-function Tooltip({ r, tS, cellM, pinned, style }: { r: Reading; tS: number; cellM: number; pinned: boolean; style?: CSSProperties }) {
+function Tooltip({ r, tS, cellM, pinned, outside, style }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties }) {
   const ser = r.ser;
   const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
   const wet = r.depth >= wetM, cut = r.depth >= passM;
   const permanent = !!ser?.permanent_water;
   const since = (t: number | null | undefined) => (!ser ? "" : t == null ? "never" : `since ${fmtT(t)}`);
+  if (outside) return (
+    <div role="tooltip" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+      borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
+      Outside the simulated area
+    </div>
+  );
   if (r.loading) return (
     <div role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
@@ -1109,12 +1116,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
         {pinned && (
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
-            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned style={{ pointerEvents: "auto" }} />
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} />
           </Anchored>
         )}
         {!pinned && hover && (
           <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10 }}>
-            <Tooltip r={hover} tS={tS} cellM={cellM} pinned={false} />
+            <Tooltip r={hover} tS={tS} cellM={cellM} pinned={false} outside={outsideDomain(run, hover.lon, hover.lat, aoi?.grid.bounds_wgs84)} />
           </div>
         )}
 
@@ -1168,6 +1175,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         )}
 
         <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
+        <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
         {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} />}

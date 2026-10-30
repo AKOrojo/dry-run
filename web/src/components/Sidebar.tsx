@@ -544,7 +544,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
           <>
             <CardLock.Provider value={locked ? "Locked while simulating" : null}><StormCard {...scenario} /></CardLock.Provider>
             <CardLock.Provider value={locked ? "Locked" : null}>
-              <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard /></div>
+              <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard hasInflows={!!aoi?.layers?.inflows} /></div>
             </CardLock.Provider>
             <RainPreviewCard />
             <CardLock.Provider value={locked ? "Locked" : null}>

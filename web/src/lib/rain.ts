@@ -22,12 +22,16 @@ export type RainState = {
   visible: boolean;
   /** Key of the storm the last Simulate sent; once it matches the current storm the water layers take over. */
   lastSimKey: string | null;
+  /** Simulate only the rain window (domain rain_area). Only sent while the switch is visible. */
+  domainOnly: boolean;
+  /** Set by App from the estimate: cells simulated with the rain-area window and on the whole grid. */
+  estCells: { domain: number; grid: number } | null;
 };
 
 const DEFAULT: RainState = {
   aoiId: null, bounds: null, lagos: false, mode: "whole", center: null, radius_m: 5000, profile: "gaussian",
   moving: false, heading_deg: 90, speed_m_s: 5, polygon: null, place: null, placeAsCell: false, picking: null,
-  preview: null, previewBusy: false, previewErr: null, places: [], visible: false, lastSimKey: null,
+  preview: null, previewBusy: false, previewErr: null, places: [], visible: false, lastSimKey: null, domainOnly: false, estCells: null,
 };
 let state: RainState = DEFAULT;
 const subs = new Set<() => void>();
@@ -74,6 +78,10 @@ export function initRain(aoiId: string, bounds: [number, number, number, number]
 }
 
 const areaCentre = (b: [number, number, number, number]): LonLat => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+
+/** The "Simulate this area only" switch shows for a storm cell, drawn area or place, on AOIs without river inflows. */
+export const domainSwitchVisible = (s: RainState, hasInflows: boolean) =>
+  s.mode !== "whole" && !(s.mode === "draw" && !s.polygon) && !(s.mode === "place" && !s.place) && !hasInflows;
 
 export function setRainMode(mode: RainMode) {
   const s = state;

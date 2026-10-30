@@ -31,6 +31,8 @@ export type Intervention =
 export type ScenarioSpec = {
   aoi_id: string; storm: Storm; interventions?: Intervention[];
   sim_hours?: number; output_interval_min?: number; label?: string | null;
+  /** "rain_area": simulate only the rain window (needs storm.spatial; not on AOIs with river inflows). */
+  domain?: "aoi" | "rain_area";
 };
 export type FrameRef = { t_s: number; png: string; depth: string };
 export type RunStats = Record<string, number | boolean | string> & { run_id: string };
@@ -114,6 +116,7 @@ export type SimEstimate = {
   run_id: string; cached: boolean; status: "done" | "running" | "failed" | "none";
   est_s: number | null; est_basis: "cached" | "speed_model" | "history" | null; t_end_s: number;
   output_interval_s: number; frames_total: number;
+  domain_cells?: number; grid_cells?: number;
 };
 export const estimateSim = (s: ScenarioSpec, signal?: AbortSignal) =>
   fetch(`${API}/api/simulate/estimate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s), signal }).then(j<SimEstimate>);

@@ -21,7 +21,7 @@ import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import type { SimBar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
-import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
+import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, domainSwitchVisible, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
 import type { RainState } from "./lib/rain";
 import { setGoogleAvailable, useLayers } from "./lib/layers";
 import { Tour, tourDisabled, tourDone } from "./components/Tour";
@@ -184,8 +184,21 @@ export default function App() {
 
   const interventionsNow: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
   const specNow: ScenarioSpec | null = aoi && rainReady
-    ? { aoi_id: aoi.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions: interventionsNow } : null;
+    ? { aoi_id: aoi.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions: interventionsNow,
+      ...(domainSwitchVisible(rainState, !!aoi.layers?.inflows) && rainState.domainOnly ? { domain: "rain_area" as const } : {}) } : null;
   const specKey = specNow ? JSON.stringify(specNow) : "";
+  // The switch's note needs the rain-area window size whether or not it is on, so ask for that spec's estimate (free).
+  const domainSpec = specNow && aoi && domainSwitchVisible(rainState, !!aoi.layers?.inflows) ? { ...specNow, domain: "rain_area" as const } : null;
+  const domainKey = domainSpec ? JSON.stringify(domainSpec) : "";
+  useEffect(() => {
+    patchRain({ estCells: null });
+    if (!domainSpec) return;
+    const ac = new AbortController();
+    const t = setTimeout(() => estimateSim(domainSpec, ac.signal).then((x) => {
+      if (x.domain_cells && x.grid_cells) patchRain({ estCells: { domain: x.domain_cells, grid: x.grid_cells } });
+    }, () => { /* the note falls back to "faster" */ }), 400);
+    return () => { clearTimeout(t); ac.abort(); };
+  }, [domainKey]);  // eslint-disable-line react-hooks/exhaustive-deps
   // Cached or live, and how long, for the scenario as it stands (debounced; free on the server).
   useEffect(() => {
     setEst(null);

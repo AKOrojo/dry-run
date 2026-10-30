@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { CircleDashed, MapPin, NavigationArrow, Polygon, Target, Warning } from "@phosphor-icons/react";
 import { Card, Field, FIG, mono, raisedButton, Segmented } from "./rev5";
 import { coord } from "./WaypointDetails";
-import { compassOf, effectiveCentre, isCell, setMoving, setRain, setRainMode, useRain } from "../lib/rain";
+import { compassOf, domainSwitchVisible, effectiveCentre, isCell, setMoving, setRain, setRainMode, useRain } from "../lib/rain";
 import type { RainMode } from "../lib/rain";
 import type { RainProfile } from "../lib/api";
 
@@ -119,12 +119,26 @@ function CellControls({ onPick }: { onPick?: boolean }) {
   );
 }
 
-export function RainAreaCard() {
+function DomainRow({ on, cells }: { on: boolean; cells: { domain: number; grid: number } | null }) {
+  const note = !cells ? "faster" : cells.domain < cells.grid ? `${Math.round(cells.grid / cells.domain * 10) / 10}× fewer cells` : "whole area, no speed-up";
+  return (
+    <div data-tour="rain-domain" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Toggle on={on} label="Simulate this area only" onChange={(v) => setRain({ domainOnly: v })} />
+        <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap", ...FIG }}>{note}</span>
+      </div>
+      {on && <p style={hint}>Only the rain window and 1 km around it are modelled. Water from outside does not flow in.</p>}
+    </div>
+  );
+}
+
+export function RainAreaCard({ hasInflows = false }: { hasInflows?: boolean }) {
   const s = useRain();
   return (
     <Card title="Rain area" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", display: "flex" }}><CircleDashed size={16} weight="bold" /></span>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 14px 14px" }}>
         <Segmented<RainMode> size={12} options={MODES} active={s.mode} onChange={setRainMode} />
+        {domainSwitchVisible(s, hasInflows) && <DomainRow on={s.domainOnly} cells={s.estCells} />}
         {s.mode === "whole" && <p style={hint}>Rain falls evenly over the whole area. Choose a storm cell, a drawn area or a place to put it somewhere.</p>}
         {s.mode === "cell" && <CellControls onPick />}
         {s.mode === "draw" && (
