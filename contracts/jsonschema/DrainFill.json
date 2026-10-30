@@ -1,0 +1,52 @@
+{
+  "additionalProperties": false,
+  "description": "runs/<run_id>/drain_fill.json (0.8.0). fill_pct[f][k] = fill of ids[k] at t_s[f], 0-100 (same frames as\nRunManifest.frames). ids are drains_geojson line and sewer_zone ids.",
+  "properties": {
+    "t_s": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "T S",
+      "type": "array"
+    },
+    "ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Ids",
+      "type": "array"
+    },
+    "kind": {
+      "items": {
+        "enum": [
+          "open_drain",
+          "covered_drain",
+          "gutter_inferred",
+          "canal",
+          "sewer_zone"
+        ],
+        "type": "string"
+      },
+      "title": "Kind",
+      "type": "array"
+    },
+    "fill_pct": {
+      "items": {
+        "items": {
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "title": "Fill Pct",
+      "type": "array"
+    }
+  },
+  "required": [
+    "t_s",
+    "ids",
+    "kind",
+    "fill_pct"
+  ],
+  "title": "DrainFill",
+  "type": "object"
+}

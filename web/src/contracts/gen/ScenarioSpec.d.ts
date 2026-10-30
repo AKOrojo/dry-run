@@ -92,6 +92,31 @@ export type OutputIntervalMin = number;
  * aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.
  */
 export type Domain = "aoi" | "rain_area";
+export type System = ("closed" | "open" | "mixed") | null;
+/**
+ * design rain intensity the system carries (Queens pre-1973 standard 1.5 in/h = 38.1 mm/h). Closed: pipe flow cap = this x runoff coefficient x zone area. Open: scales channel widths relative to the AOI default
+ */
+export type CapacityMmH = number | null;
+/**
+ * alternative to capacity_mm_h: the design storm, mapped through drainage_default.design_mm_h_by_return_period (400 if the AOI has no entry for it)
+ */
+export type ReturnPeriodYr = (1 | 2 | 3 | 5 | 10 | 25 | 50 | 100) | null;
+/**
+ * share of inlet and channel capacity lost to solid waste and sediment
+ */
+export type BlockagePct = number | null;
+/**
+ * tide: water leaves only while the level inside is above the receiving water (lagoon/tide; TideLevel raises it). free: ignore the receiving water. blocked: nothing leaves; the system only stores, then overflows
+ */
+export type Outfall = "tide" | "free" | "blocked";
+/**
+ * outfalls let no outside water back in
+ */
+export type FlapGates = boolean | null;
+/**
+ * open/mixed: add inferred drains along drivable roads (OSM maps only 2-3 % of them in Lagos)
+ */
+export type RoadsideGutters = boolean | null;
 /**
  * human label; NOT part of run_id
  */
@@ -105,6 +130,10 @@ export interface ScenarioSpec {
   sim_hours?: SimHours;
   output_interval_min?: OutputIntervalMin;
   domain?: Domain;
+  /**
+   * the drain/sewer model. None = the AOI's drainage_default if it has one, else the constant drain_sink_mm_h (older AOIs). On an AOI without drainage_default a Drainage is a 400. Added in 0.8.0
+   */
+  drainage?: Drainage | null;
   label?: Label;
 }
 export interface Storm {
@@ -179,4 +208,22 @@ export interface RoadClosure {
   polygon?: Polygon4;
   place?: Place5;
   type?: Type4;
+}
+/**
+ * The drain/sewer model (0.8.0). Every field left None takes the AOI's drainage_default.
+ *
+ * closed: rain enters only at inlet cells (catch basins), fills a lumped sewer per zone that empties at a capped
+ *         rate through its outfall; when full or tide-locked it surcharges back onto the lowest inlet cells.
+ * open:   rain enters roadside channels along their open edges (covered sections only through inlets); the
+ *         channels carry it along the network (Manning) to outfalls and overflow onto the street when full.
+ * mixed:  both (a what-if, e.g. Lagos with closed sewers under the roads as well).
+ */
+export interface Drainage {
+  system?: System;
+  capacity_mm_h?: CapacityMmH;
+  return_period_yr?: ReturnPeriodYr;
+  blockage_pct?: BlockagePct;
+  outfall?: Outfall;
+  flap_gates?: FlapGates;
+  roadside_gutters?: RoadsideGutters;
 }

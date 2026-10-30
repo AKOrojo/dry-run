@@ -9,6 +9,18 @@ export type TS = number[];
 export type FloodedAreaKm2 = number[];
 export type RoadKmImpassable = number[];
 export type EdgesCut = number[];
+/**
+ * system-wide drain fill, 0-100 (0.8.0)
+ */
+export type DrainFullPct = number[] | null;
+/**
+ * outfall discharge, m3/s (0.8.0)
+ */
+export type DrainOutfallM3S = number[] | null;
+/**
+ * overflow back onto the street, m3/s (0.8.0)
+ */
+export type SurchargeM3S = number[] | null;
 
 /**
  * Per-frame series for charts and event markers on the shared clock (same order as frames).
@@ -18,4 +30,7 @@ export interface Timeseries {
   flooded_area_km2: FloodedAreaKm2;
   road_km_impassable: RoadKmImpassable;
   edges_cut: EdgesCut;
+  drain_full_pct?: DrainFullPct;
+  drain_outfall_m3_s?: DrainOutfallM3S;
+  surcharge_m3_s?: SurchargeM3S;
 }

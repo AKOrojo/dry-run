@@ -13,6 +13,8 @@ Positivity:  a cell's outgoing fluxes are scaled down so it never sends more wat
 Boundary:    cells in inp.boundary_mask (open lagoon/sea water, wherever it is) are held at the
              tide level every step, so water flows OUT when the land surface is higher and IN
              when the tide is higher. Domain edges elsewhere are closed walls.
+Drainage:    the constant drain_sink_mm_h, or (inp.drains, contract 0.8.0) the drain/sewer model in drainage.py,
+             stepped after every surface step; its net take is part of drained_volume_m3.
 Control volume = land cells (not boundary_mask): rain, infiltration and drains act on land only,
 and boundary_outflow_m3 is the net water that crossed from land into the held boundary cells.
 Boundary cells start (t=0) and stay at the tide level, so frames show the lagoon full while
@@ -59,7 +61,8 @@ def simulate(inp: SolverInputs, spec: ScenarioSpec, cell_m: float):
     """Return (frames: list[(t_s, depth_m float32 [ny,nx])], ledger: dict[str, float]).
 
     ledger keys: rain_volume_m3, drained_volume_m3, infiltrated_volume_m3, boundary_outflow_m3,
-                 inflow_volume_m3 (boundary_outflow is NET: negative if a high tide pushes water INTO the domain)
+                 inflow_volume_m3 (boundary_outflow is NET: negative if a high tide pushes water INTO the domain),
+                 and "_drainage" (drainage.Runner.results()) when inp.drains is set
     CONTRACT: frames[0] is t=0; frames[-1] is ALWAYS the final state at t_end, even if t_end is
     not a multiple of output_interval (engine computes mass balance from it).
     Physics uses inp.dx_m / inp.dy_m (lon/lat grid, cells ~30 m); cell_m is unused.
@@ -115,6 +118,13 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
 
     led = dict(rain_volume_m3=0.0, drained_volume_m3=0.0, infiltrated_volume_m3=0.0, boundary_outflow_m3=0.0,
                inflow_volume_m3=0.0)
+    drn = None
+    if inp.drains is not None:
+        from dryrun.sim.drainage import Runner
+
+        inp.drains.reset()
+        drn = Runner(inp.drains, min(dx, dy), level)
+        drn.frame(0.0)
     if field is not None:
         led.update(rain_generated_m3=0.0, rain_in_aoi_m3=0.0)
     frames: list[tuple[float, np.ndarray]] = [(0, h.astype(np.float32))]
@@ -149,10 +159,19 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
             led["infiltrated_volume_m3"] += d_inf * area
             led["drained_volume_m3"] += d_drn * area
             led["boundary_outflow_m3"] += d_out * area
+            if drn is not None:
+                net, back = drn.step(h, area, dt, t, level)
+                led["drained_volume_m3"] += net
+                if back > 0:  # overflow raised some cells
+                    hmax = float(h.max())
             t += dt
         t = float(t_out)
         frames.append((int(t_out) if float(t_out).is_integer() else t_out, h.astype(np.float32)))
+        if drn is not None:
+            drn.frame(t)
         jobs.tick(t, t_end)
+    if drn is not None:
+        led["_drainage"] = drn.results()
     return frames, led
 
 
@@ -163,6 +182,9 @@ def warmup() -> None:
     b[-1] = True
     inp = SolverInputs(z, z + 0.03, z, z, -0.2, b, 30.0, 30.0)
     integrate(inp, [120], lambda a, c: 0.001 * (c - a) / 120, kernel="numba")
+    from dryrun.sim import drainage
+
+    drainage.warmup()
 
 
 # ----------------------------------------------------------------------------- kernels

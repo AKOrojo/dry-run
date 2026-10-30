@@ -344,7 +344,7 @@ def aoi_vector_layer(aoi_id: str, layer: str):
     _check_aoi(aoi_id)
     """Vector layers for the globe. Large footprint sets may instead be served gzipped from the
     public bucket or Cesium ion (see doc 04)."""
-    if layer not in {"buildings_geojson", "shelters", "places", "inflows"}:
+    if layer not in {"buildings_geojson", "shelters", "places", "inflows", "drains_geojson"}:
         raise HTTPException(404, "not a public vector layer")
     m = storage.load_aoi(aoi_id)
     rel = m.layers.get(layer)

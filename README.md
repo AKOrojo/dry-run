@@ -335,6 +335,53 @@ grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `doc
   wider than ~2 km on a 5 km AOI cover the whole grid anyway. Not available on river AOIs (the river comes from
   outside).
 
+### Drains and sewers (`dryrun/sim/drainage.py`, contract 0.8.0)
+
+AOIs published from 0.8.0 on (`lagos-lekki-v3`, `nyc-queens-v1`) carry a drain network instead of a fixed sink
+(`dryrun/pipeline/drains.py`). Older AOIs keep the constant `drain_sink_mm_h`, and their run_ids are unchanged. The
+drainage step runs after every surface step and moves water between the street and two kinds of storage:
+
+- **Closed sewers (Queens).** Water enters only at the cells holding one of NYC DEP's 7,672 catch basins in the box,
+  through the HEC-22 sag-inlet law: the smaller of a weir (Cw 1.66, perimeter 1.8 m) and an orifice (Co 0.67,
+  0.18 m2), reduced by blockage. It fills one lumped sewer per zone. The 34 zones are Voronoi catchments of the CSO
+  and storm outfalls cut into 1 km tiles, because NYC does not publish its sewersheds. Each zone empties through its
+  outfall at up to capacity x 0.85 (runoff) x area. The default is the pre-1973 Queens standard of 1.5 in/h
+  (38.1 mm/h); 44.5 and 54.1 mm/h are offered as the 5- and 10-year designs. Pipe storage is 12 mm over the zone.
+  The receiving water (the tide setting) cuts the outflow, and flap gates stop it running back in. A full zone
+  still takes water at inlets 1 m or more above its lowest one and pushes it out at its lowest inlets.
+- **Open drains with covered sections (Lagos).** There is one channel node per 30 m cell. The 22.5 km of open
+  drains, 16.7 km of ditches, 2.1 km of culverts and the canals and streams come from OpenStreetMap. A drain is also
+  inferred along every drivable road, because OSM maps only 2-3 % of them. Water enters along the open banks
+  (lateral weir Cw 1.60), or through a grate every 15 m on covered sections. It flows along the network by the same
+  local-inertial law as the surface, with Manning n 0.015 for concrete and 0.035-0.04 for earth. It leaves at the
+  117 points where a drain meets open water, against the lagoon level and with no flap gates, and overflows onto
+  the street where a drain runs full. All drain sizes are assumptions, because no survey of Lekki drains is
+  public: a 0.9 x 0.9 m U-drain, two 0.6 x 0.6 m roadside drains, a 6 x 2.5 m canal. Tidal channels start filled
+  to the lagoon level.
+
+Scenario controls (`ScenarioSpec.drainage`): system closed / open / mixed, capacity in mm/h or a design return
+period, blockage 0-90 %, outfall tide / free / blocked, flap gates, and inferred roadside drains. Every run reports
+captured, overflow, outfall and stored volumes, peak fill, the time the system filled, the overflow window, the fill
+of every drain line and zone per frame (`drain_fill.json`), and the limits that apply.
+
+Measured on the drainage AOIs (local machine, solver, mass balance 0.0 % in every run):
+
+| Scenario | Fixed sink (v2 / v0) | Drain model (v3 / v1) | Runtime |
+|---|---|---|---|
+| Lagos 120 mm / 3 h | 21.86 km2, 29,137 buildings | 21.08 km2, 26,076 buildings (blockage 0 %: 20.70, 70 %: 21.90) | 21.7 s -> 32.2 s |
+| Lagos 120 mm / 3 h, lagoon +0.5 m | | 26.91 km2 (the drains are tide-locked now) | |
+| Queens Ida peak hour 80 mm | 2.89 km2 | 2.05 km2; sewers 82 % full, overflow 0:50-1:20 | 12.3 s -> 12.2 s |
+| Queens 80 mm, outfalls blocked | | 2.83 km2; full after 44 min | |
+| Queens 44.5 mm / 1 h (5-year design storm) | 1.25 km2 | 1.06 km2 | |
+
+The open network costs about 2 x (channel nodes / cells) extra run time (`speed.DRAIN_CHANNEL_COST`). Closed zones
+cost nothing measurable.
+
+Limits: lumped sewers have no pipes, manholes or basements, so no single overflowing inlet can be named. Lagos drain
+sizes and blockage are scenario settings, not measurements, so read Lagos as relative susceptibility, not absolute
+depth. Validation against NYC 311 reports and the DEP Stormwater Flood Maps, and the refit of the Lagos built-up
+infiltration (which stood in for unmapped drains), follow in the next PR.
+
 ### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
 The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a
 close-up, a 60–300 m box can be re-solved in 3D with OpenFOAM v2406 `interFoam` (two-phase VOF, k-ω SST), nested

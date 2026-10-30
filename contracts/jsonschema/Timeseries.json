@@ -29,6 +29,54 @@
       },
       "title": "Edges Cut",
       "type": "array"
+    },
+    "drain_full_pct": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "system-wide drain fill, 0-100 (0.8.0)",
+      "title": "Drain Full Pct"
+    },
+    "drain_outfall_m3_s": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "outfall discharge, m3/s (0.8.0)",
+      "title": "Drain Outfall M3 S"
+    },
+    "surcharge_m3_s": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "overflow back onto the street, m3/s (0.8.0)",
+      "title": "Surcharge M3 S"
     }
   },
   "required": [

@@ -13,8 +13,9 @@ setup:           ## install python (all extras) + web deps
 	$(PY) -m pip install -e ".[sim,meta,dev]"
 	cd web && npm install
 
-fixtures:        ## write synthetic AOI to ./data (no GCP needed)
+fixtures:        ## write synthetic AOIs to ./data (no GCP needed): fixture-synthetic, fixture-drains
 	$(PY) -m dryrun.pipeline.fixtures
+	$(PY) -m dryrun.pipeline.drains --fixture
 
 contracts:       ## export JSON Schema + TS types for the web app
 	$(PY) scripts/export_contracts.py

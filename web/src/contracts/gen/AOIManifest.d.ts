@@ -41,6 +41,37 @@ export type IsSynthetic = boolean;
  * Google Photorealistic 3D Tiles have real (photogrammetric) buildings here: the UI hides its own extrusions and draws only flooded ones (added in 0.6.0)
  */
 export type PhotorealBuildings = boolean;
+export type System = "closed" | "open" | "mixed";
+export type Label = string;
+/**
+ * default design rain intensity
+ */
+export type CapacityMmH = number;
+/**
+ * the design storm of the default, if known
+ */
+export type ReturnPeriodYr = number | null;
+export type BlockagePct = number;
+/**
+ * plausible range for a slider
+ *
+ * @minItems 2
+ * @maxItems 2
+ */
+export type BlockageRangePct = [number, number];
+export type FlapGates = boolean;
+export type RoadsideGutters = boolean;
+export type Receiving = string;
+export type RunoffCoefficient = number;
+/**
+ * closed sewers: pipe storage per zone area, mm
+ */
+export type StorageMm = number;
+/**
+ * what the model cannot claim here, one sentence each
+ */
+export type Limits = string[];
+export type Sources1 = string[];
 
 /**
  * Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.
@@ -54,6 +85,10 @@ export interface AOIManifest {
   sources: Sources;
   is_synthetic?: IsSynthetic;
   photoreal_buildings?: PhotorealBuildings;
+  /**
+   * the drainage system this AOI models when a scenario turns drainage on (or leaves ScenarioSpec.drainage unset on an AOI that has this). None = the constant drain_sink_mm_h only (AOIs published before 0.8.0). Added in 0.8.0
+   */
+  drainage_default?: DrainageDefault | null;
 }
 /**
  * Describes every raster in an AOI. All AOI rasters share this grid exactly.
@@ -68,7 +103,7 @@ export interface GridSpec {
   bounds_wgs84: BoundsWgs84;
 }
 /**
- * Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py).
+ * Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py), drainage (AOIs with drainage_default): drain_network, inlets_count, sewer_zones, drains_geojson.
  */
 export interface Layers {
   [k: string]: string;
@@ -78,4 +113,29 @@ export interface Layers {
  */
 export interface Sources {
   [k: string]: string;
+}
+/**
+ * AOIManifest.drainage_default (0.8.0): what this AOI's drainage is, and what it can honestly claim.
+ */
+export interface DrainageDefault {
+  system: System;
+  label: Label;
+  capacity_mm_h: CapacityMmH;
+  return_period_yr?: ReturnPeriodYr;
+  design_mm_h_by_return_period?: DesignMmHByReturnPeriod;
+  blockage_pct: BlockagePct;
+  blockage_range_pct: BlockageRangePct;
+  flap_gates: FlapGates;
+  roadside_gutters: RoadsideGutters;
+  receiving: Receiving;
+  runoff_coefficient?: RunoffCoefficient;
+  storage_mm: StorageMm;
+  limits: Limits;
+  sources?: Sources1;
+}
+/**
+ * {"3": 38.1, "5": 44.5, "10": 54.1}: keys are years as strings; empty where no design standard is published (Lagos)
+ */
+export interface DesignMmHByReturnPeriod {
+  [k: string]: number;
 }

@@ -46,6 +46,7 @@ class SolverInputs:
     intervention_cells: list[int] | None = None  # cells touched per intervention (0 => warn)
     inflows: list[Inflow] | None = None  # river inflow sources (Texas preset); None = none
     rain: RainField | None = None  # where the rain falls; None = uniform over the whole grid
+    drains: object | None = None  # drainage.Drains (contract 0.8.0 drainage model); None = drain_sink_mm_h only
 
 
 @dataclass(frozen=True)
@@ -191,11 +192,13 @@ def rain_total_mm(spec: ScenarioSpec, grid: GridSpec, t_end: float | None = None
     return out
 
 
-def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs) -> SolverInputs:
+def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs, drainage_model: bool = False) -> SolverInputs:
+    """drainage_model: the run uses the drain/sewer model (drainage.py), which replaces the constant sink: the
+    sink starts at zero, DrainUpgrade.capacity_factor acts on the drains there, and add_mm_h stays a sink."""
     dem = base.dem.copy()
     manning = base.manning.copy()
     infil = base.infiltration_mm_h.copy()
-    sink = base.drain_sink_mm_h.copy()
+    sink = np.zeros_like(base.drain_sink_mm_h) if drainage_model else base.drain_sink_mm_h.copy()
     tide = base.tide_level_m
     exclude = (base.exclude_mask.copy() if base.exclude_mask is not None else np.zeros(dem.shape, bool))
     changed: list[int] = []  # cells whose inputs ACTUALLY changed (0 => intervention did nothing)
@@ -204,7 +207,7 @@ def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs) -> SolverInput
             m = area_mask(spec, grid, iv, default_all=True)
             before = sink.copy()
             sink[m] = sink[m] * iv.capacity_factor + iv.add_mm_h  # add_mm_h = new drains where none mapped
-            changed.append(int((sink != before).sum()))
+            changed.append(int((sink != before).sum()))  # drainage model: the engine adds its drain cells
         elif isinstance(iv, GreenInfrastructure):
             m = area_mask(spec, grid, iv)
             b_inf, b_man = infil.copy(), manning.copy()
@@ -291,7 +294,7 @@ def crop(inp: SolverInputs, win: tuple[slice, slice], shape: tuple[int, int]) ->
     return dataclasses.replace(
         inp, dem=cut(inp.dem), manning=cut(inp.manning), infiltration_mm_h=cut(inp.infiltration_mm_h),
         drain_sink_mm_h=cut(inp.drain_sink_mm_h), boundary_mask=np.ascontiguousarray(bnd | edge),
-        exclude_mask=cut(inp.exclude_mask), rain=rain)
+        exclude_mask=cut(inp.exclude_mask), rain=rain, drains=None)  # the engine crops the drains
 
 
 def validate_areas(spec: ScenarioSpec, grid: GridSpec) -> None:

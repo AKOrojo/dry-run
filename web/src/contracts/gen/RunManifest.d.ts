@@ -94,6 +94,31 @@ export type OutputIntervalMin = number;
  * aoi: simulate the whole grid. rain_area: only the cells the storm's rain area wets (storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and is counted. Faster for a small storm; flow from outside the window is not modelled. Not available on river AOIs (AOIManifest.layers has 'inflows'): 400.
  */
 export type Domain = "aoi" | "rain_area";
+export type System = ("closed" | "open" | "mixed") | null;
+/**
+ * design rain intensity the system carries (Queens pre-1973 standard 1.5 in/h = 38.1 mm/h). Closed: pipe flow cap = this x runoff coefficient x zone area. Open: scales channel widths relative to the AOI default
+ */
+export type CapacityMmH = number | null;
+/**
+ * alternative to capacity_mm_h: the design storm, mapped through drainage_default.design_mm_h_by_return_period (400 if the AOI has no entry for it)
+ */
+export type ReturnPeriodYr = (1 | 2 | 3 | 5 | 10 | 25 | 50 | 100) | null;
+/**
+ * share of inlet and channel capacity lost to solid waste and sediment
+ */
+export type BlockagePct = number | null;
+/**
+ * tide: water leaves only while the level inside is above the receiving water (lagoon/tide; TideLevel raises it). free: ignore the receiving water. blocked: nothing leaves; the system only stores, then overflows
+ */
+export type Outfall = "tide" | "free" | "blocked";
+/**
+ * outfalls let no outside water back in
+ */
+export type FlapGates = boolean | null;
+/**
+ * open/mixed: add inferred drains along drivable roads (OSM maps only 2-3 % of them in Lagos)
+ */
+export type RoadsideGutters = boolean | null;
 /**
  * human label; NOT part of run_id
  */
@@ -121,6 +146,18 @@ export type TS1 = number[];
 export type FloodedAreaKm2 = number[];
 export type RoadKmImpassable = number[];
 export type EdgesCut = number[];
+/**
+ * system-wide drain fill, 0-100 (0.8.0)
+ */
+export type DrainFullPct = number[] | null;
+/**
+ * outfall discharge, m3/s (0.8.0)
+ */
+export type DrainOutfallM3S = number[] | null;
+/**
+ * overflow back onto the street, m3/s (0.8.0)
+ */
+export type SurchargeM3S = number[] | null;
 /**
  * JSON {"ids": [...], "max_depth_m": [...]} per building; the UI joins by id to the buildings_geojson features and colours extrusions with it
  */
@@ -193,7 +230,47 @@ export type PassabilityThresholdM = number;
  * True if produced by the ML emulator, not the solver
  */
 export type IsSurrogate = boolean;
+/**
+ * GROSS surface water taken in by inlets and open drains: water that overflows and is taken in again counts each time. Net taken off the streets = drained_volume_m3
+ */
+export type SewerCapturedM3 = number | null;
+/**
+ * water pushed back onto the street (system full or outfall drowned)
+ */
+export type SewerSurchargeM3 = number | null;
+/**
+ * left through outfalls (net: negative if the receiving water flowed in)
+ */
+export type DrainOutfallM3 = number | null;
+/**
+ * water gained by pipes and channels since the start (tidal water already in channels at t=0 not counted)
+ */
+export type DrainStorageEndM3 = number | null;
+/**
+ * peak system-wide fill, 0-100
+ */
+export type DrainPeakFullPct = number | null;
+/**
+ * first time the system was >= 95 % full; null if never
+ */
+export type DrainFullTS = number | null;
+/**
+ * first time water overflowed onto the street
+ */
+export type DrainSurchargeStartTS = number | null;
+/**
+ * last time water overflowed onto the street
+ */
+export type DrainSurchargeEndTS = number | null;
 export type Error = string | null;
+/**
+ * path to drain_fill.json (DrainFill): per-frame fill of every drain line and sewer zone. Null without the drainage model. Added in 0.8.0
+ */
+export type DrainFill = string | null;
+/**
+ * what this run's drainage model cannot claim, one sentence each (the AOI's limits plus scenario-specific ones). Added in 0.8.0
+ */
+export type DrainageLimits = string[] | null;
 export type Backend = "fake" | "solver" | "surrogate";
 export type ElapsedS = number | null;
 
@@ -213,6 +290,8 @@ export interface RunManifest {
   stats?: RunStats | null;
   colormap?: Colormap;
   error?: Error;
+  drain_fill?: DrainFill;
+  drainage_limits?: DrainageLimits;
   backend?: Backend;
   elapsed_s?: ElapsedS;
 }
@@ -224,6 +303,10 @@ export interface ScenarioSpec {
   sim_hours?: SimHours;
   output_interval_min?: OutputIntervalMin;
   domain?: Domain;
+  /**
+   * the drain/sewer model. None = the AOI's drainage_default if it has one, else the constant drain_sink_mm_h (older AOIs). On an AOI without drainage_default a Drainage is a 400. Added in 0.8.0
+   */
+  drainage?: Drainage | null;
   label?: Label;
 }
 export interface Storm {
@@ -299,6 +382,24 @@ export interface RoadClosure {
   place?: Place5;
   type?: Type4;
 }
+/**
+ * The drain/sewer model (0.8.0). Every field left None takes the AOI's drainage_default.
+ *
+ * closed: rain enters only at inlet cells (catch basins), fills a lumped sewer per zone that empties at a capped
+ *         rate through its outfall; when full or tide-locked it surcharges back onto the lowest inlet cells.
+ * open:   rain enters roadside channels along their open edges (covered sections only through inlets); the
+ *         channels carry it along the network (Manning) to outfalls and overflow onto the street when full.
+ * mixed:  both (a what-if, e.g. Lagos with closed sewers under the roads as well).
+ */
+export interface Drainage {
+  system?: System;
+  capacity_mm_h?: CapacityMmH;
+  return_period_yr?: ReturnPeriodYr;
+  blockage_pct?: BlockagePct;
+  outfall?: Outfall;
+  flap_gates?: FlapGates;
+  roadside_gutters?: RoadsideGutters;
+}
 export interface FrameRef {
   t_s: TS;
   png: Png;
@@ -312,6 +413,9 @@ export interface Timeseries {
   flooded_area_km2: FloodedAreaKm2;
   road_km_impassable: RoadKmImpassable;
   edges_cut: EdgesCut;
+  drain_full_pct?: DrainFullPct;
+  drain_outfall_m3_s?: DrainOutfallM3S;
+  surcharge_m3_s?: SurchargeM3S;
 }
 /**
  * Every number the agent is allowed to cite MUST come from here (or RouteResult).
@@ -340,6 +444,14 @@ export interface RunStats {
   buildings_in_ponds?: BuildingsInPonds;
   passability_threshold_m?: PassabilityThresholdM;
   is_surrogate?: IsSurrogate;
+  sewer_captured_m3?: SewerCapturedM3;
+  sewer_surcharge_m3?: SewerSurchargeM3;
+  drain_outfall_m3?: DrainOutfallM3;
+  drain_storage_end_m3?: DrainStorageEndM3;
+  drain_peak_full_pct?: DrainPeakFullPct;
+  drain_full_t_s?: DrainFullTS;
+  drain_surcharge_start_t_s?: DrainSurchargeStartTS;
+  drain_surcharge_end_t_s?: DrainSurchargeEndTS;
 }
 /**
  * bin edges used to colour the PNGs; UI legend reads this

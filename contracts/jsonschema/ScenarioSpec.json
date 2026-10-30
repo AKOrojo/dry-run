@@ -69,6 +69,121 @@
       "title": "DrainUpgrade",
       "type": "object"
     },
+    "Drainage": {
+      "additionalProperties": false,
+      "description": "The drain/sewer model (0.8.0). Every field left None takes the AOI's drainage_default.\n\nclosed: rain enters only at inlet cells (catch basins), fills a lumped sewer per zone that empties at a capped\n        rate through its outfall; when full or tide-locked it surcharges back onto the lowest inlet cells.\nopen:   rain enters roadside channels along their open edges (covered sections only through inlets); the\n        channels carry it along the network (Manning) to outfalls and overflow onto the street when full.\nmixed:  both (a what-if, e.g. Lagos with closed sewers under the roads as well).",
+      "properties": {
+        "system": {
+          "anyOf": [
+            {
+              "enum": [
+                "closed",
+                "open",
+                "mixed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System"
+        },
+        "capacity_mm_h": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "design rain intensity the system carries (Queens pre-1973 standard 1.5 in/h = 38.1 mm/h). Closed: pipe flow cap = this x runoff coefficient x zone area. Open: scales channel widths relative to the AOI default",
+          "title": "Capacity Mm H"
+        },
+        "return_period_yr": {
+          "anyOf": [
+            {
+              "enum": [
+                1,
+                2,
+                3,
+                5,
+                10,
+                25,
+                50,
+                100
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "alternative to capacity_mm_h: the design storm, mapped through drainage_default.design_mm_h_by_return_period (400 if the AOI has no entry for it)",
+          "title": "Return Period Yr"
+        },
+        "blockage_pct": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "share of inlet and channel capacity lost to solid waste and sediment",
+          "title": "Blockage Pct"
+        },
+        "outfall": {
+          "default": "tide",
+          "description": "tide: water leaves only while the level inside is above the receiving water (lagoon/tide; TideLevel raises it). free: ignore the receiving water. blocked: nothing leaves; the system only stores, then overflows",
+          "enum": [
+            "tide",
+            "free",
+            "blocked"
+          ],
+          "title": "Outfall",
+          "type": "string"
+        },
+        "flap_gates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "outfalls let no outside water back in",
+          "title": "Flap Gates"
+        },
+        "roadside_gutters": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "open/mixed: add inferred drains along drivable roads (OSM maps only 2-3 % of them in Lagos)",
+          "title": "Roadside Gutters"
+        }
+      },
+      "title": "Drainage",
+      "type": "object"
+    },
     "GreenInfrastructure": {
       "additionalProperties": false,
       "properties": {
@@ -507,7 +622,7 @@
   "additionalProperties": false,
   "properties": {
     "contract_version": {
-      "default": "0.7.0",
+      "default": "0.8.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -574,6 +689,18 @@
       ],
       "title": "Domain",
       "type": "string"
+    },
+    "drainage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Drainage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the drain/sewer model. None = the AOI's drainage_default if it has one, else the constant drain_sink_mm_h (older AOIs). On an AOI without drainage_default a Drainage is a 400. Added in 0.8.0"
     },
     "label": {
       "anyOf": [

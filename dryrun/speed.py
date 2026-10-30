@@ -18,6 +18,7 @@ over all 11 prod runs (0.88): est/actual - 1 is then -12 % on the 7 calibration 
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -30,6 +31,9 @@ CALIBRATION: dict[str, list[tuple[float, float]]] = {
     "lagos-lekki-v1": [(0.0, 5.8), (50.0, 5.92), (120.0, 9.39), (200.0, 13.09)],
     "lagos-lekki-v2": [(0.0, 5.8), (50.0, 5.92), (120.0, 9.39), (200.0, 13.09)],
     "nyc-queens-v0": [(66.8, 9.7), (118.0, 15.71), (238.8, 23.5)],
+    # drainage AOIs (contract 0.8.0): same surface grid and cost; the drain network's cost is DRAIN_CHANNEL_COST
+    "lagos-lekki-v3": [(0.0, 5.8), (50.0, 5.92), (120.0, 9.39), (200.0, 13.09)],
+    "nyc-queens-v1": [(66.8, 9.7), (118.0, 15.71), (238.8, 23.5)],
     "texas-guadalupe-v0": [(0.0, 5.6), (85.0, 7.0)],
 }
 K_CFL = 48.0  # ns per cell per simulated second per (sqrt(g h) / dx): the rev 00046 value x 1.6, the median ratio
@@ -39,6 +43,10 @@ TIDE_HIGH = 1.54  # a held level above the default makes deeper water: the Lagos
 EXTRAPOLATE_MAX = 1.5  # above the table, follow its last slope, at most this times its last value
 SCALE = 0.88  # all 11 prod runs (7 calibration + 4 out-of-sample): geometric mean of actual / estimate
 FAKE_S = 1.0
+# Open-drain routing costs this x (channel nodes / simulated cells) on top of the surface solve: Lagos v3, 120 mm / 3 h,
+# 41.6k nodes on 175k cells, 32.2 s against 21.7 s locally (+48 %). Closed sewer zones cost nothing measurable
+# (Queens v1 Ida hour 12.2 s against 12.3 s).
+DRAIN_CHANNEL_COST = 2.0
 SPREAD = 0.4  # +-: rev 00046 to 00058 moved the same specs by 1.4-2.7x; one prod sample per spec
 
 
@@ -112,13 +120,43 @@ def domain_cells(aoi: AOIManifest, spec: ScenarioSpec) -> int:
     return aoi.grid.nx * aoi.grid.ny
 
 
+@lru_cache(maxsize=8)
+def _channel_nodes(aoi_id: str) -> dict[str, int]:
+    """Drain-network channel nodes by channel type (cached: AOIs are immutable)."""
+    import json
+    from collections import Counter
+
+    from dryrun import storage
+
+    doc = json.loads(storage.load_aoi_file(aoi_id, "drain_network"))
+    return dict(Counter(doc["nodes"]["channel"]))
+
+
+def drainage_factor(aoi: AOIManifest, spec: ScenarioSpec, cells: int) -> float:
+    """1 + DRAIN_CHANNEL_COST x the share of simulated cells carrying an open channel the run routes."""
+    try:
+        from dryrun.sim import drainage
+
+        s = drainage.settings(spec, aoi)
+        if s is None or not s.open:
+            return 1.0
+        nodes = _channel_nodes(aoi.aoi_id)
+        n = sum(v for k, v in nodes.items() if s.roadside_gutters or k != "gutter")
+        full = aoi.grid.nx * aoi.grid.ny
+        n *= min(cells / full, 1.0)  # a rain window holds about its share of the network
+        return 1.0 + DRAIN_CHANNEL_COST * n / max(cells, 1)
+    except Exception:  # noqa: BLE001 - an estimate must never fail a request
+        return 1.0
+
+
 def estimate_s(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> float:
     """Expected wall seconds on prod. cells: the simulated domain (defaults to the whole grid)."""
     if backend == "fake":
         return FAKE_S
     n = cells if cells is not None else domain_cells(aoi, spec)
     drain, rain = _aoi_inputs(aoi, spec)
-    return round(OVERHEAD_S + SCALE * ns_per_cell_s(aoi, spec, drain, rain) * 1e-9 * n * spec.sim_hours * 3600, 1)
+    per = ns_per_cell_s(aoi, spec, drain, rain) * drainage_factor(aoi, spec, n)
+    return round(OVERHEAD_S + SCALE * per * 1e-9 * n * spec.sim_hours * 3600, 1)
 
 
 def estimate(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> dict:

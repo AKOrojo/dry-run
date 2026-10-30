@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.7.0"
+CONTRACT_VERSION = "0.8.0"
 
 
 class _Base(BaseModel):
@@ -61,7 +61,8 @@ class AOIManifest(_Base):
             "Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep "
             ".tif/.parquet copies alongside only for QGIS/offline work). "
             "Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), "
-            "obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py)."
+            "obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py), "
+            "drainage (AOIs with drainage_default): drain_network, inlets_count, sewer_zones, drains_geojson."
         )
     )
     sources: dict[str, str] = Field(description="Layer name -> attribution / licence string")
@@ -69,6 +70,10 @@ class AOIManifest(_Base):
     photoreal_buildings: bool = Field(False, description="Google Photorealistic 3D Tiles have real (photogrammetric) "
                                       "buildings here: the UI hides its own extrusions and draws only flooded ones "
                                       "(added in 0.6.0)")
+    drainage_default: DrainageDefault | None = Field(
+        None, description="the drainage system this AOI models when a scenario turns drainage on (or leaves "
+                          "ScenarioSpec.drainage unset on an AOI that has this). None = the constant drain_sink_mm_h "
+                          "only (AOIs published before 0.8.0). Added in 0.8.0")
 
 
 # AOI ids are IMMUTABLE: never overwrite files under an existing aoi_id; publish -v2 instead.
@@ -91,7 +96,22 @@ OPTIONAL_AOI_LAYERS = (
     "places",  # GeoJSON Polygons (<=20 vertices), props name, kind: agent geography + area stats
     "obs_flood_extent",  # .npy Sentinel-1 flood mask for validation
     "inflows",  # inflows.json {t0_utc, sources: [{name, gauges, cells [[r,c]], hydrograph [[t_s, m3_s]]}], note}
+    # drainage (0.8.0, AOIs with drainage_default; built by dryrun/pipeline/drains.py):
+    "drain_network",  # drain_network.json: channel nodes/links/outfalls, sewer zones, feature -> node lists
+    "inlets_count",  # float32 .npy, drain inlets (catch basins) per cell
+    "sewer_zones",  # int32 .npy, lumped sewer zone per cell, -1 = none
+    "drains_geojson",  # UI layer, see DRAINS_GEOJSON below
 )
+
+# drains_geojson (0.8.0): one FeatureCollection. Every feature has properties `id` (string, prefixed by kind:
+# "drain:", "gutter:", "canal:", "zone:", "inlet:", "outfall:") and `kind`, one of
+#   open_drain | covered_drain | gutter_inferred | canal   LineString; width_m, depth_m, source "osm"|"inferred",
+#                                                          name (null if unnamed)
+#   sewer_zone                                             Polygon/MultiPolygon; name, capacity_mm_h, inlets,
+#                                                          receiving, gated
+#   inlet                                                  Point (catch basin; Queens only, from NYC DEP)
+#   outfall                                                Point; name, receiving, gated
+# The line and zone ids are the ids in a run's drain_fill.
 
 
 # ----------------------------------------------------------------------- Scenario
@@ -208,6 +228,63 @@ Intervention = Annotated[
 ]
 
 
+DrainageSystem = Literal["closed", "open", "mixed"]
+
+
+class Drainage(_Base):
+    """The drain/sewer model (0.8.0). Every field left None takes the AOI's drainage_default.
+
+    closed: rain enters only at inlet cells (catch basins), fills a lumped sewer per zone that empties at a capped
+            rate through its outfall; when full or tide-locked it surcharges back onto the lowest inlet cells.
+    open:   rain enters roadside channels along their open edges (covered sections only through inlets); the
+            channels carry it along the network (Manning) to outfalls and overflow onto the street when full.
+    mixed:  both (a what-if, e.g. Lagos with closed sewers under the roads as well).
+    """
+
+    system: DrainageSystem | None = None
+    capacity_mm_h: float | None = Field(None, ge=0, le=200, description=(
+        "design rain intensity the system carries (Queens pre-1973 standard 1.5 in/h = 38.1 mm/h). Closed: pipe "
+        "flow cap = this x runoff coefficient x zone area. Open: scales channel widths relative to the AOI default"))
+    return_period_yr: Literal[1, 2, 3, 5, 10, 25, 50, 100] | None = Field(None, description=(
+        "alternative to capacity_mm_h: the design storm, mapped through drainage_default."
+        "design_mm_h_by_return_period (400 if the AOI has no entry for it)"))
+    blockage_pct: float | None = Field(None, ge=0, le=90, description=(
+        "share of inlet and channel capacity lost to solid waste and sediment"))
+    outfall: Literal["tide", "free", "blocked"] = Field("tide", description=(
+        "tide: water leaves only while the level inside is above the receiving water (lagoon/tide; TideLevel "
+        "raises it). free: ignore the receiving water. blocked: nothing leaves; the system only stores, then overflows"))
+    flap_gates: bool | None = Field(None, description="outfalls let no outside water back in")
+    roadside_gutters: bool | None = Field(None, description=(
+        "open/mixed: add inferred drains along drivable roads (OSM maps only 2-3 % of them in Lagos)"))
+
+    @model_validator(mode="after")
+    def _one_capacity(self):
+        if self.capacity_mm_h is not None and self.return_period_yr is not None:
+            raise ValueError("give capacity_mm_h or return_period_yr, not both")
+        return self
+
+
+class DrainageDefault(_Base):
+    """AOIManifest.drainage_default (0.8.0): what this AOI's drainage is, and what it can honestly claim."""
+
+    system: DrainageSystem
+    label: str = Field(examples=["Closed sewers: catch basins into pipes"])
+    capacity_mm_h: float = Field(ge=0, description="default design rain intensity")
+    return_period_yr: int | None = Field(None, description="the design storm of the default, if known")
+    design_mm_h_by_return_period: dict[str, float] = Field(
+        default_factory=dict, description='{"3": 38.1, "5": 44.5, "10": 54.1}: keys are years as strings; empty '
+                                          "where no design standard is published (Lagos)")
+    blockage_pct: float = Field(ge=0, le=90)
+    blockage_range_pct: tuple[float, float] = Field(description="plausible range for a slider")
+    flap_gates: bool
+    roadside_gutters: bool
+    receiving: str = Field(examples=["Lagos Lagoon", "East River and Flushing Bay"])
+    runoff_coefficient: float = Field(0.85, gt=0, le=1)
+    storage_mm: float = Field(ge=0, description="closed sewers: pipe storage per zone area, mm")
+    limits: list[str] = Field(description="what the model cannot claim here, one sentence each")
+    sources: list[str] = Field(default_factory=list)
+
+
 class ScenarioSpec(_Base):
     contract_version: str = CONTRACT_VERSION
     aoi_id: str
@@ -220,6 +297,10 @@ class ScenarioSpec(_Base):
                            "(storm.spatial), plus a 1 km buffer; water reaching the window edge flows out and "
                            "is counted. Faster for a small storm; flow from outside the window is not modelled. Not "
                            "available on river AOIs (AOIManifest.layers has 'inflows'): 400.")
+    drainage: Drainage | None = Field(
+        None, description="the drain/sewer model. None = the AOI's drainage_default if it has one, else the constant "
+                          "drain_sink_mm_h (older AOIs). On an AOI without drainage_default a Drainage is a 400. "
+                          "Added in 0.8.0")
     # Stored in the PUBLIC runs bucket and reachable from public input: short, no URLs or markup.
     label: str | None = Field(None, max_length=60, pattern=r"^[\w .,+%()/×-]*$",
                               description="human label; NOT part of run_id")
@@ -245,6 +326,8 @@ class ScenarioSpec(_Base):
             payload["storm"].pop("spatial", None)
         if payload.get("domain") == "aoi":  # likewise for the whole-grid domain
             payload.pop("domain", None)
+        if payload.get("drainage") is None:  # and for no explicit drainage
+            payload.pop("drainage", None)
         payload["_solver"] = SOLVER_VERSION
         payload["_aoi"] = storage.aoi_hash(self.aoi_id)
         blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -305,6 +388,22 @@ class RunStats(_Base):
     buildings_in_ponds: int = Field(0, description="buildings inside pond polygons (displaced, not 'saved')")
     passability_threshold_m: float = 0.3
     is_surrogate: bool = Field(False, description="True if produced by the ML emulator, not the solver")
+    # drainage (0.8.0): all null on runs without the drainage model (older AOIs, older runs). Then
+    # drained_volume_m3 = drain_outfall_m3 + drain_storage_end_m3 (net taken off the surface), so
+    # mass_balance_error_pct keeps its formula.
+    sewer_captured_m3: float | None = Field(None, description="GROSS surface water taken in by inlets and open drains: "
+                                            "water that overflows and is taken in again counts each time. Net "
+                                            "taken off the streets = drained_volume_m3")
+    sewer_surcharge_m3: float | None = Field(None, description="water pushed back onto the street (system full or "
+                                             "outfall drowned)")
+    drain_outfall_m3: float | None = Field(None, description="left through outfalls (net: negative if the receiving "
+                                           "water flowed in)")
+    drain_storage_end_m3: float | None = Field(None, description="water gained by pipes and channels since the start "
+                                               "(tidal water already in channels at t=0 not counted)")
+    drain_peak_full_pct: float | None = Field(None, description="peak system-wide fill, 0-100")
+    drain_full_t_s: int | None = Field(None, description="first time the system was >= 95 % full; null if never")
+    drain_surcharge_start_t_s: int | None = Field(None, description="first time water overflowed onto the street")
+    drain_surcharge_end_t_s: int | None = Field(None, description="last time water overflowed onto the street")
 
 
 class Patch3DRequest(_Base):
@@ -370,6 +469,11 @@ class RunManifest(_Base):
         description="bin edges used to colour the PNGs; UI legend reads this",
     )
     error: str | None = None
+    drain_fill: str | None = Field(None, description="path to drain_fill.json (DrainFill): per-frame fill of every "
+                                   "drain line and sewer zone. Null without the drainage model. Added in 0.8.0")
+    drainage_limits: list[str] | None = Field(None, description="what this run's drainage model cannot claim, one "
+                                              "sentence each (the AOI's limits plus scenario-specific ones). Added "
+                                              "in 0.8.0")
     backend: Literal["fake", "solver", "surrogate"] = "fake"  # default fails toward the honest badge
     elapsed_s: float | None = None
 
@@ -400,6 +504,19 @@ class Timeseries(_Base):
     flooded_area_km2: list[float]
     road_km_impassable: list[float]
     edges_cut: list[int]
+    drain_full_pct: list[float] | None = Field(None, description="system-wide drain fill, 0-100 (0.8.0)")
+    drain_outfall_m3_s: list[float] | None = Field(None, description="outfall discharge, m3/s (0.8.0)")
+    surcharge_m3_s: list[float] | None = Field(None, description="overflow back onto the street, m3/s (0.8.0)")
+
+
+class DrainFill(_Base):
+    """runs/<run_id>/drain_fill.json (0.8.0). fill_pct[f][k] = fill of ids[k] at t_s[f], 0-100 (same frames as
+    RunManifest.frames). ids are drains_geojson line and sewer_zone ids."""
+
+    t_s: list[int]
+    ids: list[str]
+    kind: list[Literal["open_drain", "covered_drain", "gutter_inferred", "canal", "sewer_zone"]]
+    fill_pct: list[list[int]]
 
 
 class CompareResult(_Base):

@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 from dryrun import jobs, storage
-from dryrun.contracts import FrameRef, RunManifest, RunStats, RunStatus, ScenarioSpec, Timeseries
+from dryrun.contracts import DrainFill, FrameRef, RunManifest, RunStats, RunStatus, ScenarioSpec, Timeseries
 from dryrun.sim import BACKEND, exposure, interventions
 
 # RGBA per depth bin, matches RunManifest.colormap default edges [0.05,0.15,0.3,0.5,1,2]
@@ -64,10 +64,14 @@ def _backend():
 
 
 def _load_inputs(spec: ScenarioSpec):
+    from dryrun.sim import drainage
+
     aoi = storage.load_aoi(spec.aoi_id)
 
     def r(name):
         return storage.load_raster(spec.aoi_id, name)
+
+    model = drainage.settings(spec, aoi) is not None
 
     base = interventions.SolverInputs(
         dem=r("dem"), manning=r("manning"), infiltration_mm_h=r("infiltration_mm_h"),
@@ -75,7 +79,22 @@ def _load_inputs(spec: ScenarioSpec):
         boundary_mask=r("boundary_mask") > 0.5, dx_m=aoi.grid.dx_m, dy_m=aoi.grid.dy_m,
         exclude_mask=r("exclude_mask") > 0.5, inflows=_inflows(spec.aoi_id, aoi) or None,
     )
-    return aoi, interventions.apply(spec, aoi.grid, base)
+    inp = interventions.apply(spec, aoi.grid, base, drainage_model=model)
+    if model:
+        inp.drains = drainage.load(spec, aoi, inp.dem)
+        inp.intervention_cells = _drain_changes(spec, inp.intervention_cells, inp.drains)
+    return aoi, inp
+
+
+def _drain_changes(spec: ScenarioSpec, changed: list[int] | None, drains) -> list[int]:
+    """With the drainage model, a DrainUpgrade's capacity_factor changes drain cells, not the (zero) sink."""
+    from dryrun.contracts import DrainUpgrade
+
+    out = list(changed or [])
+    ups = [k for k, iv in enumerate(spec.interventions) if isinstance(iv, DrainUpgrade) and iv.capacity_factor != 1]
+    for k in ups:  # one combined count: the drains cannot tell overlapping upgrades apart
+        out[k] += drains.changed_cells
+    return out
 
 
 def _inflows(aoi_id: str, aoi) -> list[interventions.Inflow]:
@@ -99,6 +118,9 @@ def validate(spec: ScenarioSpec) -> None:
         if "inflows" in aoi.layers:
             raise ValueError("domain rain_area is not available on a river AOI: the river comes from outside")
         interventions.rain_window(spec, aoi.grid)
+    from dryrun.sim import drainage
+
+    drainage.settings(spec, aoi)  # a Drainage on an AOI without drains, or an unknown return period
 
 
 def run_scenario(spec: ScenarioSpec, force: bool = False) -> RunManifest:
@@ -139,7 +161,12 @@ def _simulate_window(simulate, inp, spec, grid):
     window the state is the t=0 one (dry land, boundary water at the default level), so it adds nothing to the
     stored-volume change."""
     win = interventions.rain_window(spec, grid)
-    frames, ledger = simulate(interventions.crop(inp, win, (grid.ny, grid.nx)), spec, grid.cell_size_m)
+    sub = interventions.crop(inp, win, (grid.ny, grid.nx))
+    if inp.drains is not None:
+        from dryrun.sim import drainage
+
+        sub.drains = drainage.crop(inp.drains, spec, storage.load_aoi(spec.aoi_id), inp.dem, win, sub.boundary_mask)
+    frames, ledger = simulate(sub, spec, grid.cell_size_m)
     full0 = np.zeros((grid.ny, grid.nx), frames[0][1].dtype)
     if inp.boundary_mask is not None:
         from dryrun.sim.solver import DEFAULT_TIDE_M
@@ -164,6 +191,7 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
         ledger["domain_cells"] = aoi.grid.nx * aoi.grid.ny
         win = None
     domain_cells = ledger.pop("domain_cells")
+    drained = ledger.pop("_drainage", None)
     if frames[-1][0] != interventions.t_end_s(spec):
         raise RuntimeError("backend must end on the final state")
 
@@ -198,6 +226,11 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
         bdep = [d if ok else None for d, ok in zip(bdep, inside.tolist())]
     jobs.append(_IO.submit(storage.write_run_file, run_id, "building_depths.json",
                            json.dumps({"ids": ids, "max_depth_m": bdep}).encode(), "application/json"))
+    if drained is not None:
+        fill = DrainFill(t_s=ts["t_s"], **drained["fill"])
+        jobs.append(_IO.submit(storage.write_run_file, run_id, "drain_fill.json",
+                               fill.model_dump_json().encode(), "application/json"))
+        ts.update(drained["series"])
     for j in jobs:
         j.result()  # surface upload errors before the manifest says "done"
 
@@ -214,11 +247,14 @@ def _solve_inner(spec, run_id, simulate, backend_name, t0) -> RunManifest:
         **{k: round(v, 1) for k, v in ledger.items()}, domain_cells=domain_cells,
         domain_bbox=None if win is None else interventions.window_bbox(win, aoi.grid),
         **exposure.impact(spec.aoi_id, max_depth, area, excl, ponds),
+        **(drained["stats"] if drained is not None else {}),
     )
     m = RunManifest(
         run_id=run_id, scenario=spec, status=RunStatus.done, frames=refs, max_depth_png="max_depth.png",
         building_depths="building_depths.json", intervention_cells=inp.intervention_cells or [],
         timeseries=Timeseries(**ts), stats=stats, backend=backend_name, elapsed_s=round(time.time() - t0, 2),
+        drain_fill=None if drained is None else "drain_fill.json",
+        drainage_limits=None if drained is None else drained["limits"],
     )
     storage.save_run(m)
     return m

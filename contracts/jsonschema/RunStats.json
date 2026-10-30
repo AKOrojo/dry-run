@@ -162,6 +162,110 @@
       "description": "True if produced by the ML emulator, not the solver",
       "title": "Is Surrogate",
       "type": "boolean"
+    },
+    "sewer_captured_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "GROSS surface water taken in by inlets and open drains: water that overflows and is taken in again counts each time. Net taken off the streets = drained_volume_m3",
+      "title": "Sewer Captured M3"
+    },
+    "sewer_surcharge_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "water pushed back onto the street (system full or outfall drowned)",
+      "title": "Sewer Surcharge M3"
+    },
+    "drain_outfall_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "left through outfalls (net: negative if the receiving water flowed in)",
+      "title": "Drain Outfall M3"
+    },
+    "drain_storage_end_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "water gained by pipes and channels since the start (tidal water already in channels at t=0 not counted)",
+      "title": "Drain Storage End M3"
+    },
+    "drain_peak_full_pct": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "peak system-wide fill, 0-100",
+      "title": "Drain Peak Full Pct"
+    },
+    "drain_full_t_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "first time the system was >= 95 % full; null if never",
+      "title": "Drain Full T S"
+    },
+    "drain_surcharge_start_t_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "first time water overflowed onto the street",
+      "title": "Drain Surcharge Start T S"
+    },
+    "drain_surcharge_end_t_s": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "last time water overflowed onto the street",
+      "title": "Drain Surcharge End T S"
     }
   },
   "required": [

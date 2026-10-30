@@ -1,5 +1,134 @@
 {
   "$defs": {
+    "DrainageDefault": {
+      "additionalProperties": false,
+      "description": "AOIManifest.drainage_default (0.8.0): what this AOI's drainage is, and what it can honestly claim.",
+      "properties": {
+        "system": {
+          "enum": [
+            "closed",
+            "open",
+            "mixed"
+          ],
+          "title": "System",
+          "type": "string"
+        },
+        "label": {
+          "examples": [
+            "Closed sewers: catch basins into pipes"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "capacity_mm_h": {
+          "description": "default design rain intensity",
+          "minimum": 0,
+          "title": "Capacity Mm H",
+          "type": "number"
+        },
+        "return_period_yr": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the design storm of the default, if known",
+          "title": "Return Period Yr"
+        },
+        "design_mm_h_by_return_period": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "{\"3\": 38.1, \"5\": 44.5, \"10\": 54.1}: keys are years as strings; empty where no design standard is published (Lagos)",
+          "title": "Design Mm H By Return Period",
+          "type": "object"
+        },
+        "blockage_pct": {
+          "maximum": 90,
+          "minimum": 0,
+          "title": "Blockage Pct",
+          "type": "number"
+        },
+        "blockage_range_pct": {
+          "description": "plausible range for a slider",
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Blockage Range Pct",
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        "flap_gates": {
+          "title": "Flap Gates",
+          "type": "boolean"
+        },
+        "roadside_gutters": {
+          "title": "Roadside Gutters",
+          "type": "boolean"
+        },
+        "receiving": {
+          "examples": [
+            "Lagos Lagoon",
+            "East River and Flushing Bay"
+          ],
+          "title": "Receiving",
+          "type": "string"
+        },
+        "runoff_coefficient": {
+          "default": 0.85,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Runoff Coefficient",
+          "type": "number"
+        },
+        "storage_mm": {
+          "description": "closed sewers: pipe storage per zone area, mm",
+          "minimum": 0,
+          "title": "Storage Mm",
+          "type": "number"
+        },
+        "limits": {
+          "description": "what the model cannot claim here, one sentence each",
+          "items": {
+            "type": "string"
+          },
+          "title": "Limits",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "system",
+        "label",
+        "capacity_mm_h",
+        "blockage_pct",
+        "blockage_range_pct",
+        "flap_gates",
+        "roadside_gutters",
+        "receiving",
+        "storage_mm",
+        "limits"
+      ],
+      "title": "DrainageDefault",
+      "type": "object"
+    },
     "GridSpec": {
       "additionalProperties": false,
       "description": "Describes every raster in an AOI. All AOI rasters share this grid exactly.",
@@ -82,7 +211,7 @@
   "description": "Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.",
   "properties": {
     "contract_version": {
-      "default": "0.7.0",
+      "default": "0.8.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -105,7 +234,7 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py).",
+      "description": "Layer name -> path relative to the AOI folder. Required keys: dem, manning, infiltration_mm_h, drain_sink_mm_h, buildings, roads_graph, population, shelters. Rasters: float32 .npy on the AOI grid (the serving image has no rasterio/pandas; keep .tif/.parquet copies alongside only for QGIS/offline work). Optional: buildings_geojson (UI), places (agent geography; Polygon features only, <= 20 vertices), obs_flood_extent (Sentinel-1), inflows (inland AOIs: river gauge hydrographs, see pipeline/inflows.py), drainage (AOIs with drainage_default): drain_network, inlets_count, sewer_zones, drains_geojson.",
       "title": "Layers",
       "type": "object"
     },
@@ -127,6 +256,18 @@
       "description": "Google Photorealistic 3D Tiles have real (photogrammetric) buildings here: the UI hides its own extrusions and draws only flooded ones (added in 0.6.0)",
       "title": "Photoreal Buildings",
       "type": "boolean"
+    },
+    "drainage_default": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DrainageDefault"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the drainage system this AOI models when a scenario turns drainage on (or leaves ScenarioSpec.drainage unset on an AOI that has this). None = the constant drain_sink_mm_h only (AOIs published before 0.8.0). Added in 0.8.0"
     }
   },
   "required": [

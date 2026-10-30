@@ -4,7 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 
-_SRC = ("solver.py", "fake.py", "interventions.py", "exposure.py", "engine.py")
+_SRC = ("solver.py", "fake.py", "interventions.py", "exposure.py", "engine.py", "drainage.py")
 # The ONE place the backend is read (engine imports it), so run_id and the solver always agree.
 BACKEND = os.getenv("DRYRUN_SIM_BACKEND", "fake")  # fake | solver
 

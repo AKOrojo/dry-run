@@ -73,6 +73,38 @@ export type PassabilityThresholdM = number;
  * True if produced by the ML emulator, not the solver
  */
 export type IsSurrogate = boolean;
+/**
+ * GROSS surface water taken in by inlets and open drains: water that overflows and is taken in again counts each time. Net taken off the streets = drained_volume_m3
+ */
+export type SewerCapturedM3 = number | null;
+/**
+ * water pushed back onto the street (system full or outfall drowned)
+ */
+export type SewerSurchargeM3 = number | null;
+/**
+ * left through outfalls (net: negative if the receiving water flowed in)
+ */
+export type DrainOutfallM3 = number | null;
+/**
+ * water gained by pipes and channels since the start (tidal water already in channels at t=0 not counted)
+ */
+export type DrainStorageEndM3 = number | null;
+/**
+ * peak system-wide fill, 0-100
+ */
+export type DrainPeakFullPct = number | null;
+/**
+ * first time the system was >= 95 % full; null if never
+ */
+export type DrainFullTS = number | null;
+/**
+ * first time water overflowed onto the street
+ */
+export type DrainSurchargeStartTS = number | null;
+/**
+ * last time water overflowed onto the street
+ */
+export type DrainSurchargeEndTS = number | null;
 
 /**
  * Every number the agent is allowed to cite MUST come from here (or RouteResult).
@@ -101,4 +133,12 @@ export interface RunStats {
   buildings_in_ponds?: BuildingsInPonds;
   passability_threshold_m?: PassabilityThresholdM;
   is_surrogate?: IsSurrogate;
+  sewer_captured_m3?: SewerCapturedM3;
+  sewer_surcharge_m3?: SewerSurchargeM3;
+  drain_outfall_m3?: DrainOutfallM3;
+  drain_storage_end_m3?: DrainStorageEndM3;
+  drain_peak_full_pct?: DrainPeakFullPct;
+  drain_full_t_s?: DrainFullTS;
+  drain_surcharge_start_t_s?: DrainSurchargeStartTS;
+  drain_surcharge_end_t_s?: DrainSurchargeEndTS;
 }

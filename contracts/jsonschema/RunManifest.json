@@ -69,6 +69,121 @@
       "title": "DrainUpgrade",
       "type": "object"
     },
+    "Drainage": {
+      "additionalProperties": false,
+      "description": "The drain/sewer model (0.8.0). Every field left None takes the AOI's drainage_default.\n\nclosed: rain enters only at inlet cells (catch basins), fills a lumped sewer per zone that empties at a capped\n        rate through its outfall; when full or tide-locked it surcharges back onto the lowest inlet cells.\nopen:   rain enters roadside channels along their open edges (covered sections only through inlets); the\n        channels carry it along the network (Manning) to outfalls and overflow onto the street when full.\nmixed:  both (a what-if, e.g. Lagos with closed sewers under the roads as well).",
+      "properties": {
+        "system": {
+          "anyOf": [
+            {
+              "enum": [
+                "closed",
+                "open",
+                "mixed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System"
+        },
+        "capacity_mm_h": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "design rain intensity the system carries (Queens pre-1973 standard 1.5 in/h = 38.1 mm/h). Closed: pipe flow cap = this x runoff coefficient x zone area. Open: scales channel widths relative to the AOI default",
+          "title": "Capacity Mm H"
+        },
+        "return_period_yr": {
+          "anyOf": [
+            {
+              "enum": [
+                1,
+                2,
+                3,
+                5,
+                10,
+                25,
+                50,
+                100
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "alternative to capacity_mm_h: the design storm, mapped through drainage_default.design_mm_h_by_return_period (400 if the AOI has no entry for it)",
+          "title": "Return Period Yr"
+        },
+        "blockage_pct": {
+          "anyOf": [
+            {
+              "maximum": 90,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "share of inlet and channel capacity lost to solid waste and sediment",
+          "title": "Blockage Pct"
+        },
+        "outfall": {
+          "default": "tide",
+          "description": "tide: water leaves only while the level inside is above the receiving water (lagoon/tide; TideLevel raises it). free: ignore the receiving water. blocked: nothing leaves; the system only stores, then overflows",
+          "enum": [
+            "tide",
+            "free",
+            "blocked"
+          ],
+          "title": "Outfall",
+          "type": "string"
+        },
+        "flap_gates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "outfalls let no outside water back in",
+          "title": "Flap Gates"
+        },
+        "roadside_gutters": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "open/mixed: add inferred drains along drivable roads (OSM maps only 2-3 % of them in Lagos)",
+          "title": "Roadside Gutters"
+        }
+      },
+      "title": "Drainage",
+      "type": "object"
+    },
     "FrameRef": {
       "additionalProperties": false,
       "properties": {
@@ -575,6 +690,110 @@
           "description": "True if produced by the ML emulator, not the solver",
           "title": "Is Surrogate",
           "type": "boolean"
+        },
+        "sewer_captured_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GROSS surface water taken in by inlets and open drains: water that overflows and is taken in again counts each time. Net taken off the streets = drained_volume_m3",
+          "title": "Sewer Captured M3"
+        },
+        "sewer_surcharge_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "water pushed back onto the street (system full or outfall drowned)",
+          "title": "Sewer Surcharge M3"
+        },
+        "drain_outfall_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "left through outfalls (net: negative if the receiving water flowed in)",
+          "title": "Drain Outfall M3"
+        },
+        "drain_storage_end_m3": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "water gained by pipes and channels since the start (tidal water already in channels at t=0 not counted)",
+          "title": "Drain Storage End M3"
+        },
+        "drain_peak_full_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "peak system-wide fill, 0-100",
+          "title": "Drain Peak Full Pct"
+        },
+        "drain_full_t_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "first time the system was >= 95 % full; null if never",
+          "title": "Drain Full T S"
+        },
+        "drain_surcharge_start_t_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "first time water overflowed onto the street",
+          "title": "Drain Surcharge Start T S"
+        },
+        "drain_surcharge_end_t_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "last time water overflowed onto the street",
+          "title": "Drain Surcharge End T S"
         }
       },
       "required": [
@@ -610,7 +829,7 @@
       "additionalProperties": false,
       "properties": {
         "contract_version": {
-          "default": "0.7.0",
+          "default": "0.8.0",
           "title": "Contract Version",
           "type": "string"
         },
@@ -677,6 +896,18 @@
           ],
           "title": "Domain",
           "type": "string"
+        },
+        "drainage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Drainage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "the drain/sewer model. None = the AOI's drainage_default if it has one, else the constant drain_sink_mm_h (older AOIs). On an AOI without drainage_default a Drainage is a 400. Added in 0.8.0"
         },
         "label": {
           "anyOf": [
@@ -851,6 +1082,54 @@
           },
           "title": "Edges Cut",
           "type": "array"
+        },
+        "drain_full_pct": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "system-wide drain fill, 0-100 (0.8.0)",
+          "title": "Drain Full Pct"
+        },
+        "drain_outfall_m3_s": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "outfall discharge, m3/s (0.8.0)",
+          "title": "Drain Outfall M3 S"
+        },
+        "surcharge_m3_s": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "overflow back onto the street, m3/s (0.8.0)",
+          "title": "Surcharge M3 S"
         }
       },
       "required": [
@@ -867,7 +1146,7 @@
   "description": "gs://<runs-bucket>/runs/<run_id>/manifest.json",
   "properties": {
     "contract_version": {
-      "default": "0.7.0",
+      "default": "0.8.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -965,6 +1244,35 @@
       ],
       "default": null,
       "title": "Error"
+    },
+    "drain_fill": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "path to drain_fill.json (DrainFill): per-frame fill of every drain line and sewer zone. Null without the drainage model. Added in 0.8.0",
+      "title": "Drain Fill"
+    },
+    "drainage_limits": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "what this run's drainage model cannot claim, one sentence each (the AOI's limits plus scenario-specific ones). Added in 0.8.0",
+      "title": "Drainage Limits"
     },
     "backend": {
       "default": "fake",
