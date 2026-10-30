@@ -396,7 +396,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
 
   // ----- hover, pin, waypoints, context menu -----
   const bounds = aoi?.grid.bounds_wgs84;
-  const cellM = aoi?.grid.cell_size_m ?? 30;
+  const cellM = Math.round(aoi?.grid.cell_size_m ?? 30);
   const [hover, setHover] = useState<(Reading & { x: number; y: number; lon: number; lat: number }) | null>(null);
   const [pinned, setPinned] = useState<(Reading & { lon: number; lat: number }) | null>(null);
   const [wpReadings, setWpReadings] = useState<Record<number, Reading>>({});
@@ -468,18 +468,18 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseenter", onEnter);
     canvas.addEventListener("mouseleave", onLeave);
-    canvas.addEventListener("mousedown", onDown);
-    canvas.addEventListener("mousedown", onRDown);
-    canvas.addEventListener("mouseup", onUp);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointerdown", onRDown);
+    canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("contextmenu", onContext);
     return () => {
       clearTimeout(timer);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mouseenter", onEnter);
       canvas.removeEventListener("mouseleave", onLeave);
-      canvas.removeEventListener("mousedown", onDown);
-      canvas.removeEventListener("mousedown", onRDown);
-      canvas.removeEventListener("mouseup", onUp);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerdown", onRDown);
+      canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("contextmenu", onContext);
     };
   }, [viewer, runId, inAoi]);

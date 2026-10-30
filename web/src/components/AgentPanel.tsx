@@ -127,7 +127,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
                 <ClockCounterClockwise size={18} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />
                 <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 14, lineHeight: "20px" }}>{r.question}</span>
-                  <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.model} · {r.recorded_at}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.model} · {fmtRecorded(r.recorded_at)}</span>
                 </span>
                 <Badge>Replay</Badge>
               </button>
@@ -149,7 +149,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
             <ClockCounterClockwise size={20} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 13, lineHeight: "20px", color: "var(--ink-muted)" }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>Recorded live session</span>
-              <span>{introMatch ? `${introMatch[1]} via ${introMatch[2]} · ${introMatch[3]}. ` : ""}Not a live model call; waits are shortened.</span>
+              <span>{introMatch ? `${introMatch[1]} via ${introMatch[2]} · ${fmtRecorded(introMatch[3])}. ` : ""}Not a live model call; waits are shortened.</span>
             </div>
           </div>
         </Card>
@@ -185,8 +185,8 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
           <>
             <Btn kind="raised" icon={<Columns size={16} weight="bold" aria-hidden="true" />}
               onClick={() => { const id = brief.recommended_run_id ?? brief.claims?.find((c: any) => c.source_run_id)?.source_run_id; if (id) onRun(id); }}>Compare on map</Btn>
-            <Btn kind="ghost" icon={<Copy size={16} weight="bold" aria-hidden="true" />} onClick={copy}>{copied ? "Copied" : "Copy brief"}</Btn>
-            <span style={{ flex: 1 }} /><Btn kind="ghost" onClick={reset}>New question</Btn>
+            <Btn kind="ghost" icon={<Copy size={16} weight="bold" aria-hidden="true" />} onClick={copy}>{copied ? "Copied" : "Copy"}</Btn>
+            <span style={{ flex: 1 }} /><Btn kind="ghost" onClick={reset}>New</Btn>
           </>
         ) : (
           <>
@@ -206,4 +206,13 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
       </Footer>
     </div>
   );
+}
+
+/** "2026-10-29T20:20:45+00:00" -> "29 Oct, 20:20 UTC"; unparseable input is shown as given. */
+function fmtRecorded(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const day = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+  return `${day}, ${time} UTC`;
 }

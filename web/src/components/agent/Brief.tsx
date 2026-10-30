@@ -44,7 +44,7 @@ export function BriefCard({ brief }: { brief: any }) {
           <div style={{ display: "flex", fontSize: 12, color: "var(--ink-muted)" }}><span>Impassable road, by run</span><span style={{ marginLeft: "auto" }}>{unit}</span></div>
           {bars.map((c, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", columnGap: 12, rowGap: 4, alignItems: "center" }}>
-              <span style={{ fontSize: 13 }}>{c.text}</span>
+              <span style={{ fontSize: 13 }}>{cap(c.text)}</span>
               <span style={{ ...FIG, fontSize: 13, fontWeight: 600, textAlign: "right", gridRow: "1 / span 2", gridColumn: 2 }}>{num(c.value as number)} {c.unit}</span>
               <div style={{ height: 6, borderRadius: 3, background: "var(--ground)", boxShadow: "var(--inset-shadow)" }}>
                 <div style={{ height: "100%", width: `${max > 0 ? Math.max(2, ((c.value as number) / max) * 100) : 0}%`, background: "var(--hazard)", borderRadius: 3 }} />
@@ -70,7 +70,7 @@ export function ClaimsCard({ brief }: { brief: any }) {
             {ok ? <CheckCircle size={18} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--verified)" }} />
                 : <Warning size={18} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />}
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-              <span style={{ fontSize: 14, lineHeight: "20px" }}>{c.text}</span>
+              <span style={{ fontSize: 14, lineHeight: "20px" }}>{cap(c.text)}</span>
               <span style={{ fontSize: 12, color: ok ? "var(--verified)" : "var(--ink-muted)" }}>
                 {ok ? "✓ verified" : "⚠ unverified"}
                 {c.source_run_id && <> · <span style={{ fontFamily: mono }}>{c.source_run_id}</span></>}
@@ -85,3 +85,6 @@ export function ClaimsCard({ brief }: { brief: any }) {
     </Card>
   );
 }
+
+/** Sentence case for claim text the model writes in lower case. */
+const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
