@@ -252,6 +252,39 @@ More likely causes are the estimated South Fork inflow (Hunt minus North Fork, t
 and floodplain storage the 2″ grid cannot resolve. The gauge-rise comparison was dropped: the channel starts dry, so
 the model has no pre-event level to measure a rise from.
 
+### Queens, New York (`nyc-queens-v0`): Hurricane Ida, 1 Sep 2021
+15 m grid (319 × 324 cells) on USGS 3DEP lidar (1/9″, first-quartile aggregation, NAVD88 → EGM2008), NYC
+building footprints with roof heights, an outflow ring on every edge, and 13 mm/h of combined-sewer capacity on
+all land (assumed). Rain from the gauges: LaGuardia 118 mm with a 56 mm/h peak hour, Central Park 7.13 in
+(181 mm) with the record 3.15 in (80 mm) hour. Presets: 118 mm / 4 h centre-peaked (peak 59 mm/h), 181 mm /
+4.5 h (peak 80 mm/h), the 181 mm as a 5 km cell centred on Woodside, and the 118 mm storm with sewer capacity
+doubled. Each runs in 15–35 s; mass balance 0.0 %.
+
+| Preset | Buildings with water close by | Flooded km² | Road km impassable | Max depth |
+|---|---|---|---|---|
+| LaGuardia gauge, 118 mm | 12,531 | 2.24 | 92 | 4.5 m |
+| Central Park rate, 181 mm | 15,171 | 3.67 | 132 | 4.7 m |
+| 181 mm core over Woodside | 10,615 | 1.76 | 66 | 3.7 m |
+| 118 mm, sewers ×2 | 9,113 | 1.07 | 44 | 2.3 m |
+
+**Scored against 311 reports** (`evals/validation/nyc311_ida.py`). 350 flood-related 311 requests in the box
+between 18:00 on 1 Sep and 06:00 on 2 Sep; 85 report water on the street (street flooding, catch basin, manhole),
+265 sewer backup or basement water. A report is a hit when the run reaches 0.15 m within 30 m. Reports are
+geocoded to street addresses, so the baseline is random road cells.
+
+| Preset | Street reports hit (95 % CI) | Random road cells | Lift |
+|---|---|---|---|
+| LaGuardia gauge, 118 mm | 64 % (53–74 %) | 36 % | 1.8× |
+| Central Park rate, 181 mm | 71 % (60–80 %) | 43 % | 1.7× |
+| 181 mm core over Woodside | 56 % (46–67 %) | 27 % | 2.1× |
+| 118 mm, sewers ×2 | 49 % (39–61 %) | 25 % | 1.9× |
+
+The model puts water where people reported it about twice as often as at random roads. Sewer backup and
+basement reports score a little lower (55 % at 118 mm, lift 1.6×); much of that water comes up through building
+pipes, which the model does not represent. 311 cannot measure false alarms: a street with no report may still
+have flooded. At 50 m every hit rate rises (74 % at 118 mm) but so does the baseline (53 %), so the lift falls
+to 1.4×.
+
 ### Where the rain falls (contract 0.6.0)
 `Storm.spatial` sets the footprint; `null` keeps rain on the whole area. Every option builds one rain field on the
 grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `docs/` research, not in the repo).
