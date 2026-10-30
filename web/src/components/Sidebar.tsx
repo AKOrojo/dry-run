@@ -6,6 +6,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { LayerKey, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
+import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
 import { Card, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, Segmented, srOnly, TextAction } from "./rev5";
 import { fmtT } from "./ds";
@@ -50,6 +51,8 @@ const ROUTE_T = svgThumb(<><path d="M4 25 C10 25 10 15 16 15 S22 5 27 5" stroke=
 const PHOTO_T = svgThumb(<><circle cx="10" cy="11" r="3" fill="var(--observed)" /><circle cx="21" cy="19" r="3" fill="var(--observed)" /><circle cx="12" cy="23" r="2" fill="var(--observed)" opacity=".6" /></>);
 const ARRIVAL_T = svgThumb(<><rect width="30" height="30" fill="var(--hazard)" opacity=".28" /><path d="M0 18 C8 12 14 22 30 14 V30 H0z" fill="var(--hazard)" opacity=".55" /><path d="M0 24 C9 20 16 28 30 22 V30 H0z" fill="var(--hazard)" /></>);
 
+const BOUNDARY_T = svgThumb(<path d="M-2 21 C7 13 15 23 32 9" stroke="var(--depth-1)" strokeWidth="2" fill="none" opacity=".9" />);
+
 const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; note?: string }[] = [
   { key: "water", name: "Water depth", thumb: imgThumb("water"), slider: true },
   { key: "buildings", name: "Buildings by depth", thumb: imgThumb("buildings"), slider: true },
@@ -60,18 +63,20 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "photos", name: "Photo observations", thumb: PHOTO_T, note: "None yet" },
   { key: "terrain", name: "Terrain (3D)", thumb: imgThumb("terrain") },
   { key: "imagery", name: "Aerial imagery", thumb: imgThumb("aerial"), slider: true },
+  { key: "boundary", name: "Lagoon / sea edge", thumb: BOUNDARY_T },
 ];
 
 function LayersCard() {
   const lay = useLayers();
   const imageryMode = lay.imageryMode;
+  const { boundary } = useExtras();
   return (
     <section style={{ display: "flex", flexDirection: "column", flex: "none", padding: "4px 0", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
-      {ROWS.map((r) => {
+      {ROWS.filter((r) => r.key !== "boundary" || boundary).map((r) => {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <label key={r.key} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+          <label key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
             <input type="checkbox" checked={on} onChange={(e) => setLayer(r.key, { on: e.target.checked })} style={srOnly} />
             <Checkbox on={on} />
             <span style={{ display: "flex", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
@@ -267,12 +272,21 @@ function SimulateBar({ busy, canRun, onSimulate }: Pick<ScenarioProps, "busy" | 
 
 // ---- sources ----
 function SourcesCard({ sources }: { sources: string[] }) {
+  const { inflows } = useExtras();
+  const note = inflows?.properties?.note;
   return (
     <Card title="Sources">
       <ul style={{ margin: 0, padding: "10px 14px 12px", listStyle: "none", display: "flex", flexDirection: "column", gap: 7, fontSize: 13, lineHeight: "18px" }}>
         {sources.map((c, i) => <li key={i}>{c}</li>)}
+        {inflows?.features.map((f) => (
+          <li key={f.properties.name}>
+            River inflow, {f.properties.name}
+            {!!f.properties.gauges?.length && <span style={{ color: "var(--ink-muted)" }}> · gauge {f.properties.gauges.join(", ")}</span>}
+          </li>
+        ))}
         <li style={{ color: "var(--ink-muted)" }}>© OpenStreetMap contributors</li>
       </ul>
+      {note && <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>{note}</p>}
       <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
         Built with Muse Spark Open. Not an operational warning system.
       </p>
