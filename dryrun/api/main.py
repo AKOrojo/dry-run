@@ -232,9 +232,24 @@ def config():
             # Cesium ion tokens are public client tokens (restrict allowed URLs in the ion dashboard);
             # serving it at runtime keeps it out of the image and out of Cloud Build secrets.
             "cesium_ion_token": _secret("CESIUM_ION_TOKEN"),
+            # Our own Google Map Tiles key (2D satellite as an alternative to Bing). Judges only: the key itself comes
+            # from /api/tiles/google-key behind X-Judge-Key; this flag only says whether to offer the option.
+            "google_tiles_available": bool(_secret("GOOGLE_TILES_KEY")),
             # Optional: large footprint file served gzipped from the public bucket (or ion). Empty = use
             # /api/aoi/{id}/layer/buildings_geojson.
             "buildings_url": os.getenv("DRYRUN_BUILDINGS_URL", "")}
+
+
+@app.get("/api/tiles/google-key")
+def google_tiles_key(request: Request):
+    """The Google Map Tiles key, for judges and the team only (owner rule). The key is restricted to the Map
+    Tiles API and our referrers, and the project caps it to the free tier per day (2D 3,000 tiles)."""
+    key = _secret("GOOGLE_TILES_KEY")
+    if not key:
+        raise HTTPException(404, "Google tiles are not configured")
+    ratelimit.require_paid_access(request)
+    limit(request, "google_key", per_hour=60)
+    return JSONResponse({"key": key}, headers={"Cache-Control": "no-store"})
 
 
 def _secret(name: str) -> str:

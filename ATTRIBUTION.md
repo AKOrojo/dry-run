@@ -40,7 +40,7 @@ before the data lands. Add the credit line to the UI in the same commit as the d
 | Source | Use | Licence / terms | Notes |
 |---|---|---|---|
 | Sentinel-1 (Copernicus), via Microsoft Planetary Computer | validation flood extent (30 Jun 2026 event) | RTC: CC BY 4.0; GRD: Copernicus legal notice | "Contains modified Copernicus Sentinel data [year]" |
-| Google Maps 2D Satellite (ion asset 3830182) | Aerial imagery for Lagos (#89); the app tries it first | Google Map Tiles API terms, via Cesium ion | Not serving: ion's shared Google project returns 429 "2D Tiles requests per day" (checked 2026-10-30), so Bing Aerial (above) is what users see. Move to In use only when tiles actually load, with the Google credit in the credit display |
+| Google Maps 2D Satellite (Map Tiles API, our own key; ion asset 3830182 as a second path) | judges-only Aerial option beside Bing (owner rule: Bing for everyone, Google for judges) | Google Map Tiles API terms | Google logo and imagery attributions in Cesium's on-screen credit display. Key: Secret Manager `google-tiles-key`, restricted to the Map Tiles API and our referrers, capped at 3,000 2D tiles/day (free tier: 100k/month). Move to In use when Eng B's toggle is live |
 | Cesium ion (Community tier) | serves the basemap above and terrain below; ion token restricted by URL | Community tier is non-commercial only | open question for the owner: the demo may be commercial-adjacent |
 
 ## Excluded
