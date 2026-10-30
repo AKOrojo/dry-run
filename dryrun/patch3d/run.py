@@ -100,7 +100,8 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
         g = (np.arange(9) + 0.5) * req.size_m / 9
         X, Y = np.meshgrid(g, g)
         plon, plat = probe.lonlat(X.ravel(), Y.ravel())
-        max_wse = max(float(forcing.sample(plon, plat, t)[0].max()) for t in np.linspace(t0, t1, 7))
+        max_wse = max(float(np.nan_to_num(forcing.sample(plon, plat, t)[0], nan=-np.inf).max())
+                      for t in np.linspace(t0, t1, 7))
         p = geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.cell_m, max_wse)
         n_fluid = int((~p.solid()).sum())
         procs = C.procs_for(n_fluid)
@@ -170,7 +171,7 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
                 force_t.append(t)
         vol3.append(float(depth.ravel()[open_cols].sum() * cell_area))
         wse2, _, _ = forcing.sample(lon, lat, t0 + t)
-        d2 = np.clip(wse2 - p.ground.ravel(), 0, None)
+        d2 = np.nan_to_num(np.clip(wse2 - p.ground.ravel(), 0, None))
         vol2.append(float(d2[open_cols].sum() * cell_area))
     vmax = max(0.5, float(np.ceil(max(np.abs(np.concatenate([np.ravel(a) for a in surf + mid])).max(), 0.01) * 2) / 2))
     for (t, _), depth, us, um in zip(times, depths, surf, mid):
@@ -179,17 +180,25 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
             t_s=round(t0 + t, 1),
             surface=save(req.run_id, pid, f"frames/{k:04d}_surface.png", post.surface_png(depth), "image/png"),
             velocity=save(req.run_id, pid, f"frames/{k:04d}_velocity.png", post.velocity_png(us, um, vmax), "image/png")))
-    if forces and p.building_ids:
-        F = np.array(forces)  # [frames, nb, 2] N
+    # a footprint cut by the box edge has walls on one side only, and the sponge band damps the flow, so a building
+    # that reaches into the band gets no force
+    k = C.SPONGE_CELLS
+    edge = {int(i) for i in np.concatenate([p.building[:k].ravel(), p.building[-k:].ravel(),
+                                            p.building[:, :k].ravel(), p.building[:, -k:].ravel()])}
+    whole = np.array([i for i in range(len(p.building_ids)) if i not in edge], int)
+    if forces and len(whole):
+        F = np.array(forces)[:, whole]  # [frames, nb, 2] N
         mag = np.hypot(F[..., 0], F[..., 1])
         kmax = mag.argmax(0)
-        nb = np.arange(len(p.building_ids))
-        bl = {"ids": p.building_ids, "peak_force_kN": np.round(mag[kmax, nb] / 1000, 2).tolist(),
+        nb = np.arange(len(whole))
+        bl = {"ids": [p.building_ids[i] for i in whole], "peak_force_kN": np.round(mag[kmax, nb] / 1000, 2).tolist(),
+              "excluded_at_box_edge": [p.building_ids[i] for i in sorted(edge - {-1})],
               "t_s": [round(t0 + force_t[k], 1) for k in kmax],
               "direction_deg": np.round(np.degrees(np.arctan2(F[kmax, nb, 0], F[kmax, nb, 1])) % 360, 0).tolist(),
               "method": "net horizontal pressure force on each footprint's wall faces from the 3D solve (pressure "
                         "relative to the open top); no shear; stair-stepped walls at cell_m; frames after the "
-                        f"{SPINUP_S:g} s spin-up only"}
+                        f"{SPINUP_S:g} s spin-up only; buildings reaching into the {C.SPONGE_CELLS * p.cell_m:g} m "
+                        "side sponge band are excluded"}
         buildings = save(req.run_id, pid, "buildings.json", json.dumps(bl).encode(), "application/json")
     w, s_, e, n_ = p.bounds_wgs84
     encoding = {"surface": f"depth_m = (R*256 + G) / 65535 * {post.DEPTH_MAX_M}; A = 255 where depth >= 0.02 m; "

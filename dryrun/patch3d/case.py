@@ -10,7 +10,10 @@ fraction is inletOutlet (the 2D window-mean fraction where flow enters, the cell
 keeps alpha bounded. A fixed 2D fraction on faces where water leaves pushed out water the cells did not hold
 (alpha fell to -83 and the solve failed). The side pressure can act on air in the interface band and in
 corners; fvOptions limitVelocity caps cell speed at U_CAP_M_S, well above flood speeds, so those air currents
-cannot run away. We do not impose the 2D velocity: it is estimated from the 2D water-surface slope, not a solved
+cannot run away. A sponge band SPONGE_CELLS wide along the sides relaxes velocity to rest on SPONGE_TAU_S: an open pressure side
+reflects and feeds energy into the box (still Queens ponds ran at the cap within 5 min, though closing the sides held
+them under 0.2 m/s); the band absorbs it, and the 2D level on the sides still moves water in and out. We do not
+impose the 2D velocity: it is estimated from the 2D water-surface slope, not a solved
 flux, and imposing it added water the other sides could not shed (the box gained 120 % in 10 min). hRef sits at
 the median 2D surface (reference_level).
 Turbulence: k-omega SST with rough-wall functions (Ks from a bare urban-surface Manning n). A laminar model had
@@ -45,6 +48,9 @@ WRITE_DT_S = 30.0  # output frame interval
 GROUND_MANNING = 0.02
 KS_GROUND_M = round((25.4 * GROUND_MANNING) ** 6, 4)  # ~0.017 m
 K_IN, OMEGA_IN = 1e-4, 1.0  # small free-stream turbulence on inflow
+SPONGE_CELLS = 4  # sponge band width in cells along each side; buildings in it get no force
+SPONGE_TAU_S = 20.0  # sponge velocity relaxation time for water (air relaxes 1000x faster)
+DRY_M = 0.01  # 2D depth below which a cell holds no water level
 U_CAP_M_S = 5.0  # cell speed cap (fvOptions limitVelocity): flood water here is < 2 m/s; this only stops the
 # spurious air currents that the side pressure drives in the interface band and in corners
 
@@ -87,14 +93,20 @@ class Forcing:
         return i, a
 
     def sample(self, lon: np.ndarray, lat: np.ndarray, t: float):
-        """(wse, u, v) at points: wse = ground + depth of the 2D run (nan-free)."""
+        """(wse, u, v) at points. wse is the 2D water surface interpolated from wet cells only, nan where the 2D run
+        is dry: ground + 0 there is not a water level, and holding it on a side put a phantom film (up to half a
+        cell of water at ground height, several kPa of p_rgh) on dry faces that jetted into the box at the 5 m/s cap."""
         from dryrun.patch3d.geometry import bilinear
 
         b = self.aoi.grid.bounds_wgs84
         i, a = self._bracket(t)
         d = (1 - a) * self.depth[i].astype(np.float64) + a * self.depth[i + 1].astype(np.float64)
         (u0, v0), (u1, v1) = self._frame_uv(i), self._frame_uv(i + 1)
-        wse = bilinear(self.dem + d, b, lon, lat)
+        wet = d > DRY_M
+        share = bilinear(wet.astype(np.float64), b, lon, lat)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            wse = bilinear(np.where(wet, self.dem + d, 0.0), b, lon, lat) / share
+        wse = np.where((share > 0) & (bilinear(d, b, lon, lat) > DRY_M), wse, np.nan)
         return wse, bilinear((1 - a) * u0 + a * u1, b, lon, lat), bilinear((1 - a) * v0 + a * v1, b, lon, lat)
 
     def peak_time(self, lon: float, lat: float) -> float:
@@ -174,6 +186,18 @@ limitU
     selectionMode all;
     max {U_CAP_M_S};
 }}
+sponge
+{{
+    type vectorSemiImplicitSource;
+    active yes;
+    selectionMode cellSet;
+    cellSet sponge;
+    volumeMode specific;
+    injectionRateSuSp
+    {{
+        U ((0 0 0) {-RHO_WATER / SPONGE_TAU_S:g});
+    }}
+}}
 """)
     _w(case / "constant/g", "uniformDimensionedVectorField", "g", "\ndimensions [0 1 -2 0 0 0 0];\nvalue (0 0 -9.81);\n")
     _w(case / "constant/transportProperties", "dictionary", "transportProperties", f"""
@@ -213,7 +237,7 @@ def _scalar_list(a: np.ndarray) -> str:
 def column_fields(wse: np.ndarray, u: np.ndarray, v: np.ndarray, zc: np.ndarray, dz: float):
     """alpha.water and U for cells at heights zc (broadcast with wse/u/v): fractional alpha at the interface,
     the depth-averaged velocity below the surface, at rest in the air."""
-    alpha = np.clip((wse - (zc - dz / 2)) / dz, 0.0, 1.0)
+    alpha = np.nan_to_num(np.clip((wse - (zc - dz / 2)) / dz, 0.0, 1.0))  # dry (nan wse): air
     return alpha, u * alpha, v * alpha
 
 
@@ -221,10 +245,26 @@ def _bc_times(t0: float, t1: float) -> list[float]:
     return list(np.arange(0.0, t1 - t0, BC_DT_S)) + [t1 - t0]
 
 
-def level_p_rgh(wse: np.ndarray, alpha: np.ndarray, href: float) -> np.ndarray:
-    """Hydrostatic p_rgh (p_rgh = 0 in still air, as the atmosphere patch holds): (rho_w - rho_a) g (wse - hRef)
-    below the surface."""
-    return alpha * (RHO_WATER - RHO_AIR) * G * (wse - href)
+def level_p_rgh(wse: np.ndarray, zc: np.ndarray, dz: float, href: float) -> np.ndarray:
+    """Hydrostatic p_rgh at heights zc under a water surface wse, in interFoam's discrete balance (p_rgh = 0 in still
+    air, as the atmosphere patch holds). The solver holds a column at rest when p_rgh steps by
+    -g (z_f - hRef) (rho_above - rho_below) across each horizontal face, with rho from the cells' water fraction. The
+    analytic (rho_w - rho_a) g (wse - hRef) misses that step in the interface band by ~270 Pa (2.5 cm of water)
+    when the surface is near hRef; held on a side, that mismatch pulled water across every interface-band face and
+    still ponds ran at the 5 m/s cap within minutes. Summed from the cell at zc up past the surface; deeper faces
+    have no density step. nan wse (dry): 0."""
+    wse = np.nan_to_num(np.broadcast_to(wse, np.shape(zc)), nan=-np.inf)
+
+    def rho(z):
+        a, _, _ = column_fields(wse, 0.0, 0.0, z, dz)
+        return RHO_AIR + a * (RHO_WATER - RHO_AIR)
+
+    j0 = np.maximum(np.floor((np.where(np.isfinite(wse), wse, zc) - zc) / dz) - 1, 0)
+    out = np.zeros(np.shape(zc))
+    for k in range(4):  # the faces from a cell below the surface cell to a cell above it
+        zb = zc + (j0 + k) * dz
+        out -= G * (zb + dz / 2 - href) * (rho(zb + dz) - rho(zb))
+    return out
 
 
 def reference_level(p: Patch, forcing: Forcing, t0: float) -> float:
@@ -233,7 +273,8 @@ def reference_level(p: Patch, forcing: Forcing, t0: float) -> float:
     10 m/s air currents that grew until the solve failed. hRef near the surface makes p_rgh nearly continuous."""
     X, Y = np.meshgrid((np.arange(p.nx) + 0.5) * p.cell_m, (np.arange(p.ny) + 0.5) * p.cell_m)
     lon, lat = p.lonlat(X.ravel(), Y.ravel())
-    return round(float(np.median(forcing.sample(lon, lat, t0)[0])), 3)
+    wse = forcing.sample(lon, lat, t0)[0]
+    return round(float(np.nanmedian(wse) if np.isfinite(wse).any() else np.median(p.ground)), 3)
 
 
 def write_boundary_data(case: Path, p: Patch, forcing: Forcing, t0: float, t1: float, href: float) -> None:
@@ -246,10 +287,9 @@ def write_boundary_data(case: Path, p: Patch, forcing: Forcing, t0: float, t1: f
         lon, lat = p.lonlat(pts[:, 0], pts[:, 1])
         for t in _bc_times(t0, t1):
             wse, u, v = forcing.sample(lon, lat, t0 + t)
-            alpha, _, _ = column_fields(wse, u, v, pts[:, 2], p.dz)
             d = base / f"{t:g}"
             d.mkdir(exist_ok=True)
-            (d / "p_rgh").write_text(_scalar_list(level_p_rgh(wse, alpha, href)))
+            (d / "p_rgh").write_text(_scalar_list(level_p_rgh(wse, pts[:, 2], p.dz, href)))
 
 
 def side_inlet_alpha(case: Path, p: Patch, forcing: Forcing, t0: float, t1: float) -> dict[str, np.ndarray]:
@@ -273,6 +313,14 @@ def write_cellset(case: Path, p: Patch) -> int:
     fluid = np.nonzero(~p.solid().ravel())[0]  # [nz, ny, nx] ravel == i + nx (j + ny k)
     _w(case / "constant/polyMesh/sets/fluid", "cellSet", "fluid", _scalar_list(fluid.astype(np.int64)).replace(".0", ""))
     return int(fluid.size)
+
+
+def write_sponge(case: Path, p: Patch, C: np.ndarray) -> int:
+    """cellSet `sponge`: the subset-mesh cells within SPONGE_CELLS of a side."""
+    d = np.minimum.reduce([C[:, 0], p.size_m - C[:, 0], C[:, 1], p.size_m - C[:, 1]])
+    ids = np.nonzero(d < SPONGE_CELLS * p.cell_m)[0]
+    _w(case / "constant/polyMesh/sets/sponge", "cellSet", "sponge", _scalar_list(ids.astype(np.int64)).replace(".0", ""))
+    return int(ids.size)
 
 
 def read_cell_centres(case: Path, ncells: int) -> np.ndarray:
@@ -304,7 +352,7 @@ def write_initial_fields(case: Path, p: Patch, forcing: Forcing, t0: float, t1: 
        + walls.format(t="noSlip", v="") + "\n}\n")
     _w(case / "0/p_rgh", "volScalarField", "p_rgh",
        "\ndimensions [1 -1 -2 0 0 0 0];\ninternalField nonuniform List<scalar> "
-       + _scalar_list(level_p_rgh(wse, alpha, href)) + ";\nboundaryField\n{\n" + side_p
+       + _scalar_list(level_p_rgh(wse, C[:, 2], p.dz, href)) + ";\nboundaryField\n{\n" + side_p
        + "\n    atmosphere { type totalPressure; p0 uniform 0; }\n"
        + walls.format(t="fixedFluxPressure", v="value uniform 0;") + "\n}\n")
     for name, cls, dims, val, wall in (
@@ -318,7 +366,8 @@ def write_initial_fields(case: Path, p: Patch, forcing: Forcing, t0: float, t1: 
            + "\n".join(f"    {s} {open_bc}" for s in (*SIDES, "atmosphere"))
            + f"\n    \"(walls|floor)\" {{ type {wall}; }}\n}}\n")
     cell_v = p.cell_m * p.cell_m * p.dz
-    return {"water_m3_t0": round(float(alpha.sum() * cell_v), 1), "sides": "2D water level (hydrostatic p_rgh)", "href_m": href}
+    return {"water_m3_t0": round(float(alpha.sum() * cell_v), 1), "sides": "2D water level (hydrostatic p_rgh)",
+            "href_m": href, "sponge_m": SPONGE_CELLS * p.cell_m, "sponge_cells": write_sponge(case, p, C)}
 
 
 def procs_for(cells: int) -> int:

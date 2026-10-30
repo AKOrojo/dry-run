@@ -348,21 +348,27 @@ one way in a finished 2D run:
   that pressure, water enters with the 2D water fraction and leaves with its own. The top is open air. We do
   not impose the 2D velocity on the sides: ours is estimated from the 2D water-surface slope, not solved, and
   imposing it added water faster than the other sides let it out (the box gained 120 % in 10 minutes against
-  a steady 2D run).
+  a steady 2D run). The side pressure follows interFoam's own discrete hydrostatic balance (the textbook formula
+  is ~270 Pa off in the waterline cell), and dry 2D cells hold no water level. An 8 m damping band along the
+  sides relaxes velocity to rest over 20 s. Without it, an open side kept feeding energy into the box: still
+  ponds in a Queens patch reached the 5 m/s speed cap within 5 minutes (they stayed below 0.2 m/s with the sides
+  closed). With it, those ponds stay below 0.2 m/s (99th percentile 0.04 m/s) and match the 2D volume to 0.1 %.
+  Buildings that reach into the band get no force.
 - **Test (Lagos v2, 120 mm, 100 m box at 2 m, 25,565 cells, 3 CPU cores, about 8 minutes for 10 minutes of
   flow):** after a 2-minute spin-up the 3D water volume holds steady at 23 % below the 2D run's (1,480–1,590 m³
   against ~1,970 m³), and the water fraction stays bounded. The gap barely moves with bed roughness (−24 % at
   Manning n 0.03), so it comes from the nesting and the 2 m terrain, not from friction: the 3D box drains to a
-  lower level than the 30 m 2D cells hold. Water speeds: median 0.55 m/s, 99th percentile 2–3 m/s.
+  lower level than the 30 m 2D cells hold. Water speeds: median 0.27 m/s, 99th percentile 1.1 m/s, maximum 1.4 m/s
+  (before the damping band: median 0.55 m/s, 99th percentile 2–3 m/s); the volume gap is the same with the band.
 - **Outputs** (`/api/runs/{run_id}/patch3d`): a water-surface depth PNG and a velocity PNG (surface and mid-depth
   u, v) every 30 s, and the net horizontal force on each building from its
   wall pressures (shear is not included). The manifest records the cell count and the 3D and 2D water volume
   per frame.
 - **Limits:** RANS with wall functions on 0.25–2 m cells, so wakes and near-wall shear are approximate and
-  vertical velocity profiles are indicative. The side pressure drives spurious air currents in a few cells (in
-  corners and just above the water at the sides); cell speeds are capped at 5 m/s (flood water here moves
-  under 2 m/s), so these currents cannot grow, but the capped air speeds are not physical. The sides carry levels only, so water entering the box starts
-  without the momentum it had in the 2D run; keep the area of interest away from the sides. The 3D patch does
+  vertical velocity profiles are indicative. Cell speeds are capped at 5 m/s (flood water here moves under
+  2 m/s); after the damping band only a few air cells reach it. The sides carry levels only, so water entering
+  the box starts without the momentum it had in the 2D run, and the band damps flow within 8 m of the sides;
+  keep the area of interest away from them. The 3D patch does
   not feed back into the 2D run.
 - **Cost:** solves take minutes to hours on CPUs, so the API never solves inside a request. Showcase patches are
   precomputed; `POST /api/runs/{run_id}/patch3d` returns a stored patch to anyone. Queueing a new one (and starting
