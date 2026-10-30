@@ -40,7 +40,7 @@ function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTa
         const on = n === active;
         const st: CSSProperties = on
           ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: "0 12px" }
-          : { color: "var(--ink-muted)", padding: "0 12px" };
+          : { color: "var(--ink-muted)", fontWeight: 400, padding: "0 12px" };
         return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : n === "Layers" ? "layers" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
           style={{ height: 38, marginRight: 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", ...st }}>{n}</button>;
       })}
@@ -87,7 +87,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
 ];
 
 const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit",
-  ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) });
+  ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) });
 const KEY_NOTE = "Google imagery needs the judge key.";
 
 /** Aerial source: Bing for everyone, Google Map Tiles for judges (key from the server, behind the judge key). */
@@ -175,7 +175,7 @@ function LayersCard() {
             const on = lay.basemap === m;
             return <button key={m} type="button" aria-pressed={on} onClick={() => setBasemap(m)}
               title={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}
-              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
+              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
               {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</button>;
           })}
         </span>
@@ -187,7 +187,7 @@ function LayersCard() {
           {(["colour", "greyscale"] as const).map((m) => {
             const on = imageryMode === m;
             return <button key={m} type="button" aria-pressed={on} disabled={lay.basemap !== "aerial"} onClick={() => setImageryMode(m)}
-              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
+              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
               {m === "colour" ? "Colour" : "Greyscale"}</button>;
           })}
         </span>

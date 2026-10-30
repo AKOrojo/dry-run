@@ -107,7 +107,7 @@ export function Segmented<T extends string>({ options, active, onChange, size = 
         return (
           <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
             style={{ flex: 1, height: 26, padding: "0 8px", border: 0, borderRadius: 3, font: "inherit", fontSize: size, whiteSpace: "nowrap",
-              ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
+              ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
             {o.label}
           </button>
         );
