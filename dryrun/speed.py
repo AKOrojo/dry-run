@@ -2,11 +2,15 @@
 
 The solver's cost is cells x steps, and the step is the CFL limit dt = ALPHA * dx / sqrt(g h_max), so a run costs
 about cells x simulated seconds x ns_per_cell_s, where ns_per_cell_s grows with how deep the water gets. That is
-fitted per AOI on prod's stored elapsed_s (Cloud Run, rev 00046), against the storm's effective rain depth: the
-storm total minus what interventions add in drainage over the storm. Unknown AOIs fall back to the CFL form.
-Outside dryrun/sim, so it never changes a run_id.
+fitted per AOI on prod's elapsed_s against the storm's effective rain depth: the storm total minus what
+interventions add in drainage over the storm (plus what they take away: sewers at capacity_factor 0 drain nothing).
+Unknown AOIs fall back to the CFL form. Outside dryrun/sim, so it never changes a run_id.
 
-Fit (prod rev 00046, the 18 demo runs; in-sample, so expect worse on new scenarios): see test_speed_estimate.
+Fit: prod rev 00058 (2 vCPU Cloud Run), 7 forced runs through /simulate/stream on 2026-10-30 (Eng D,
+data/_scratch/prod_timings.json): Lagos 50/120/200 mm and the tide lock, Texas replay, Queens LaGuardia and the
+Queens hero (sewers full). Those ran 1.4-2.7x slower than the rev 00046 fit predicted; points not re-measured (the
+0 mm floors, Queens 67 mm) are the rev 00046 values times the measured ratio for their AOI. Repeat runs of one
+spec on prod vary by tens of percent, so SPREAD stays wide.
 """
 
 from __future__ import annotations
@@ -17,21 +21,22 @@ import numpy as np
 
 from dryrun.contracts import AOIManifest, DrainUpgrade, ScenarioSpec, TideLevel
 
-# effective rain mm -> ns per cell per simulated second, prod Cloud Run (no-intervention demo runs)
+# effective rain mm -> ns per cell per simulated second, prod Cloud Run rev 00058
 CALIBRATION: dict[str, list[tuple[float, float]]] = {
-# The 0 mm points: the held lagoon / edge water keeps dt small even without rain (Lagos: drain sweeps that remove
-# the rain run at ~3 ns); Queens' 67 mm point is the 118 mm storm with sewers x2.
-    "lagos-lekki-v1": [(0.0, 3.4), (50.0, 3.46), (120.0, 6.74), (200.0, 6.61)],
-    "lagos-lekki-v2": [(0.0, 3.4), (50.0, 3.46), (120.0, 6.74), (200.0, 6.61)],
-    "nyc-queens-v0": [(66.8, 6.0), (118.0, 9.74), (181.0, 10.35)],
-    "texas-guadalupe-v0": [(0.0, 3.43), (85.0, 4.30)],
+# The 0 mm points: the held lagoon / edge water keeps dt small even without rain (Lagos drain sweeps that remove
+# the rain); Queens' 238.8 mm point is the hero, 181 mm with the sewers full (12.8 mm/h x 4.5 h back).
+    "lagos-lekki-v1": [(0.0, 5.8), (50.0, 5.92), (120.0, 9.39), (200.0, 13.09)],
+    "lagos-lekki-v2": [(0.0, 5.8), (50.0, 5.92), (120.0, 9.39), (200.0, 13.09)],
+    "nyc-queens-v0": [(66.8, 9.7), (118.0, 15.71), (238.8, 23.5)],
+    "texas-guadalupe-v0": [(0.0, 5.6), (85.0, 7.0)],
 }
-K_CFL = 30.0  # ns per cell per simulated second per (sqrt(g h) / dx), median over the calibrated AOIs
+K_CFL = 48.0  # ns per cell per simulated second per (sqrt(g h) / dx): the rev 00046 value x 1.6, the median ratio
 OVERHEAD_S = 0.0  # the calibration is on total elapsed_s, which already includes input load and output writes
-OTHER_INTERVENTION = 0.85  # any intervention but tide: shallower water, ~15 % less time on prod
-TIDE_HIGH = 1.18  # a held level above the default makes deeper water, ~18 % more time (Lagos tide lock)
+OTHER_INTERVENTION = 0.85  # an intervention that removes water (drains, green, ponds): ~15 % less time (rev 00046)
+TIDE_HIGH = 1.54  # a held level above the default makes deeper water: the Lagos tide lock, 14.45 vs 9.39 ns
+EXTRAPOLATE_MAX = 1.5  # above the table, follow its last slope, at most this times its last value
 FAKE_S = 1.0
-SPREAD = 0.3  # +-: worst in-sample miss 27 % (a drain-only scenario); new scenarios can miss more
+SPREAD = 0.4  # +-: rev 00046 to 00058 moved the same specs by 1.4-2.7x; one prod sample per spec
 
 
 def effective_rain_mm(spec: ScenarioSpec, base_drain_mm_h: float = 0.0, mean_rain_mm: float | None = None) -> float:
@@ -44,11 +49,20 @@ def effective_rain_mm(spec: ScenarioSpec, base_drain_mm_h: float = 0.0, mean_rai
     return max(mm, 0.0)
 
 
+def _removes_water(iv) -> bool:
+    """Drains, green areas, ponds and the like; not a raised level, and not a drain made worse (sewers full)."""
+    if isinstance(iv, TideLevel):
+        return False
+    if isinstance(iv, DrainUpgrade):
+        return iv.add_mm_h > 0 or iv.capacity_factor > 1.0
+    return True
+
+
 def ns_per_cell_s(aoi: AOIManifest, spec: ScenarioSpec, base_drain_mm_h: float = 0.0,
                   mean_rain_mm: float | None = None) -> float:
     eff = effective_rain_mm(spec, base_drain_mm_h, mean_rain_mm)
     factor = 1.0
-    if any(not isinstance(iv, TideLevel) for iv in spec.interventions):
+    if any(_removes_water(iv) for iv in spec.interventions):
         factor *= OTHER_INTERVENTION
     if any(isinstance(iv, TideLevel) and iv.boundary_level_m > -0.5 for iv in spec.interventions):
         factor *= TIDE_HIGH
@@ -57,6 +71,9 @@ def ns_per_cell_s(aoi: AOIManifest, spec: ScenarioSpec, base_drain_mm_h: float =
         x, y = zip(*sorted(table))
         if eff < x[0] and x[0] > 0:  # below the calibrated range: cost falls with the water, to a floor
             return factor * max(y[0] * eff / x[0], 0.5 * y[0])
+        if eff > x[-1] and len(x) > 1:  # above it: deeper water keeps costing more (the old clamp missed 2.7x)
+            slope = max((y[-1] - y[-2]) / (x[-1] - x[-2]), 0.0)
+            return factor * min(y[-1] + slope * (eff - x[-1]), EXTRAPOLATE_MAX * y[-1])
         return factor * float(np.interp(eff, x, y))
     h = min(max(eff / 1000.0 * 15.0, 0.5), 5.0)  # rough peak depth: rain ponds ~15x in low spots
     return K_CFL * math.sqrt(9.81 * h) / aoi.grid.cell_size_m

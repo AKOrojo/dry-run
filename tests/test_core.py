@@ -740,6 +740,20 @@ def test_speed_estimate():
     assert speed.domain_cells(aoi, poly.model_copy(update={"domain": "rain_area"})) < aoi.grid.nx * aoi.grid.ny
     r = speed.estimate(aoi, base)
     assert r["low_s"] < r["est_s"] < r["high_s"]
+    # calibrated AOI (prod rev 00058 points): reproduced in-sample; sewers full costs more, not 15 % less; above
+    # the table the cost keeps rising (bounded)
+    lagos = aoi.model_copy(update={"aoi_id": "lagos-lekki-v2"})
+    queens = aoi.model_copy(update={"aoi_id": "nyc-queens-v0"})
+    lb = ScenarioSpec(aoi_id="lagos-lekki-v2", storm=Storm(total_mm=200, duration_h=3))
+    assert abs(speed.ns_per_cell_s(lagos, lb) - 13.09) < 1e-6
+    qb = ScenarioSpec(aoi_id="nyc-queens-v0", storm=Storm(total_mm=181, duration_h=4.5))
+    full = qb.model_copy(update={"interventions": [DrainUpgrade(capacity_factor=0.0)]})
+    assert speed.ns_per_cell_s(queens, full, base_drain_mm_h=12.8) > speed.ns_per_cell_s(queens, qb, base_drain_mm_h=12.8)
+    assert abs(speed.ns_per_cell_s(queens, full, base_drain_mm_h=12.8) - 23.5) < 0.1  # drain is 12.8 rounded
+    huge = qb.model_copy(update={"storm": Storm(total_mm=400, duration_h=4.5)})
+    assert 23.5 < speed.ns_per_cell_s(queens, huge) <= speed.EXTRAPOLATE_MAX * 23.5
+
+
 def test_rain_area_domain():
     from pydantic import ValidationError
 
