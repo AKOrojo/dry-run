@@ -137,9 +137,9 @@ function ShareMenu({ onCopyLink, onSaveImage }: { onCopyLink: () => Promise<stri
   );
 }
 
-export function TopBar({ aois, aoiId, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage }: {
+export function TopBar({ rainText, aois, aoiId, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage }: {
   aois: { aoi_id: string; name: string }[]; aoiId?: string; onAoi: (id: string) => void;
-  rainMm: number; durationH: number; pattern: keyof typeof PATTERN_TEXT;
+  rainMm: number; durationH: number; pattern: keyof typeof PATTERN_TEXT; /** Where the rain falls, or null for "pattern over the area". */ rainText?: string | null;
   mode: Mode; onMode: (m: Mode) => void; agentRuns: number; onTour: () => void;
   /** Both return the short status line to show ("Link copied", or why it failed). */
   onCopyLink: () => Promise<string>; onSaveImage: () => string | null;
@@ -165,7 +165,7 @@ export function TopBar({ aois, aoiId, onAoi, rainMm, durationH, pattern, mode, o
       )}
       <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)" }}>
         <CloudRain size={15} weight="bold" />
-        <span style={{ color: "var(--ink)", ...FIG }}>{rainMm} mm / {durationH} h</span>{PATTERN_TEXT[pattern]} over the area
+        <span style={{ color: "var(--ink)", ...FIG }}>{rainMm} mm / {durationH} h</span>{rainText ?? `${PATTERN_TEXT[pattern]} over the area`}
       </span>
       <nav aria-label="Mode" style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto", padding: 3, background: "var(--ground)", boxShadow: "var(--inset-shadow)", borderRadius: "var(--radius-md)" }}>
         <ModeTab name="Scenario" Ic={MapTrifold} active={mode === "Scenario"} onClick={() => onMode("Scenario")} />

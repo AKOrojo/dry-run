@@ -24,11 +24,17 @@ import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
 import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
+import { rain as rainStore, setRain, useRain } from "../lib/rain";
+import { RainMap } from "./RainMap";
+import { Anchored } from "./Anchored";
+import type { Anchors } from "./Anchored";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
 
 export type MapStageProps = {
+  /** The storm being edited: the rain-area overlay draws its label and track from it. */
+  rainStorm?: { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
   aoi?: AOIManifest; run?: RunManifest; frames?: { t_s: number; url: string }[]; tS: number;
   ionToken: string; buildingsUrl?: string; runsBase: string;
   /** Compare swipe: run B's frames, drawn right of `split` (0..1 of the width) while `frames` stay left of it. */
@@ -55,7 +61,6 @@ type Reading = { depth: number; max: number; ser?: PointSeries | null; loading?:
 type Place = { name: string; lon: number; lat: number; ring: [number, number][] };
 type Area = { road_km_impassable: number; buildings_flooded: number };
 type ArrivalLegend = { edges_min: number[]; alphas: number[]; rgb: string; note: string };
-type Anchors = Set<(scene: Cesium.Scene) => void>;
 
 // ---------- style fragments from parts.py ----------
 const elevHi = "var(--elev-hi, transparent)";
@@ -76,31 +81,6 @@ const segBtn = (on: boolean, h: number, disabled = false): CSSProperties => ({
     : { background: "transparent", color: "var(--ink-muted)" }),
   ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}),
 });
-
-// ---------- anchored overlay: follows a lon/lat every frame ----------
-function Anchored({ anchors, scene, lon, lat, dx = 0, dy = 0, children }: {
-  anchors: React.MutableRefObject<Anchors>; scene?: Cesium.Scene; lon: number; lat: number; dx?: number; dy?: number; children: ReactNode;
-}) {
-  const el = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!scene) return;
-    const scratch = new Cesium.Cartesian2();
-    const update = (s: Cesium.Scene) => {
-      const node = el.current;
-      if (!node || s.isDestroyed()) return;
-      const h = s.globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0;
-      const win = Cesium.SceneTransforms.worldToWindowCoordinates(s, Cesium.Cartesian3.fromDegrees(lon, lat, h), scratch);
-      const w = s.canvas.clientWidth, hh = s.canvas.clientHeight;
-      if (!win || win.x < -80 || win.y < -80 || win.x > w + 80 || win.y > hh + 80) { node.style.display = "none"; return; }
-      node.style.display = "";
-      node.style.transform = `translate(${Math.round(win.x + dx)}px, ${Math.round(win.y + dy)}px)`;
-    };
-    anchors.current.add(update);
-    update(scene);
-    return () => { anchors.current.delete(update); };
-  }, [scene, lon, lat, dx, dy, anchors]);
-  return <div ref={el} style={{ position: "absolute", left: 0, top: 0, display: "none", pointerEvents: "none", willChange: "transform" }}>{children}</div>;
-}
 
 // ---------- geometry helpers ----------
 function pointInRing(x: number, y: number, ring: [number, number][]) {
@@ -505,12 +485,13 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
 }
 
 // ---------- the stage ----------
-export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
+export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
   const lay = useLayers();
   const wps = useWaypoints();
+  const rs = useRain();
   const runId = run?.run_id;
   const tSRef = useRef(tS);
   tSRef.current = tS;
@@ -676,7 +657,7 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuildin
       const c = Cesium.Cartographic.fromCartesian(p);
       return { lon: Cesium.Math.toDegrees(c.longitude), lat: Cesium.Math.toDegrees(c.latitude) };
     };
-    const hoverAllowed = () => modeRef.current !== "free" && !flyPlayingRef.current && !drawRef.current.drawing;
+    const hoverAllowed = () => modeRef.current !== "free" && !flyPlayingRef.current && !drawRef.current.drawing && !rainStore.get().picking;
     const process = async () => {
       timer = undefined;
       const cur = cursor.current;
@@ -943,11 +924,11 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuildin
   const [area, setArea] = useState<Area | null>(null);
   const aoiId = aoi?.aoi_id;
   useEffect(() => {
-    setPlaces([]); setSelectedPlace(null);
+    setPlaces([]); setSelectedPlace(null); setRain({ places: [] });
     if (!aoiId) return;
     let cancelled = false;
     fetch(`${API}/api/aoi/${aoiId}/layer/places`).then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!cancelled && d) setPlaces(parsePlaces(d)); }).catch(() => { /* no places layer */ });
+      .then((d) => { if (!cancelled && d) { const ps = parsePlaces(d); setPlaces(ps); setRain({ places: ps }); } }).catch(() => { /* no places layer */ });
     return () => { cancelled = true; };
   }, [aoiId]);
   const place = useMemo(() => places.find((p) => p.name === selectedPlace), [places, selectedPlace]);
@@ -1126,8 +1107,12 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuildin
             onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
           <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
         </div>
-        <span style={{ ...pill, position: "absolute", left: "50%", top: 18, transform: "translateX(-50%)" }}>
-          {drawing ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
+        {/* Below the route and camera controls, so it never covers them. */}
+        <span style={{ ...pill, position: "absolute", left: "50%", top: 62, transform: "translateX(-50%)", maxWidth: "calc(100% - 32px)" }}>
+          {rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
+            : rs.picking === "centre" ? "Click the map to place the storm centre · Esc to cancel"
+            : rs.visible && rs.mode === "cell" && !drawing && mode === "orbit" ? "Click to place the storm · drag the ring to resize · drag the arrow to steer"
+            : drawing ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
             : mode === "free" ? "Drag to look · WASD to move · E / Q up and down · Shift faster · Esc to orbit"
             : mode === "fly" ? "Drag to look around · scroll or E / Q for height · Esc to orbit"
             : "Drag to pan · right-drag or Ctrl+drag to orbit and tilt · scroll to zoom · W to drop a waypoint"}
@@ -1148,6 +1133,16 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuildin
         )}
 
         {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
+        {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
+        {rs.visible && rs.preview && (
+          <div className="ft-legend" style={{ position: "absolute", left: 16, bottom: 44, pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
+            <span className="ft-stat-label">Rain over the storm</span>
+            <span style={{ width: 168, height: 10, borderRadius: "var(--radius-pill)", border: "var(--stroke-hairline) solid var(--hairline)",
+              background: "linear-gradient(90deg, color-mix(in srgb, var(--depth-3) 6%, transparent), var(--depth-3))" }} />
+            <span style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--ink-muted)", ...FIG }}>
+              <span>0</span><span>{Math.round(rs.preview.vmax_mm / 2)}</span><span>{Math.round(rs.preview.vmax_mm)} mm</span></span>
+          </div>
+        )}
 
         {place && (
           <div style={{ position: "absolute", left: "50%", bottom: 74, transform: "translateX(-50%)", display: "flex", flexDirection: "column", minWidth: 520, background: "var(--surface-raised)",

@@ -19,6 +19,8 @@ import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
+import { buildStorm, rainSummary, initRain, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
+import { useLayers } from "./lib/layers";
 import { Tour, tourDisabled, tourDone } from "./components/Tour";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
@@ -64,6 +66,15 @@ export default function App() {
   const view = useView();
   const pinSeries = usePinnedSeries();
   const aoiId = aoi?.aoi_id;
+  const rainState = useRain();
+  const lay = useLayers();
+  const { spatial, ready: rainReady } = spatialOf(rainState);
+  const stormNow = stormKey(rain, durationH, pattern, spatial);
+  useEffect(() => { if (aoi) initRain(aoi.aoi_id, aoi.grid.bounds_wgs84); }, [aoi?.aoi_id]);
+  useRainPreview(aoiId, rain, durationH, pattern);
+  // The preview is on the map until a run exists for this very storm; the Layers card can bring it back.
+  const rainVisible = !!spatial && rainReady && (lay.rain.on || rainState.lastSimKey !== stormNow);
+  useEffect(() => { patchRain({ visible: rainVisible }); }, [rainVisible]);
   const runId = run?.status === "done" ? run.run_id : undefined;
 
   // First visit only; ?notour=1 keeps it off in automated runs. The delay lets the layout settle.
@@ -132,7 +143,8 @@ export default function App() {
     setBusy(true); setSimErr(null);
     const interventions: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
     try {
-      const m = await simulate({ aoi_id: aoi!.aoi_id, storm: { total_mm: rain, duration_h: durationH, pattern }, interventions });
+      const m = await simulate({ aoi_id: aoi!.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions });
+      patchRain({ lastSimKey: stormNow });
       setRun(m);
       addRun(m);
       startClock(m);
@@ -233,14 +245,15 @@ export default function App() {
 
   return (
     <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
-      <TopBar aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
+      <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
         mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
         onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
             {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
-              tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
+              tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase}
+              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} />}
           </div>
           {side && aoi && pair && (
             <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", right: 0 }}>
@@ -255,7 +268,7 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && (buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+        {view.timeline && (buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
           third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} />)}
       </div>
@@ -279,7 +292,7 @@ export default function App() {
           </>
         ) : undefined} scenario={{
           rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
-          coastal, busy, canRun: !!aoi, onSimulate: go, err: simErr,
+          coastal, busy, canRun: !!aoi && rainReady, onSimulate: go, err: simErr,
         }} />
       </div>
       {tour && <Tour onClose={() => setTour(false)} />}

@@ -8,6 +8,7 @@ import { useExtras } from "../lib/extras";
 import { clock, useClock } from "../lib/clock";
 import { addNote, removeNote, useNotes } from "../lib/notes";
 import { fmtT } from "./ds";
+import { depthByPlace, hyetograph, isCell, useRain } from "../lib/rain";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
@@ -320,7 +321,49 @@ function abNow(a: number, b: number, digits: number) {
   );
 }
 
-export function Dock({ run, series, ghost, third, side, note }: { run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+type RainStorm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
+
+/** Before a run, with a rain area set: the rain at the storm centre over time, and the preview depth inside each place. */
+function RainDock({ storm }: { storm: RainStorm }) {
+  const r = useRain();
+  const f = r.preview;
+  const [rows, setRows] = useState<{ name: string; mm: number }[]>([]);
+  useEffect(() => {
+    if (!f || !r.places.length) { setRows([]); return; }
+    let off = false;
+    depthByPlace(f, r.places).then((x) => { if (!off) setRows(x); }, () => { if (!off) setRows([]); });
+    return () => { off = true; };
+  }, [f?.png, r.places]);
+  const series = useMemo(() => hyetograph(storm.total_mm, storm.duration_h, storm.pattern ?? "uniform"), [storm.total_mm, storm.duration_h, storm.pattern]);
+  const moving = isCell(r) && r.moving;
+  const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
+  return (
+    <div data-tour="timeline" style={shell}>
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <Band title="Rain at the storm centre" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>
+          mm/h{moving ? " · moving cell, so the centre is where the storm is at each moment" : ""}</span>} />
+        <ChartFigure last title="Rain intensity" unit="mm/h" now={`${Math.max(...series).toFixed(0)} peak`} series={series} color="var(--depth-3)" gid="rn" playI={-1} ymaxMin={Math.max(...series) * 1.2} tTotal={storm.duration_h * 3600}
+          aria="Rain intensity at the storm centre over the storm duration" />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
+        <Band title="Where it rains" />
+        {rows.length === 0 ? <p style={{ margin: 0, padding: 14, color: "var(--ink-muted)", fontSize: 12 }}>{r.places.length ? "Waiting for the preview" : "No places in this area"}</p> : (
+          <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none", minHeight: 0, overflowY: "auto" }}>
+            {rows.map((p) => (
+              <li key={p.name} onClick={() => { const pl = r.places.find((x) => x.name === p.name); if (pl) setFocus({ lon: pl.lon, lat: pl.lat }); }}
+                style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 32, padding: "0 12px 0 14px", cursor: "pointer" }}>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{Math.round(p.mm)} mm</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function Dock({ storm, run, series, ghost, third, side, note }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
   /** Compare mode: run A, drawn under `run` (B) in the charts. */ ghost?: RunManifest;
   /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. */
   third?: ReactNode; side?: ReactNode; note?: string }) {
@@ -333,6 +376,8 @@ export function Dock({ run, series, ghost, third, side, note }: { run?: RunManif
   const pond = srv?.events.find((e) => e.kind === "pond_closure");
   const pondKm = pond ? (pond.road_km ?? ts?.road_km_impassable[0] ?? null) : null;
   const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
+  const rainSet = useRain();
+  if ((!ts || ts.t_s.length < 2) && storm && rainSet.mode !== "whole" && rainSet.visible) return <RainDock storm={storm} />;
   if (!ts || ts.t_s.length < 2) {
     return <div data-tour="timeline" style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
       <KeyEvents events={[]} nowS={0} /></div>;

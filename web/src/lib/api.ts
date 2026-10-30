@@ -5,7 +5,20 @@
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
-export type Storm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
+export type RainProfile = "gaussian" | "exponential" | "flat";
+/** heading_deg is the direction the cell moves TOWARD (0 to <360); `center` is where it is at its peak intensity. */
+export type RainTrack = { heading_deg: number; speed_m_s: number };
+/** Where the rain falls (server 0.6.0). null = the whole area. Exactly one of center/place (cell) or polygon/place (polygon). */
+export type Spatial = null
+  | { kind: "cell"; center: [number, number] | null; place: string | null; radius_m: number; profile: RainProfile; track: RainTrack | null }
+  | { kind: "polygon"; polygon: [number, number][] | null; place: string | null };
+export type Storm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked"; spatial?: Spatial };
+/** POST /api/aoi/{id}/rain_field: the rain over the AOI before simulating. png is north-up on the AOI grid, already coloured. */
+export type RainField = {
+  png: string; bounds_wgs84: [number, number, number, number]; nx: number; ny: number; colour: string; max_alpha: number; vmax_mm: number;
+  max_point_mm: number; mean_aoi_mm: number; mean_land_mm: number; wet_area_km2: number; volume_generated_m3: number; volume_in_aoi_m3: number;
+  outside_share: number; peak_intensity_mm_h: number; center: [number, number] | null; warnings: string[]; note: string;
+};
 // Area = EITHER polygon OR place (a name from the AOI's places layer); exactly one, except
 // drain_upgrade where neither means the whole AOI.
 type Area = { polygon: [number, number][]; place?: never } | { place: string; polygon?: never };
@@ -90,6 +103,8 @@ export const simulate = async (s: ScenarioSpec) => {
   }
   return j<RunManifest>(r);
 };
+export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
+  fetch(`${API}/api/aoi/${aoiId}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
 export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
 
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
