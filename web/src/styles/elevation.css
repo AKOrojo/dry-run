@@ -1,0 +1,11 @@
+:root, [data-theme="dark"] { --elev-drop: rgba(0,0,0,0.45); --elev-drop-soft: rgba(0,0,0,0.28); --elev-hi: color-mix(in srgb, var(--ink) 9%, transparent); }
+[data-theme="light"] { --elev-drop: rgba(60,48,28,0.22); --elev-drop-soft: rgba(60,48,28,0.12); --elev-hi: rgba(255,255,255,0.75); }
+:root, [data-theme] {
+  --raised-bg: linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 90%, var(--ink)) 0%, var(--surface-raised) 100%);
+  --raised-shadow: inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft);
+  --pressed-bg: linear-gradient(180deg, color-mix(in srgb, var(--ink) 86%, var(--ground)) 0%, var(--ink) 100%);
+  --pressed-shadow: inset 0 1px 2px var(--elev-drop), 0 1px 0 var(--elev-hi);
+  --inset-shadow: inset 0 1px 2px var(--elev-drop), inset 0 0 0 1px var(--hairline);
+  --card-shadow: inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft), 0 4px 12px var(--elev-drop-soft);
+  --tile-shadow: 0 1px 2px var(--elev-drop), inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+}
