@@ -1,5 +1,5 @@
 {
- "recorded_at": "2026-10-30T13:56:55+00:00",
+ "recorded_at": "2026-10-30T20:01:10+00:00",
  "base": "https://dryrun-vcdpde6nnq-uc.a.run.app",
  "provider": "meta",
  "model": "muse-spark-1.3",
@@ -7,14 +7,14 @@
  "question": "Replay the 4 July 2025 Guadalupe flood: which camps and places along the South Fork flood, how deep, and which shelters stay reachable?",
  "events": [
   {
-   "t": 2.01,
+   "t": 0.88,
    "kind": "thought",
    "data": {
-    "text": "Replaying the July 4th Guadalupe flood — mapping camps, depths, and shelter routes."
+    "text": "Replaying the July 2025 Guadalupe flood — mapping camps and shelters along the South Fork."
    }
   },
   {
-   "t": 2.01,
+   "t": 0.88,
    "kind": "tool_call",
    "data": {
     "name": "get_aoi_info",
@@ -24,7 +24,7 @@
    }
   },
   {
-   "t": 2.15,
+   "t": 1.02,
    "kind": "tool_result",
    "data": {
     "name": "get_aoi_info",
@@ -312,20 +312,20 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 1.9,
+     "elapsed_s": 0.8,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 4.02,
+   "t": 2.6,
    "kind": "thought",
    "data": {
-    "text": "I've got the river corridor and camp locations — now replaying the official July 4th storm."
+    "text": "I've located the South Fork camps — now replaying the 4 July storm to measure flood depths."
    }
   },
   {
-   "t": 4.02,
+   "t": 2.6,
    "kind": "tool_call",
    "data": {
     "name": "run_simulation",
@@ -340,16 +340,16 @@
    }
   },
   {
-   "t": 4.16,
+   "t": 2.61,
    "kind": "tool_result",
    "data": {
     "name": "run_simulation",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "status": "done",
      "backend": "solver",
      "stats": {
-      "run_id": "r_f21d54dbd1448236",
+      "run_id": "r_9fa570dcc6a69fab",
       "buildings_flooded": 1863,
       "buildings_flooded_severe": 1637,
       "buildings_flooded_own_cell": 1063,
@@ -361,6 +361,8 @@
       "rain_volume_m3": 26892507.6,
       "rain_generated_m3": null,
       "rain_in_aoi_m3": null,
+      "domain_cells": 96228,
+      "domain_bbox": null,
       "inflow_volume_m3": 163278626.1,
       "drained_volume_m3": 3369.2,
       "infiltrated_volume_m3": 28044822.7,
@@ -376,43 +378,43 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 3.9,
+     "elapsed_s": 2.4,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 4.16,
+   "t": 2.61,
    "kind": "run_ready",
    "data": {
-    "run_id": "r_f21d54dbd1448236"
+    "run_id": "r_9fa570dcc6a69fab"
    }
   },
   {
-   "t": 6.62,
+   "t": 5.26,
    "kind": "thought",
    "data": {
-    "text": "Baseline replay is done — now checking flood depths at each camp and river reach."
+    "text": "Baseline replay is done — now checking flood depth at each camp and South Fork reach."
    }
   },
   {
-   "t": 6.62,
+   "t": 5.27,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Heart O’ the Hills Summer Camp for Girls",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.07,
+   "t": 7.79,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "Heart O’ the Hills Summer Camp for Girls",
      "buildings_flooded": 12,
      "buildings_flooded_own_cell": 8,
@@ -424,29 +426,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 7.8,
+     "elapsed_s": 7.6,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.07,
+   "t": 7.79,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Camp Mystic Guadalupe River",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.19,
+   "t": 7.91,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "Camp Mystic Guadalupe River",
      "buildings_flooded": 33,
      "buildings_flooded_own_cell": 30,
@@ -458,29 +460,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 7.9,
+     "elapsed_s": 7.7,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.19,
+   "t": 7.91,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Camp Mystic Cypress Lake",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.3,
+   "t": 8.08,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "Camp Mystic Cypress Lake",
      "buildings_flooded": 17,
      "buildings_flooded_own_cell": 11,
@@ -492,29 +494,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.0,
+     "elapsed_s": 7.8,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.3,
+   "t": 8.08,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Camp La Junta for Boys",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.43,
+   "t": 8.16,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "Camp La Junta for Boys",
      "buildings_flooded": 30,
      "buildings_flooded_own_cell": 13,
@@ -526,29 +528,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.2,
+     "elapsed_s": 8.0,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.43,
+   "t": 8.16,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Camp Waldemar",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.56,
+   "t": 8.27,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "Camp Waldemar",
      "buildings_flooded": 26,
      "buildings_flooded_own_cell": 7,
@@ -560,29 +562,29 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.3,
+     "elapsed_s": 8.1,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.56,
+   "t": 8.28,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "South Fork Guadalupe River",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.65,
+   "t": 8.41,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
     "result": {
-     "run_id": "r_f21d54dbd1448236",
+     "run_id": "r_9fa570dcc6a69fab",
      "place": "South Fork Guadalupe River",
      "buildings_flooded": 134,
      "buildings_flooded_own_cell": 129,
@@ -594,24 +596,24 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.4,
+     "elapsed_s": 8.2,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.65,
+   "t": 8.41,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Hunt",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.65,
+   "t": 8.41,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
@@ -621,24 +623,24 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.4,
+     "elapsed_s": 8.2,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 8.65,
+   "t": 8.41,
    "kind": "tool_call",
    "data": {
     "name": "get_area_stats",
     "arguments": {
      "place": "Ingram",
-     "run_id": "r_f21d54dbd1448236"
+     "run_id": "r_9fa570dcc6a69fab"
     }
    }
   },
   {
-   "t": 8.65,
+   "t": 8.41,
    "kind": "tool_result",
    "data": {
     "name": "get_area_stats",
@@ -648,250 +650,259 @@
     "budget": {
      "runs_used": 0,
      "runs_max": 4,
-     "elapsed_s": 8.4,
+     "elapsed_s": 8.2,
      "deadline_s": 240
     }
    }
   },
   {
-   "t": 17.83,
+   "t": 20.64,
    "kind": "thought",
    "data": {
-    "text": "This is a replay of the **4 July 2025 Guadalupe flood** using the preset scenario:\n\n**Run `r_f21d54dbd1448236` - Guadalupe 4 Jul 2025 replay**\n* `storm: total_mm 85, duration_h 12`\n* `sim_hours: 12`\n* Gauged river inflows are built into every run in `texas-guadalupe-v0` and cannot be changed. Rain falls over the whole study area.\n\n> Simulator is a planning model, not a forecast.\n\n### Basin-wide baseline\n\n* `buildings_flooded: 1863`\n* `buildings_flooded_severe: 1637`\n* `buildings_flooded_own_cell: 1063`\n* `people_exposed: 1067`\n* `road_km_impassable: 114.865` at 0.3m threshold\n* `flooded_area_km2: 11.9377`\n* `max_depth_m: 13.109`\n* `peak_t_s: 23400` ~ 6.5h after storm start\n* `inflow_volume_m3: 163278626.1` dominates `rain_volume_m3: 26892507.6`\n\nThis is a river-driven flood: inflow volume is ~6x rain volume.\n\n### Camps and places along the South Fork\n\nAll camps flood in this replay:\n\n**Camp Mystic Guadalupe River**\n* `area:Camp Mystic Guadalupe River:buildings_flooded: 33` - `area:Camp Mystic Guadalupe River:buildings_flooded_own_cell: 30`\n* `area:Camp Mystic Guadalupe River:people_exposed: 10`\n* `area:Camp Mystic Guadalupe River:max_depth_m: 13.109` - deepest of all camps, = basin maximum\n* `area:Camp Mystic Guadalupe River:road_km_impassable: 2.765`\n* `area:Camp Mystic Guadalupe River:flooded_area_km2: 0.1283`\n\n**South Fork Guadalupe River corridor**\n* `area:South Fork Guadalupe River:buildings_flooded: 134` - `area:South Fork Guadalupe River:buildings_flooded_own_cell: 129`\n* `area:South Fork Guadalupe River:people_exposed: 60`\n* `area:South Fork Guadalupe River:max_depth_m: 12.188`\n* `area:South Fork Guadalupe River:road_km_impassable: 21.275`\n* `area:South Fork Guadalupe River:flooded_area_km2: 1.2431`\n\n**Heart O' the Hills Summer Camp for Girls**\n* `area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded: 12` - `area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded_own_cell: 8`\n* `area:Heart O’ the Hills Summer Camp for Girls:people_exposed: 6`\n* `area:Heart O’ the Hills Summer Camp for Girls:max_depth_m: 9.445`\n* `area:Heart O’ the Hills Summer Camp for Girls:road_km_impassable: 1.566`\n* `area:Heart O’ the Hills Summer Camp for Girls:flooded_area_km2: 0.0395`\n\n**Camp Mystic Cypress Lake**\n* `area:Camp Mystic Cypress Lake:buildings_flooded: 17` - `area:Camp Mystic Cypress Lake:buildings_flooded_own_cell: 11`\n* `area:Camp Mystic Cypress Lake:people_exposed: 0`\n* `area:Camp Mystic Cypress Lake:max_depth_m: 5.531`\n* `area:Camp Mystic Cypress Lake:road_km_impassable: 0.977`\n* `area:Camp Mystic Cypress Lake:flooded_area_km2: 0.0559`\n\n**Camp La Junta for Boys**\n* `area:Camp La Junta for Boys:buildings_flooded: 30` - `area:Camp La Junta for Boys:buildings_flooded_own_cell: 13`\n* `area:Camp La Junta for Boys:people_exposed: 13`\n* `area:Camp La Junta for Boys:max_depth_m: 10.445`\n* `area:Camp La Junta for Boys:road_km_impassable: 2.749`\n* `area:Camp La Junta for Boys:flooded_area_km2: 0.1644`\n\n**Camp Waldemar**\n* `area:Camp Waldemar:buildings_flooded: 26` - `area:Camp Waldemar:buildings_flooded_own_cell: 7`\n* `area:Camp Waldemar:people_exposed: 8`\n* `area:Camp Waldemar:max_depth_m: 6.941`\n* `area:Camp Waldemar:road_km_impassable: 5.475`\n* `area:Camp Waldemar:flooded_area_km2: 0.2466`\n\nIn short: Camp Mystic Guadalupe River is the worst hit by depth, South Fork corridor is the worst hit by building count and road loss, but no South Fork camp escapes flooding.\n\nStats for Hunt and Ingram were requested but tool budget was reached before they returned, so they are not reported here.\n\n### Shelters - reachability\n\nCandidate shelters in the study area from `get_aoi_info`:\n\n* The Hunt School [-99.338905, 30.069998] - closest to Hunt / La Junta / Waldemar camps\n* Ingram Elementary School [-99.230355, 30.075045], First Presbyterian Church of Ingram [-99.249906, 30.074567], CityWest Church [-99.223617, 30.072227]\n* Downstream Kerrville cluster: e.g. The Church of Jesus Christ of Latter-day Saints [-99.174301, 30.071889], First Christian Church [-99.177601, 30.0723], Fred H. Tally Elementary School [-99.176729, 30.070464], etc.\n\nFlood-aware routing with `compute_route` to confirm which shelters stay reachable at peak `t_s=23400` and late-storm could not be completed - tool budget was reached.\n\nGiven `road_km_impassable: 114.865` basin-wide and `21.275 km` impassable in the South Fork corridor alone, plus 1-5.5 km impassable inside each camp polygon, overland evacuation along the South Fork should be assumed compromised until a route run confirms otherwise. Re-run with a `compute_route` check from each camp centroid at `t_s=0, 23400` to nearest shelter to complete the shelter-reachability part.\n"
+    "text": "Replay of 4 July 2025 Guadalupe flood for `texas-guadalupe-v0`:\n\nPreset used verbatim:\n\n> Guadalupe 4 Jul 2025 replay - `storm: total_mm 85, duration_h 12`, `sim_hours: 12`\n\nRain over the whole study area. Gauged river inflows are built into every run in this AOI and cannot be changed.\n\nThis is a planning model, not a forecast.\n\n### Baseline run: `r_9fa570dcc6a69fab`\n\nWhole domain:\n\n* `buildings_flooded`: 1863\n* `buildings_flooded_severe`: 1637\n* `buildings_flooded_own_cell`: 1063\n* `people_exposed`: 1067\n* `road_km_impassable`: 114.865 km, threshold 0.3 m\n* `flooded_area_km2`: 11.9377\n* `max_depth_m`: 13.109\n* `peak_t_s`: 23400 - ~6.5h after storm start\n\nAll camps tested flood. South Fork corridor severely floods.\n\n### 1. South Fork Guadalupe River corridor\n\n`area:South Fork Guadalupe River:max_depth_m`: 12.188 m\n\n* `area:South Fork Guadalupe River:buildings_flooded`: 134\n* `area:South Fork Guadalupe River:buildings_flooded_own_cell`: 129\n* `area:South Fork Guadalupe River:people_exposed`: 60\n* `area:South Fork Guadalupe River:road_km_impassable`: 21.275 km\n* `area:South Fork Guadalupe River:flooded_area_km2`: 1.2431\n\n21.3 km of impassable road in this corridor alone means along-river movement is cut in the model.\n\n### 2. Camps\n\nAll with buildings flooded in their own cell, i.e. not just edge effects:\n\n**Camp Mystic Guadalupe River** - deepest in this set:\n`area:Camp Mystic Guadalupe River:max_depth_m`: 13.109 m\n\n* `area:Camp Mystic Guadalupe River:buildings_flooded`: 33\n* `area:Camp Mystic Guadalupe River:buildings_flooded_own_cell`: 30\n* `area:Camp Mystic Guadalupe River:people_exposed`: 10\n* `area:Camp Mystic Guadalupe River:road_km_impassable`: 2.765 km\n* `area:Camp Mystic Guadalupe River:flooded_area_km2`: 0.1283\n\n**Heart O' the Hills Summer Camp for Girls:**\n`area:Heart O’ the Hills Summer Camp for Girls:max_depth_m`: 9.445 m\n\n* `area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded`: 12\n* `area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded_own_cell`: 8\n* `area:Heart O’ the Hills Summer Camp for Girls:people_exposed`: 6\n* `area:Heart O’ the Hills Summer Camp for Girls:road_km_impassable`: 1.566 km\n* `area:Heart O’ the Hills Summer Camp for Girls:flooded_area_km2`: 0.0395\n\n**Camp Mystic Cypress Lake:**\n`area:Camp Mystic Cypress Lake:max_depth_m`: 5.531 m\n\n* `area:Camp Mystic Cypress Lake:buildings_flooded`: 17\n* `area:Camp Mystic Cypress Lake:buildings_flooded_own_cell`: 11\n* `area:Camp Mystic Cypress Lake:people_exposed`: 0\n* `area:Camp Mystic Cypress Lake:road_km_impassable`: 0.977 km\n* `area:Camp Mystic Cypress Lake:flooded_area_km2`: 0.0559\n\n**Camp La Junta for Boys:**\n`area:Camp La Junta for Boys:max_depth_m`: 10.445 m\n\n* `area:Camp La Junta for Boys:buildings_flooded`: 30\n* `area:Camp La Junta for Boys:buildings_flooded_own_cell`: 13\n* `area:Camp La Junta for Boys:people_exposed`: 13\n* `area:Camp La Junta for Boys:road_km_impassable`: 2.749 km\n* `area:Camp La Junta for Boys:flooded_area_km2`: 0.1644\n\n**Camp Waldemar:**\n`area:Camp Waldemar:max_depth_m`: 6.941 m\n\n* `area:Camp Waldemar:buildings_flooded`: 26\n* `area:Camp Waldemar:buildings_flooded_own_cell`: 7\n* `area:Camp Waldemar:people_exposed`: 8\n* `area:Camp Waldemar:road_km_impassable`: 5.475 km\n* `area:Camp Waldemar:flooded_area_km2`: 0.2466\n\nHow deep = `max_depth_m` in the place polygon in the model, includes channel. Do not read as depth at a specific cabin.\n\n### 3. Shelters stay reachable?\n\n19 candidate shelters (assumed) are in the AOI, from The Hunt School at [-99.338905,30.069998] near Hunt, through Ingram / Ingram Elementary School, First Presbyterian Church of Ingram, CityWest Church, Junction Highway Church of Christ, to the Kerrville-east cluster - Starkey Elementary, Trinity Baptist, Live Oak Church of Christ, St. Paul's, First Christian Church, Fred H. Tally Elementary, Impact Christian Fellowship, Nimitz Elementary, Southern Oaks Baptist, Grace Bible Chapel, Kingdom Hall, Riverside Church of Christ, Seventh-Day Adventist Church.\n\nFlood-aware routing `compute_route` at `t_s` around peak could not be completed in this session - tool budget reached after the place stats.\n\nWhat can be said from completed runs:\n\n* Domain-wide 114.865 km impassable, 21.275 km in the South Fork corridor, 1-5.5 km impassable inside each camp polygon. In-model, evacuation along the South Fork should be assumed cut around peak at 6.5h.\n* No shelter can be declared reachable without a route check. If you need it, re-run with specific `origin` + `t_s` + `run_id: r_9fa570dcc6a69fab` for:\n  1. Mystic / Heart O' the Hills -> The Hunt School\n  2. Mystic / Heart O' the Hills -> Ingram Elementary / First Presbyterian Church of Ingram\n  3. La Junta / Waldemar / Hunt -> The Hunt School"
    }
   },
   {
-   "t": 38.39,
+   "t": 38.43,
    "kind": "brief",
    "data": {
-    "title": "Guadalupe flood replay for South Fork camps and river places",
-    "summary": "Replay of the early July Guadalupe flood with gauged river inflows included shows severe flooding along the South Fork corridor with very deep water and widespread building flooding and impassable roads study-wide. All listed summer camps flood, with the deepest water at Camp Mystic along the Guadalupe River and also very deep water at Heart O the Hills and Camp La Junta and Camp Waldemar, plus deep water at Camp Mystic Cypress Lake. South Fork corridor shows extensive building flooding and impassable roads. Shelter route checks were not completed in this session, so shelter reachability remains unconfirmed and local guidance should be used for evacuation decisions. Results are from a planning model, not a forecast.",
+    "title": "South Fork Guadalupe historic flood replay for summer camps and shelter access",
+    "summary": "Replay of the early July historic Guadalupe flood with gauged river inflows built in shows severe and life threatening flooding along the South Fork corridor and at all assessed summer camps, with deep inundation and extensive impassable roads across the study area. Camp Mystic sites along the South Fork and Heart O the Hills show deep inundation with many buildings affected, while upstream boys and girls camps near Hunt also flood with major road disruption. Shelter reachability by road could not be confirmed with routing in this replay, so planners should treat riverside roads as impassable and favour high ground shelters outside the floodplain for evacuation planning.",
     "claims": [
      {
-      "text": "Study-wide maximum water depth",
-      "value": 13.109,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "Study-wide buildings with flood water close by",
+      "text": "Study area buildings with flood water close by",
       "value": 1863.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "buildings_flooded",
       "verified": true
      },
      {
-      "text": "Study-wide buildings with water at the building",
+      "text": "Study area buildings with water at the building",
       "value": 1063.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Study-wide impassable road length",
+      "text": "Study area maximum flood depth",
+      "value": 13.109,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "Study area impassable road length",
       "value": 114.865,
       "model_value": null,
       "unit": "km",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "road_km_impassable",
       "verified": true
      },
      {
-      "text": "Study-wide people exposed",
-      "value": 1067.0,
+      "text": "Study area flooded extent",
+      "value": 11.938,
       "model_value": null,
-      "unit": "people",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "people_exposed",
+      "unit": "sq km",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "flooded_area_km2",
       "verified": true
      },
      {
-      "text": "Maximum water depth at Camp Mystic Guadalupe River",
-      "value": 13.109,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Camp Mystic Guadalupe River:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "Buildings with flood water close by at Camp Mystic Guadalupe River",
+      "text": "Camp Mystic Guadalupe River buildings with flood water close by",
       "value": 33.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Mystic Guadalupe River:buildings_flooded",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building at Camp Mystic Guadalupe River",
+      "text": "Camp Mystic Guadalupe River buildings with water at the building",
       "value": 30.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Mystic Guadalupe River:buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Maximum water depth at Heart O the Hills Summer Camp for Girls",
-      "value": 9.445,
+      "text": "Camp Mystic Guadalupe River maximum flood depth",
+      "value": 13.109,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Heart O’ the Hills Summer Camp for Girls:max_depth_m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Camp Mystic Guadalupe River:max_depth_m",
       "verified": true
      },
      {
-      "text": "Buildings with flood water close by at Heart O the Hills Summer Camp for Girls",
-      "value": 12.0,
+      "text": "Camp Mystic Guadalupe River impassable road length",
+      "value": 2.765,
       "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded",
+      "unit": "km",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Camp Mystic Guadalupe River:road_km_impassable",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building at Heart O the Hills Summer Camp for Girls",
-      "value": 8.0,
-      "model_value": null,
-      "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded_own_cell",
-      "verified": true
-     },
-     {
-      "text": "Maximum water depth at Camp Mystic Cypress Lake",
-      "value": 5.531,
-      "model_value": null,
-      "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Camp Mystic Cypress Lake:max_depth_m",
-      "verified": true
-     },
-     {
-      "text": "Buildings with flood water close by at Camp Mystic Cypress Lake",
+      "text": "Camp Mystic Cypress Lake buildings with flood water close by",
       "value": 17.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Mystic Cypress Lake:buildings_flooded",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building at Camp Mystic Cypress Lake",
+      "text": "Camp Mystic Cypress Lake buildings with water at the building",
       "value": 11.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Mystic Cypress Lake:buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Maximum water depth at Camp La Junta for Boys",
-      "value": 10.445,
+      "text": "Camp Mystic Cypress Lake maximum flood depth",
+      "value": 5.531,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Camp La Junta for Boys:max_depth_m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Camp Mystic Cypress Lake:max_depth_m",
       "verified": true
      },
      {
-      "text": "Buildings with flood water close by at Camp La Junta for Boys",
+      "text": "Heart O the Hills Summer Camp for Girls buildings with flood water close by",
+      "value": 12.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded",
+      "verified": true
+     },
+     {
+      "text": "Heart O the Hills Summer Camp for Girls buildings with water at the building",
+      "value": 8.0,
+      "model_value": null,
+      "unit": "buildings",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:buildings_flooded_own_cell",
+      "verified": true
+     },
+     {
+      "text": "Heart O the Hills Summer Camp for Girls maximum flood depth",
+      "value": 9.445,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Heart O’ the Hills Summer Camp for Girls:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "Camp La Junta for Boys buildings with flood water close by",
       "value": 30.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp La Junta for Boys:buildings_flooded",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building at Camp La Junta for Boys",
+      "text": "Camp La Junta for Boys buildings with water at the building",
       "value": 13.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp La Junta for Boys:buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Maximum water depth at Camp Waldemar",
-      "value": 6.941,
+      "text": "Camp La Junta for Boys maximum flood depth",
+      "value": 10.445,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:Camp Waldemar:max_depth_m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Camp La Junta for Boys:max_depth_m",
       "verified": true
      },
      {
-      "text": "Buildings with flood water close by at Camp Waldemar",
+      "text": "Camp Waldemar buildings with flood water close by",
       "value": 26.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Waldemar:buildings_flooded",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building at Camp Waldemar",
+      "text": "Camp Waldemar buildings with water at the building",
       "value": 7.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:Camp Waldemar:buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Maximum water depth along South Fork Guadalupe River corridor",
-      "value": 12.188,
+      "text": "Camp Waldemar maximum flood depth",
+      "value": 6.941,
       "model_value": null,
       "unit": "m",
-      "source_run_id": "r_f21d54dbd1448236",
-      "field": "area:South Fork Guadalupe River:max_depth_m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:Camp Waldemar:max_depth_m",
       "verified": true
      },
      {
-      "text": "Buildings with flood water close by along South Fork Guadalupe River corridor",
+      "text": "South Fork Guadalupe River corridor buildings with flood water close by",
       "value": 134.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:South Fork Guadalupe River:buildings_flooded",
       "verified": true
      },
      {
-      "text": "Buildings with water at the building along South Fork Guadalupe River corridor",
+      "text": "South Fork Guadalupe River corridor buildings with water at the building",
       "value": 129.0,
       "model_value": null,
       "unit": "buildings",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:South Fork Guadalupe River:buildings_flooded_own_cell",
       "verified": true
      },
      {
-      "text": "Impassable road length along South Fork Guadalupe River corridor",
+      "text": "South Fork Guadalupe River corridor maximum flood depth",
+      "value": 12.188,
+      "model_value": null,
+      "unit": "m",
+      "source_run_id": "r_9fa570dcc6a69fab",
+      "field": "area:South Fork Guadalupe River:max_depth_m",
+      "verified": true
+     },
+     {
+      "text": "South Fork Guadalupe River corridor impassable road length",
       "value": 21.275,
       "model_value": null,
       "unit": "km",
-      "source_run_id": "r_f21d54dbd1448236",
+      "source_run_id": "r_9fa570dcc6a69fab",
       "field": "area:South Fork Guadalupe River:road_km_impassable",
       "verified": true
      }
     ],
-    "recommended_run_id": "r_f21d54dbd1448236",
+    "recommended_run_id": "r_9fa570dcc6a69fab",
     "model": "muse-spark-1.3",
     "provider": "meta",
     "prose_has_digits": false
    }
   },
   {
-   "t": 38.39,
+   "t": 38.43,
    "kind": "done",
    "data": {}
   }
