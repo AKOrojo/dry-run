@@ -247,7 +247,7 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
   const pondKm = pond ? (pond.road_km ?? ts?.road_km_impassable[0] ?? null) : null;
   const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
   if (!ts || ts.t_s.length < 2) {
-    return <div style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
+    return <div data-tour="timeline" style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
       <KeyEvents events={[]} nowS={0} /></div>;
   }
   const durS = ts.t_s[ts.t_s.length - 1];
@@ -256,7 +256,7 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
   const common = { playI: pi, tTotal: durS };
   const dp = series && series.length > 1 ? series : undefined;
   return (
-    <div style={shell}>
+    <div data-tour="timeline" style={shell}>
       <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
         <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>

@@ -11,6 +11,7 @@ import { ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
+import { Tour, tourDisabled, tourDone } from "./components/Tour";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -35,10 +36,18 @@ export default function App() {
   const [replayed, setReplayed] = useState(false);
   const [mode, setMode] = useState<Mode>("Scenario");
   const [agentRuns, setAgentRuns] = useState(0);
+  const [tour, setTour] = useState(false);
   const { t_s } = useClock();
   const pinSeries = usePinnedSeries();
   const aoiId = aoi?.aoi_id;
   const runId = run?.status === "done" ? run.run_id : undefined;
+
+  // First visit only; ?notour=1 keeps it off in automated runs. The delay lets the layout settle.
+  useEffect(() => {
+    if (tourDisabled() || tourDone()) return;
+    const id = window.setTimeout(() => setTour(true), 1000);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Read-only rev 5 data. A missing endpoint (404) just leaves the matching feature off.
   useEffect(() => {
@@ -91,9 +100,9 @@ export default function App() {
   return (
     <div className="dr-app body">
       <TopBar aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
-        mode={mode} onMode={setMode} agentRuns={agentRuns} />
+        mode={mode} onMode={setMode} agentRuns={agentRuns} onTour={() => setTour(true)} />
       <div className="dr-main">
-        <div className="dr-map">
+        <div className="dr-map" data-tour="map">
           {aoi && <MapStage aoi={aoi} run={run} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
@@ -117,6 +126,7 @@ export default function App() {
           coastal, busy, canRun: !!aoi, onSimulate: go, err: simErr,
         }} />
       )}
+      {tour && <Tour onClose={() => setTour(false)} />}
     </div>
   );
 }

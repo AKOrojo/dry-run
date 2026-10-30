@@ -26,7 +26,7 @@ function Tabs({ active, onTab }: { active: Tab; onTab: (t: Tab) => void }) {
         const st: CSSProperties = on
           ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: "0 12px" }
           : { color: "var(--ink-muted)", padding: "0 12px" };
-        return <button key={n} type="button" aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
+        return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
           style={{ height: 38, marginRight: 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", ...st }}>{n}</button>;
       })}
     </nav>
@@ -258,7 +258,7 @@ function LevelCard({ level, onLevel }: Pick<ScenarioProps, "level" | "onLevel">)
 
 function SimulateBar({ busy, canRun, onSimulate }: Pick<ScenarioProps, "busy" | "canRun" | "onSimulate">) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", flex: "none" }}>
+    <div data-tour="simulate" style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", flex: "none" }}>
       <span style={{ color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>2D solver · about 40 s, or instant if cached</span>
       <button type="button" disabled={busy || !canRun} onClick={onSimulate}
         style={{ marginLeft: "auto", height: 34, padding: "0 16px", display: "flex", alignItems: "center", gap: 8, opacity: busy || !canRun ? 0.6 : 1,
