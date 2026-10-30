@@ -5,8 +5,10 @@ import { Barricade, Drop, CloudSlash, TrafficCone, Waves } from "@phosphor-icons
 export const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 export const mono = "var(--font-mono)";
 
-export type EventKind = "cut" | "surge" | "peak" | "rainstop" | "standing";
+export type EventKind = "pond" | "cut" | "surge" | "peak" | "rainstop" | "standing";
 export const EVENT_ICON = {
+  // Roads a planned pond closes: an intervention effect (human intent), not a flood event.
+  pond: { Icon: Barricade, color: "var(--danfo)" },
   cut: { Icon: Barricade, color: "var(--hazard)" },
   surge: { Icon: TrafficCone, color: "var(--hazard)" },
   peak: { Icon: Drop, color: "var(--depth-3)" },
@@ -16,10 +18,15 @@ export const EVENT_ICON = {
 
 /** events.json kind -> dock/map event kind and label. */
 export const SERVER_EVENT = {
+  pond_closure: { kind: "pond", label: "Roads closed by the planned pond" },
   first_cut: { kind: "cut", label: "First road impassable" },
   cut_jump: { kind: "surge", label: "Route cuts surge" },
   peak_area: { kind: "peak", label: "Peak flooded area" },
 } as const;
+
+/** Server event label; a pond closure carries its road count ("…: 11"). */
+export const serverEventLabel = (e: { kind: keyof typeof SERVER_EVENT; count?: number }) =>
+  SERVER_EVENT[e.kind].label + (e.kind === "pond_closure" && e.count != null ? `: ${e.count}` : "");
 
 export function Glyph({ kind, muted = false, size = 16 }: { kind: EventKind; muted?: boolean; size?: number }) {
   const { Icon, color } = EVENT_ICON[kind];
