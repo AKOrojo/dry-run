@@ -5,9 +5,10 @@ import { ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, ge
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
+import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib/view";
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
-import { ProvenanceBadge } from "./components/ds";
+import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
@@ -16,6 +17,8 @@ import { Tour, tourDisabled, tourDone } from "./components/Tour";
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
+// A shared link (?aoi=&run=&t=) opens on that area, run and time, paused.
+const shared = readSharedView();
 
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
@@ -38,6 +41,7 @@ export default function App() {
   const [agentRuns, setAgentRuns] = useState(0);
   const [tour, setTour] = useState(false);
   const { t_s } = useClock();
+  const view = useView();
   const pinSeries = usePinnedSeries();
   const aoiId = aoi?.aoi_id;
   const runId = run?.status === "done" ? run.run_id : undefined;
@@ -68,13 +72,41 @@ export default function App() {
 
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
-    getConfig().then((h) => { setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); return getAOI(h.default_aoi); }).then(setAoi);
+    getConfig().then(async (h) => {
+      setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token);
+      const m = shared.run ? await getRun(shared.run).catch(() => undefined) : undefined;
+      const want = m?.scenario.aoi_id ?? shared.aoi ?? h.default_aoi;
+      const a = await getAOI(want).catch(() => getAOI(h.default_aoi));
+      setAoi(a);
+      if (m?.status === "done" && m.scenario.aoi_id === a.aoi_id) {
+        const max_s = m.frames.at(-1)?.t_s ?? 0;
+        setRun(m);
+        clock.set({ t_s: Math.min(shared.t ?? 0, max_s), max_s, playing: false });
+      }
+    });
   }, []);
 
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
   const switchAoi = (id: string) => { setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+
+  const copyLink = async () => {
+    const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
+    window.history.replaceState(null, "", url);
+    try { await navigator.clipboard.writeText(url); return "Link copied"; }
+    catch { return "Copy blocked: the link is in the address bar"; }
+  };
+  const saveImage = () => {
+    let png: string | null = null;
+    try { png = mapImage(); } catch { /* a tainted canvas or lost context */ }
+    if (!png) return "The map image is not available";
+    const a = document.createElement("a");
+    a.href = png;
+    a.download = `dryrun-${aoi?.aoi_id ?? "map"}-${fmtT(t_s).replace(/[^0-9T]/g, "")}.png`;
+    a.click();
+    return "Image saved";
+  };
 
   const go = async () => {
     setBusy(true); setSimErr(null);
@@ -98,9 +130,10 @@ export default function App() {
   const coastal = !Object.keys(aoi?.layers ?? {}).some((k) => k.includes("inflows"));
 
   return (
-    <div className="dr-app body">
+    <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
       <TopBar aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
-        mode={mode} onMode={setMode} agentRuns={agentRuns} onTour={() => setTour(true)} />
+        mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={agentRuns} onTour={() => setTour(true)}
+        onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           {aoi && <MapStage aoi={aoi} run={run} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
@@ -109,9 +142,9 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        <Dock run={run} series={pinSeries ?? undefined} />
+        {view.timeline && <Dock run={run} series={pinSeries ?? undefined} />}
       </div>
-      {mode === "Agent" ? (
+      {!view.sidebar ? null : mode === "Agent" ? (
         <aside className="dr-panel">
           <section className="dr-section">
             <h2 className="label dr-section-title">Agent</h2>

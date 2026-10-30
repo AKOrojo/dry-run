@@ -1,11 +1,12 @@
 // Dock (rev 5 dock()): timeline, three charts, key events. Everything reads the one clock.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
-import { CaretDown, DotsThreeVertical, Plus } from "@phosphor-icons/react";
+import { CaretDown, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
 import type { RunEvents, RunManifest } from "../lib/api";
 import { setFocus } from "../lib/focus";
 import { useExtras } from "../lib/extras";
 import { clock, useClock } from "../lib/clock";
+import { addNote, removeNote, useNotes } from "../lib/notes";
 import { fmtT } from "./ds";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 
@@ -211,18 +212,63 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed }: { ts: T
   );
 }
 
-function KeyEvents({ events, nowS }: { events: Ev[]; nowS: number }) {
+const NOTE_MAX = 200;
+
+function KeyEvents({ events, nowS, runId }: { events: Ev[]; nowS: number; runId?: string }) {
   const sel = [...events].reverse().find((e) => e.t <= nowS)?.id;
+  const notes = useNotes(runId);
+  const [draft, setDraft] = useState<{ t: number; text: string } | null>(null);
+  useEffect(() => setDraft(null), [runId]);
+  const save = () => {
+    const text = draft?.text.trim();
+    if (runId && draft && text) addNote(runId, draft.t, text.slice(0, NOTE_MAX));
+    setDraft(null);
+  };
+  // Events and notes share one list, in time order.
+  const rows = [...events.map((e) => ({ t: e.t, e })), ...notes.map((n) => ({ t: n.t_s, n }))].sort((a, b) => a.t - b.t);
+  const seek = (t: number) => clock.set({ t_s: t, playing: false });
   return (
     <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0, background: "var(--surface)" }}>
       <Band title="Key events" right={
-        <button type="button" style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500 }}>
+        <button type="button" data-tour="marks" disabled={!runId} title={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}
+          onClick={() => { clock.set({ playing: false }); setDraft({ t: nowS, text: "" }); }}
+          style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500,
+            ...(runId ? {} : { opacity: 0.45, cursor: "not-allowed" }) }}>
           <Plus size={12} weight="bold" />Note</button>} />
-      <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none" }}>
-        {events.map((e) => {
+      {draft && (
+        <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
+          <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
+          <input autoFocus value={draft.text} maxLength={NOTE_MAX} placeholder="Note, then Enter" aria-label={`Note at ${fmtT(draft.t)}`}
+            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } else if (e.key === "Escape") { e.preventDefault(); setDraft(null); } }}
+            onBlur={() => setDraft(null)}
+            style={{ minWidth: 0, height: 26, padding: "0 8px", background: "var(--ground)", color: "var(--ink)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
+              boxShadow: "var(--inset-shadow)", font: "inherit", fontSize: 12 }} />
+          <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(draft.t)}</span>
+        </div>
+      )}
+      <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none", minHeight: 0, overflowY: "auto" }}>
+        {rows.map((r) => {
+          if ("n" in r && r.n) {
+            const n = r.n, fut = n.t_s > nowS;
+            return (
+              <li key={`note-${n.id}`} title={n.text} onClick={() => seek(n.t_s)}
+                style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto 20px", gap: 10, alignItems: "center", height: 32, padding: "0 8px 0 14px", cursor: "pointer",
+                  ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
+                <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.text}</span>
+                <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(n.t_s)}</span>
+                <button type="button" aria-label={`Remove note at ${fmtT(n.t_s)}`} title="Remove note" onClick={(ev) => { ev.stopPropagation(); if (runId) removeNote(runId, n.id); }}
+                  style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
+                  <X size={12} weight="bold" />
+                </button>
+              </li>
+            );
+          }
+          const e = (r as { e: Ev }).e;
           const fut = e.t > nowS, on = e.id === sel;
           return (
-            <li key={e.id} title={e.place ?? undefined} onClick={() => { clock.set({ t_s: e.t, playing: false }); if (e.point) setFocus({ lon: e.point[0], lat: e.point[1] }); }}
+            <li key={e.id} title={e.place ?? undefined} onClick={() => { seek(e.t); if (e.point) setFocus({ lon: e.point[0], lat: e.point[1] }); }}
               style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 32, padding: "0 12px 0 14px", cursor: "pointer",
                 ...(on ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--danfo), inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft)" } : {}), ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
               <Glyph kind={e.kind} muted={fut} /><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...(on ? { fontWeight: 600 } : {}) }}>{e.label}</span>
@@ -231,7 +277,7 @@ function KeyEvents({ events, nowS }: { events: Ev[]; nowS: number }) {
           );
         })}
       </ol>
-      <p style={{ margin: "auto 14px 10px", color: "var(--ink-muted)", fontSize: 11, lineHeight: "15px" }}>Greyed events are after the playhead.</p>
+      <p style={{ margin: "auto 14px 10px", paddingTop: 6, color: "var(--ink-muted)", fontSize: 11, lineHeight: "15px" }}>Greyed events are after the playhead. Notes stay in this browser.</p>
     </div>
   );
 }
@@ -268,7 +314,7 @@ export function Dock({ run, series }: { run?: RunManifest; /** Depth in metres a
             color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />
         </div>
       </div>
-      <KeyEvents events={events} nowS={t_s} />
+      <KeyEvents events={events} nowS={t_s} runId={run?.status === "done" ? run.run_id : undefined} />
     </div>
   );
 }

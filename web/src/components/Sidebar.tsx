@@ -1,14 +1,17 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources.
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Clock, CloudRain, Play, Ruler, TrendUp, Waves } from "@phosphor-icons/react";
+import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { LayerKey, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
+import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints";
+import { setFocus } from "../lib/focus";
+import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
-import { Card, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, Segmented, srOnly, TextAction } from "./rev5";
+import { Card, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 import { Notice } from "./Notice";
 import { Button } from "./ds";
@@ -76,9 +79,13 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <label key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
-            <input type="checkbox" checked={on} onChange={(e) => setLayer(r.key, { on: e.target.checked })} style={srOnly} />
-            <Checkbox on={on} />
+          <label key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", cursor: "pointer", color: on ? undefined : "var(--ink-muted)" }}>
+            {/* The native box sits invisibly on top of the drawn one, so clicks, keyboard focus and automation all reach it. */}
+            <span style={{ position: "relative", display: "flex", flex: "none" }}>
+              <input type="checkbox" checked={on} onChange={(e) => setLayer(r.key, { on: e.target.checked })}
+                style={{ position: "absolute", inset: 0, zIndex: 1, width: 16, height: 16, margin: 0, opacity: 0, cursor: "pointer" }} />
+              <Checkbox on={on} />
+            </span>
             <span style={{ display: "flex", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -120,6 +127,37 @@ function LayersCard() {
 }
 
 // ---- inspect ----
+function WaypointsCard() {
+  const wps = useWaypoints();
+  const info = useWaypointInfo();
+  const ib = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0,
+    borderRadius: "var(--radius-md)", color: "var(--ink-muted)", cursor: "pointer" } as const;
+  return (
+    <Card title="Waypoints" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{wps.length || ""}</span>}>
+      {wps.length === 0 ? (
+        <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>Right-click the map or press W to drop a waypoint.</p>
+      ) : (
+        <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
+          {wps.map((w, k) => (
+            <li key={w.id} style={{ display: "grid", gridTemplateColumns: "20px minmax(0, 1fr) auto", gap: 10, padding: "10px 8px 10px 14px", borderTop: k ? "1px solid var(--hairline)" : undefined }}>
+              <span style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--danfo)", color: "var(--on-danfo)",
+                borderRadius: 3, fontSize: 11, fontWeight: 700, ...FIG }}>{w.n}</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{placeLabel(info[w.id]) ?? `Waypoint ${w.n}`}</span>
+                <WaypointDetails lon={w.lon} lat={w.lat} info={info[w.id]} />
+              </span>
+              <span style={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
+                <button type="button" aria-label={`Fly to waypoint ${w.n}`} title="Fly to" onClick={() => setFocus({ lon: w.lon, lat: w.lat })} style={ib}><Crosshair size={14} weight="bold" /></button>
+                <button type="button" aria-label={`Remove waypoint ${w.n}`} title="Remove" onClick={() => removeWaypoint(w.id)} style={ib}><X size={14} weight="bold" /></button>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
 function Metric({ Ic, label, value, sub, color = "var(--ink)" }: { Ic: Icon; label: string; value: string; sub?: string; color?: string }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr)", columnGap: 8, padding: "10px 12px", minWidth: 0 }}>
@@ -133,7 +171,6 @@ function Metric({ Ic, label, value, sub, color = "var(--ink)" }: { Ic: Icon; lab
   );
 }
 const m2 = (v: number | null) => (v == null ? "n/a" : `${v.toFixed(2)} m`);
-const coord = (lat: number, lon: number) => `${Math.abs(lat).toFixed(5)}° ${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(5)}° ${lon >= 0 ? "E" : "W"}`;
 
 function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   const i = useInspect();
@@ -317,7 +354,7 @@ export function Sidebar({ aoi, run, scenario, sources }: {
       <Tabs active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
         {tab === "Layers" && <LayersCard />}
-        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={() => setTab("Scenario")} /></>}
+        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={() => setTab("Scenario")} /></>}
         {tab === "Scenario" && (
           <>
             <StormCard {...scenario} />

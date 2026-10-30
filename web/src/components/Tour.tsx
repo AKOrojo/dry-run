@@ -15,6 +15,8 @@ const STEPS = [
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen." },
+  { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
+  { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal and it runs scenarios and writes a brief you can check." },
 ] as const;
 

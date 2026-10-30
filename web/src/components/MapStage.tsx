@@ -7,14 +7,17 @@ import * as Cesium from "cesium";
 import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Pause, Path, Play, RoadHorizon, X } from "@phosphor-icons/react";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
-import { API, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
-import type { AOIManifest, PointSeries, RunManifest } from "../lib/api";
+import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
+import type { AOIManifest, PointInfo, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
 import { setFocus, useFocus } from "../lib/focus";
 import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { setInspect, setPinnedSeries } from "../lib/inspect";
-import { addWaypoint, removeWaypoint, useWaypoints } from "../lib/waypoints";
+import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
+import type { WaypointInfo } from "../lib/waypoints";
+import { placeLabel, WaypointDetails } from "./WaypointDetails";
+import { setMapViewer } from "../lib/view";
 import { clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
 import type { LonLat } from "../lib/flyroute";
 import { useFlyAlong, useFreeCamera } from "./camera";
@@ -379,19 +382,38 @@ function Tooltip({ r, tS, cellM, pinned, style }: { r: Reading; tS: number; cell
   );
 }
 
-function WaypointPin({ n, reading, wetFrom, selected, onSelect }: { n: number; reading?: Reading; wetFrom?: string; selected: boolean; onSelect: () => void }) {
+/** Compact pin (depth now and place); selected, it opens the full description and an X to remove it. */
+function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
+  n: number; lon: number; lat: number; info?: WaypointInfo; selected: boolean; onSelect: () => void; onRemove: () => void;
+}) {
+  const place = placeLabel(info);
+  const main = info?.hasRun ? (info.depth_m != null ? `${m2(info.depth_m)} now` : "…") : place ?? "Waypoint";
+  const sub = info?.hasRun ? place : null;
   return (
     <div onClick={onSelect} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-50%, -100%)", display: "flex", flexDirection: "column", alignItems: "center",
       pointerEvents: "auto", cursor: "pointer" }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 9px 4px 4px", background: "var(--surface-raised)", border: "1px solid var(--danfo)",
+      <span style={{ position: "relative", display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--danfo)",
         borderRadius: "var(--radius-md)", boxShadow: selected ? "0 0 0 2px var(--danfo), var(--shadow-float)" : "var(--shadow-float)", whiteSpace: "nowrap" }}>
-        <span style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--danfo)", color: "var(--on-danfo)",
-          borderRadius: 3, fontSize: 11, fontWeight: 700, ...FIG }}>{n}</span>
-        <span style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ fontSize: 12, lineHeight: "15px", fontWeight: 600, ...FIG }}>{reading ? `${m2(reading.depth)} now` : "…"}</span>
-          <span style={{ fontSize: 11, lineHeight: "14px", color: "var(--ink-muted)", ...FIG }}>{reading ? `max ${m2(reading.max)}` : " "}</span>
-          {wetFrom && <span style={{ fontSize: 11, lineHeight: "14px", color: "var(--ink-muted)", ...FIG }}>{wetFrom}</span>}
+        <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 9px 4px 4px" }}>
+          <span style={{ width: 20, height: 20, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--danfo)", color: "var(--on-danfo)",
+            borderRadius: 3, fontSize: 11, fontWeight: 700, ...FIG }}>{n}</span>
+          <span style={{ display: "flex", flexDirection: "column", maxWidth: 200 }}>
+            <span style={{ fontSize: 12, lineHeight: "15px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", ...FIG }}>{main}</span>
+            {sub && <span style={{ fontSize: 11, lineHeight: "14px", color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
+          </span>
         </span>
+        {selected && (
+          <span style={{ width: 268, padding: "6px 10px 8px", borderTop: "1px solid var(--hairline)", cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+            <WaypointDetails lon={lon} lat={lat} info={info} />
+          </span>
+        )}
+        {selected && (
+          <button type="button" aria-label={`Remove waypoint ${n}`} title="Remove waypoint (Delete)" onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            style={{ position: "absolute", top: -9, right: -9, width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
+              background: "var(--surface-raised)", border: "1px solid var(--danfo)", borderRadius: "50%", color: "var(--ink)", boxShadow: "var(--shadow-float)", cursor: "pointer" }}>
+            <X size={10} weight="bold" />
+          </button>
+        )}
       </span>
       <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true" style={{ marginTop: -1 }}><path d="M1 0h10L6 7z" fill="var(--surface-raised)" stroke="var(--danfo)" /></svg>
       <span style={{ width: 8, height: 8, marginTop: 1, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
@@ -609,7 +631,9 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
   const [hover, setHover] = useState<(Reading & { x: number; y: number; lon: number; lat: number }) | null>(null);
   const [pinned, setPinned] = useState<(Reading & { lon: number; lat: number }) | null>(null);
   const [wpReadings, setWpReadings] = useState<Record<number, Reading>>({});
-  const [wpSeries, setWpSeries] = useState<Record<number, PointSeries>>({});
+  const [wpSeries, setWpSeries] = useState<Record<number, PointSeries | null>>({});
+  const [wpPoint, setWpPoint] = useState<Record<string, PointInfo | null>>({});
+  const [bDepths, setBDepths] = useState<Map<string, number> | null>(null);
   const [selectedWp, setSelectedWp] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; lon: number; lat: number } | null>(null);
   const cursor = useRef<{ x: number; y: number; lon: number; lat: number } | null>(null);
@@ -730,10 +754,43 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     if (!runId) return;
     let cancelled = false;
     wps.forEach((w) => getPointSeries(runId, w.lon, w.lat).then((ser) => {
-      if (ser && !cancelled) setWpSeries((cur) => ({ ...cur, [w.id]: ser }));
+      if (!cancelled) setWpSeries((cur) => ({ ...cur, [w.id]: ser }));
     }));
     return () => { cancelled = true; };
   }, [runId, wps]);
+
+  // Where each waypoint is (place, ground, water, nearest building): needs no run, fetched once per waypoint.
+  const aoiKey = aoi?.aoi_id;
+  const askedPoint = useRef(new Set<string>());
+  useEffect(() => {
+    if (!aoiKey) return;
+    wps.forEach((w) => {
+      const k = `${aoiKey}|${w.id}`;
+      if (askedPoint.current.has(k)) return;
+      askedPoint.current.add(k);
+      getPointInfo(aoiKey, w.lon, w.lat).then((p) => setWpPoint((cur) => ({ ...cur, [k]: p })));
+    });
+  }, [aoiKey, wps]);
+  // The run's per-building max depth (the same file that colours the buildings), for "nearest building".
+  const runFinished = run?.status === "done";
+  const bdUrl = runFinished && run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined;
+  useEffect(() => {
+    setBDepths(null);
+    if (!bdUrl) return;
+    let cancelled = false;
+    getBuildingDepths(bdUrl).then((m) => { if (!cancelled) setBDepths(m); });
+    return () => { cancelled = true; };
+  }, [bdUrl]);
+  const wpInfo = useMemo(() => Object.fromEntries(wps.map((w): [number, WaypointInfo] => {
+    const k = `${aoiKey}|${w.id}`;
+    const point = k in wpPoint ? wpPoint[k] : undefined;
+    const bid = point?.building?.id;
+    return [w.id, { point, hasRun: runFinished, depth_m: wpReadings[w.id]?.depth, series: w.id in wpSeries ? wpSeries[w.id] : undefined,
+      building_max_m: bid != null && bDepths ? bDepths.get(bid) ?? null : undefined }];
+  })), [aoiKey, wps, wpPoint, wpReadings, wpSeries, bDepths, runDone]);
+  // Same description for the Inspect tab's waypoint list.
+  useEffect(() => { setWaypointInfo(wpInfo); }, [wpInfo]);
+  useEffect(() => () => setWaypointInfo({}), []);
 
   // Inspect store: the pinned point wins over the hover.
   const shown = pinned ?? hover;
@@ -977,7 +1034,7 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
       {aoi && <Globe aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
-        onViewer={setViewer} />}
+        onViewer={(v) => { setViewer(v); setMapViewer(v); }} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {lay.places.on && places.map((p) => {
           const lp = evPlace.get(p.name)?.label_point;
@@ -1009,7 +1066,8 @@ export function MapStage({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBas
 
         {wps.map((w) => (
           <Anchored key={w.id} anchors={anchors} scene={scene} lon={w.lon} lat={w.lat}>
-            <WaypointPin n={w.n} reading={wpReadings[w.id]} wetFrom={wpSeries[w.id] ? (wpSeries[w.id].first_flooded_s != null ? `Wet since ${fmtT(wpSeries[w.id].first_flooded_s as number)}` : "Never wet") : undefined} selected={selectedWp === w.id} onSelect={() => setSelectedWp(w.id)} />
+            <WaypointPin n={w.n} lon={w.lon} lat={w.lat} info={wpInfo[w.id]} selected={selectedWp === w.id} onSelect={() => setSelectedWp(w.id)}
+              onRemove={() => { removeWaypoint(w.id); setSelectedWp(null); }} />
           </Anchored>
         ))}
 

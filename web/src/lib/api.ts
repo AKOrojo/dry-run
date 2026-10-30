@@ -176,3 +176,17 @@ export function getPointSeries(runId: string, lon: number, lat: number): Promise
   }
   return p;
 }
+
+/** GET /api/aoi/{id}/point: what is at a point without a run (waypoints). ground_m is the model's ground, not the 3D terrain. */
+export type PointInfo = {
+  aoi_id: string; lon: number; lat: number; cell: [number, number]; ground_m: number;
+  open_water: boolean | null; permanent_water: boolean | null;
+  place: { name: string; inside: boolean; distance_m: number } | null;
+  building: { id: string; cell: [number, number]; distance_m: number } | null;
+  is_synthetic: boolean;
+};
+export const getPointInfo = (aoiId: string, lon: number, lat: number) =>
+  optional<PointInfo>(`${API}/api/aoi/${aoiId}/point?lon=${lon.toFixed(5)}&lat=${lat.toFixed(5)}`);
+/** A run's building_depths.json (max depth per building id) as a map. */
+export const getBuildingDepths = (url: string) => optional<{ ids: string[]; max_depth_m: number[] }>(url)
+  .then((b) => (b ? new Map(b.ids.map((id, i) => [String(id), b.max_depth_m[i]])) : null));

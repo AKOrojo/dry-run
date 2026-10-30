@@ -1,5 +1,6 @@
 // User-dropped waypoints on the map (numbered danfo pins).
 import { useSyncExternalStore } from "react";
+import type { PointInfo, PointSeries } from "./api";
 
 export type Waypoint = { id: number; n: number; lon: number; lat: number };
 
@@ -26,3 +27,21 @@ export function removeWaypoint(id: number) {
   emit();
 }
 export function clearWaypoints() { state = []; emit(); }
+
+// Per-waypoint readings for the Inspect list, written by the map stage (it already fetches them for the pins).
+/** undefined = still loading, null = not available. `series`/`depth_m`/`building_max_m` only exist with a finished run. */
+export type WaypointInfo = {
+  point?: PointInfo | null; hasRun: boolean;
+  depth_m?: number; series?: PointSeries | null; building_max_m?: number | null;
+};
+let info: Record<number, WaypointInfo> = {};
+const infoSubs = new Set<() => void>();
+export const waypointInfo = {
+  get: () => info,
+  subscribe: (f: () => void) => { infoSubs.add(f); return () => { infoSubs.delete(f); }; },
+};
+export const useWaypointInfo = () => useSyncExternalStore(waypointInfo.subscribe, waypointInfo.get);
+export function setWaypointInfo(next: Record<number, WaypointInfo>) {
+  info = next;
+  infoSubs.forEach((f) => f());
+}

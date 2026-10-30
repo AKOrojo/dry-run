@@ -9,6 +9,9 @@ body { background: var(--ground); }
 .dr-app > header { grid-column: 1 / -1; }
 .dr-main { display: grid; grid-template-rows: minmax(0, 1fr) 284px; min-width: 0; min-height: 0; }
 .dr-map { position: relative; min-width: 0; min-height: 0; }
+/* View menu: hiding the sidebar or the timeline gives the map the space (Cesium resizes with its canvas). */
+.dr-app.no-sidebar { grid-template-columns: minmax(0, 1fr); }
+.dr-app.no-timeline .dr-main { grid-template-rows: minmax(0, 1fr); }
 
 /* Agent panel (Agent mode replaces the sidebar) */
 .dr-panel { background: var(--surface); border-left: var(--stroke-hairline) solid var(--hairline); overflow-y: auto; min-height: 0; }
@@ -53,4 +56,5 @@ body { background: var(--ground); }
   .dr-main { display: contents; }
   .dr-panel { border-left: 0; border-top: var(--stroke-hairline) solid var(--hairline); overflow-y: visible; }
   .dr-badges { top: 52px; left: 66px; }
+  .dr-app.no-timeline { grid-template-rows: 48px 60vh auto; }
 }

@@ -389,6 +389,22 @@ def depth_series(run_id: str, lon: float, lat: float, request: Request):
     return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/api/aoi/{aoi_id}/point")
+def aoi_point(aoi_id: str, lon: float, lat: float, request: Request):
+    """What is at a map point before any run: place, model ground height, water flags, nearest building."""
+    from dryrun.api import point
+
+    if not (math.isfinite(lon) and math.isfinite(lat)):
+        raise HTTPException(400, "lon/lat must be finite")
+    _check_aoi(aoi_id)
+    limit(request, "point", per_hour=3600)
+    try:
+        body = point.describe(aoi_id, lon, lat)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/api/aoi/{aoi_id}/boundary.geojson")
 def boundary_layer(aoi_id: str):
     """Lagoon/sea outline from boundary_mask (empty for inland AOIs)."""
