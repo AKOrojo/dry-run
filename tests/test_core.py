@@ -603,6 +603,14 @@ def test_patch3d_case_and_routes(tmp_path, monkeypatch):
     assert isinstance(info, dict)
     for f in ("system/blockMeshDict", "system/controlDict", "system/fvSchemes", "system/fvSolution", "constant/g"):
         assert (tmp_path / f).exists(), f
+    # subsetMesh -patch walls makes an `empty` patch unless the block mesh declares it as a wall
+    assert "walls { type wall; faces (); }" in (tmp_path / "system/blockMeshDict").read_text()
+    side = (tmp_path / "constant/boundaryData/south").iterdir()
+    assert {f.name for d in side if d.is_dir() for f in d.iterdir()} == {"p_rgh"}  # levels only, no imposed U
+    assert "limitVelocity" in (tmp_path / "system/fvOptions").read_text()
+    assert "kOmegaSST" in (tmp_path / "constant/turbulenceProperties").read_text()
+    assert abs(C.KS_GROUND_M - 0.017) < 0.002  # Strickler from n = 0.02
+    assert abs(info["href"] - C.reference_level(p, C.Forcing(m.run_id), 0.0)) < 1e-9
 
     depth = np.array([[0.0, 0.5], [1.25, 4.0]])
     rgba = np.asarray(Image.open(io.BytesIO(post.surface_png(depth))))[::-1].astype(np.int64)

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +28,7 @@ from dryrun.patch3d import geometry, post
 
 OF_BASHRC = "/usr/lib/openfoam/openfoam2406/etc/bashrc"
 DEFAULT_WINDOW_S = 600.0
+SPINUP_S = 120.0  # the 3D box adjusts from the 2D state over ~2 min (volume settles by 90-120 s)
 MPI_ENV = "export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_btl_vader_single_copy_mechanism=none;"
 
 
@@ -104,7 +106,7 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
         procs = C.procs_for(n_fluid)
         if post_only:
             cc = C.read_cell_centres(tmp, n_fluid)
-            checks = {"sides": C.side_roles(p, forcing, t0, t1)}
+            checks = {"sides": "2D water level (hydrostatic p_rgh)"}
             procs = 0
         else:
             info = C.write_case(tmp, p, forcing, t0, t1, procs)
@@ -114,7 +116,7 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
             (tmp / "0").mkdir(exist_ok=True)
             of(tmp, "postProcess -func writeCellCentres -time 0", "log.cellCentres")
             cc = C.read_cell_centres(tmp, n_fluid)
-            checks = C.write_initial_fields(tmp, p, forcing, t0, cc, info["roles"])
+            checks = C.write_initial_fields(tmp, p, forcing, t0, t1, cc, info["href"])
         t_solve = time.time()
         if post_only:
             pass
@@ -146,11 +148,13 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
     s, n = bnd["walls"]
     fc, sf = post.face_geometry(pts, faces, range(s, s + n))
     ztop = p.zmin + p.nz * p.dz
+    href_f = case / "constant/hRef"
+    href = float(re.search(r"value\s+([-+0-9.eE]+);", href_f.read_text()).group(1)) if href_f.exists() else 0.0
     cell_area = p.cell_m * p.cell_m
     X, Y = np.meshgrid((np.arange(p.nx) + 0.5) * p.cell_m, (np.arange(p.ny) + 0.5) * p.cell_m)
     lon, lat = p.lonlat(X.ravel(), Y.ravel())
     open_cols = (p.building < 0).ravel()
-    frames, depths, surf, mid, forces, vol3, vol2 = [], [], [], [], [], [], []
+    frames, depths, surf, mid, forces, force_t, vol3, vol2 = [], [], [], [], [], [], [], []
     buildings = None
     for t, d in times:
         alpha = post.read_internal(d / "alpha.water", len(cc))
@@ -161,7 +165,9 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
         mid.append(um)
         pv = post.read_patch_values(d / "p", "walls") if (d / "p").exists() else None
         if pv is not None:
-            forces.append(post.building_forces(p, fc, sf, pv + C.RHO_AIR * 9.81 * ztop))
+            if t >= SPINUP_S:  # the box adjusts from the 2D state first; no force peaks from that
+                forces.append(post.building_forces(p, fc, sf, pv + C.RHO_AIR * 9.81 * (ztop - href)))
+                force_t.append(t)
         vol3.append(float(depth.ravel()[open_cols].sum() * cell_area))
         wse2, _, _ = forcing.sample(lon, lat, t0 + t)
         d2 = np.clip(wse2 - p.ground.ravel(), 0, None)
@@ -179,10 +185,11 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
         kmax = mag.argmax(0)
         nb = np.arange(len(p.building_ids))
         bl = {"ids": p.building_ids, "peak_force_kN": np.round(mag[kmax, nb] / 1000, 2).tolist(),
-              "t_s": [round(t0 + times[k][0], 1) for k in kmax],
+              "t_s": [round(t0 + force_t[k], 1) for k in kmax],
               "direction_deg": np.round(np.degrees(np.arctan2(F[kmax, nb, 0], F[kmax, nb, 1])) % 360, 0).tolist(),
               "method": "net horizontal pressure force on each footprint's wall faces from the 3D solve (pressure "
-                        "relative to the open top); no shear; stair-stepped walls at cell_m"}
+                        "relative to the open top); no shear; stair-stepped walls at cell_m; frames after the "
+                        f"{SPINUP_S:g} s spin-up only"}
         buildings = save(req.run_id, pid, "buildings.json", json.dumps(bl).encode(), "application/json")
     w, s_, e, n_ = p.bounds_wgs84
     encoding = {"surface": f"depth_m = (R*256 + G) / 65535 * {post.DEPTH_MAX_M}; A = 255 where depth >= 0.02 m; "
@@ -192,7 +199,7 @@ def post_process(case: Path, p, forcing, req, pid, t0, t1, cc, man) -> Patch3DMa
                     "vmax_m_s": vmax, "depth_max_m": post.DEPTH_MAX_M,
                     "ground": "patch ground = the AOI DEM, bilinear; building tops = highest ground under the "
                               "footprint + height_m"}
-    checks = {**man.checks, "water_volume_3d_m3": [round(v, 1) for v in vol3],
+    checks = {**man.checks, "spinup_s": SPINUP_S, "water_volume_3d_m3": [round(v, 1) for v in vol3],
               "water_volume_2d_m3": [round(v, 1) for v in vol2],
               "volume_diff_end_pct": round(100 * (vol3[-1] - vol2[-1]) / vol2[-1], 1) if vol2 and vol2[-1] > 0 else None}
     return man.model_copy(update={"buildings": buildings, "bounds_wgs84": (w, s_, e, n_), "nx": p.nx, "ny": p.ny,

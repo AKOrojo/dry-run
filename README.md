@@ -273,22 +273,33 @@ grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `doc
 
 ### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
 The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a
-close-up, a 60–300 m box can be re-solved in 3D with OpenFOAM v2406 `interFoam` (two-phase VOF, laminar), nested
+close-up, a 60–300 m box can be re-solved in 3D with OpenFOAM v2406 `interFoam` (two-phase VOF, k-ω SST), nested
 one way in a finished 2D run:
 - **Mesh:** hex cells of `cell_m` (1–4 m) horizontally and `cell_m`/8 vertically; ground and buildings (the AOI's
-  footprints and heights) are cut out with `subsetMesh`, so they are stair-stepped walls (no-slip).
-- **Sides:** a side whose net 2D discharge over the window enters the box takes the 2D water fraction and
-  depth-averaged velocity (outward parts clamped to zero); every other side holds the 2D water level as
-  hydrostatic pressure and lets water leave or return at that level. The top is open air. Our first version fixed
-  velocity and water fraction on all four sides. That removed water from cells where flow left the box, the water
-  fraction went unbounded (min −14) and the time step collapsed; this is why the sides now have two roles.
+  footprints and heights) are cut out with `subsetMesh`, so they are stair-stepped walls. Walls are rough
+  (wall functions, Ks ≈ 0.017 m from a bare urban surface, Manning n 0.02): the 2D run's built-up n of 0.05
+  includes building drag, which the 3D mesh resolves. A laminar first version had almost no bed resistance;
+  water ran down the 2D surface slope at 5 m/s and the box sloshed (volume −20 % to +52 % of the 2D run).
+- **Sides:** every side holds the 2D water level over time (hydrostatic pressure); the velocity follows from
+  that pressure, water enters with the 2D water fraction and leaves with its own. The top is open air. We do
+  not impose the 2D velocity on the sides: ours is estimated from the 2D water-surface slope, not solved, and
+  imposing it added water faster than the other sides let it out (the box gained 120 % in 10 minutes against
+  a steady 2D run).
+- **Test (Lagos v2, 120 mm, 100 m box at 2 m, 25,565 cells, 3 CPU cores, about 8 minutes for 10 minutes of
+  flow):** after a 2-minute spin-up the 3D water volume holds steady at 23 % below the 2D run's (1,480–1,590 m³
+  against ~1,970 m³), and the water fraction stays bounded. The gap barely moves with bed roughness (−24 % at
+  Manning n 0.03), so it comes from the nesting and the 2 m terrain, not from friction: the 3D box drains to a
+  lower level than the 30 m 2D cells hold. Water speeds: median 0.55 m/s, 99th percentile 2–3 m/s.
 - **Outputs** (`/api/runs/{run_id}/patch3d`): a water-surface depth PNG and a velocity PNG (surface and mid-depth
   u, v) every 30 s, and the net horizontal force on each building from its
-  wall pressures (shear is not included). The manifest records the side
-  roles, cell count and the water volume at the start.
-- **Limits:** no turbulence model, so wakes and near-wall shear are under-resolved at metre cells; vertical
-  velocity profiles are therefore indicative. The forcing is depth-averaged, so the inflow profile is uniform with
-  depth. The 3D patch does not feed back into the 2D run.
+  wall pressures (shear is not included). The manifest records the cell count and the 3D and 2D water volume
+  per frame.
+- **Limits:** RANS with wall functions on 0.25–2 m cells, so wakes and near-wall shear are approximate and
+  vertical velocity profiles are indicative. The side pressure drives spurious air currents in a few cells (in
+  corners and just above the water at the sides); cell speeds are capped at 5 m/s (flood water here moves
+  under 2 m/s), so these currents cannot grow, but the capped air speeds are not physical. The sides carry levels only, so water entering the box starts
+  without the momentum it had in the 2D run; keep the area of interest away from the sides. The 3D patch does
+  not feed back into the 2D run.
 - **Cost:** solves take minutes to hours on CPUs, so the API never solves inside a request. Showcase patches are
   precomputed; `POST /api/runs/{run_id}/patch3d` returns a stored patch to anyone. Queueing a new one (and starting
   the `DRYRUN_PATCH3D_JOB` Cloud Run Job when one is configured) needs the team token or a judge key and is capped
