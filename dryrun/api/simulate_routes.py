@@ -2,7 +2,7 @@
 
 POST /api/simulate/estimate  ScenarioSpec ->
     {run_id, cached, status: done|running|failed|none, est_s, est_basis: cached|speed_model|history|null, t_end_s,
-     output_interval_s, frames_total}
+     output_interval_s, frames_total, domain_cells, grid_cells}   (domain_cells == grid_cells: no rain-area speed-up)
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
     started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
     progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}
@@ -80,6 +80,18 @@ def _status(run_id: str) -> str:
     return m.status.value
 
 
+def _domain_cells(aoi, spec: ScenarioSpec, grid_cells: int) -> int:
+    """Cells the solver will actually run: Eng A's rain-area window (speed.domain_cells), else the whole grid."""
+    try:
+        from dryrun import speed
+
+        fn = getattr(speed, "domain_cells", None)
+        return int(fn(aoi, spec)) if fn is not None else grid_cells
+    except Exception:  # noqa: BLE001 - the window is a nicety; never break the estimate
+        log.exception("speed.domain_cells failed; reporting the whole grid")
+        return grid_cells
+
+
 def estimate_for(spec: ScenarioSpec) -> dict:
     from dryrun.sim import interventions
 
@@ -87,8 +99,11 @@ def estimate_for(spec: ScenarioSpec) -> dict:
     status = _status(run_id)
     t_end = interventions.t_end_s(spec)
     interval = spec.output_interval_min * 60
+    aoi = storage.load_aoi(spec.aoi_id)
+    grid_cells = aoi.grid.nx * aoi.grid.ny
     out = {"run_id": run_id, "cached": status == "done", "status": status, "est_s": None, "est_basis": None,
-           "t_end_s": t_end, "output_interval_s": interval, "frames_total": t_end // interval + 1}
+           "t_end_s": t_end, "output_interval_s": interval, "frames_total": t_end // interval + 1,
+           "domain_cells": _domain_cells(aoi, spec, grid_cells), "grid_cells": grid_cells}
     if status == "done":
         return {**out, "est_s": 0.0, "est_basis": "cached"}
     try:

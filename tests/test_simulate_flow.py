@@ -41,6 +41,8 @@ def events(body: str) -> list[dict]:
 def test_estimate_then_stream_then_cached(client):
     e = client.post("/api/simulate/estimate", json=spec(41)).json()
     assert e["cached"] is False and e["status"] == "none" and e["t_end_s"] > 0
+    g = storage.load_aoi(fixtures.AOI_ID).grid
+    assert e["grid_cells"] == g.nx * g.ny and 0 < e["domain_cells"] <= e["grid_cells"]
     evs = events(client.post("/api/simulate/stream", json=spec(41)).text)
     kinds = [ev["kind"] for ev in evs]
     assert kinds[0] == "started" and kinds[-1] == "done" and "progress" in kinds
