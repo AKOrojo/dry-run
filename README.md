@@ -257,11 +257,16 @@ the model has no pre-event level to measure a rise from.
 building footprints with roof heights, an outflow ring on every edge, and 13 mm/h of combined-sewer capacity on
 all land (assumed). Rain from the gauges: LaGuardia 118 mm with a 56 mm/h peak hour, Central Park 7.13 in
 (181 mm) with the record 3.15 in (80 mm) hour. Presets: 118 mm / 4 h centre-peaked (peak 59 mm/h), 181 mm /
-4.5 h (peak 80 mm/h), the 181 mm as a 5 km cell centred on Woodside, and the 118 mm storm with sewer capacity
-doubled. Each runs in 15–35 s; mass balance 0.0 %.
+4.5 h (peak 80 mm/h), both of those with the sewers full (no drainage: NYC sewers are designed for about 1.75 in/h
+and Ida's peak hour was 3.15 in, so they surcharged), the peak hour alone (80 mm in 1 h, sewers full), the 181 mm
+as a 5 km cell centred on Woodside, and the 118 mm storm with sewer capacity doubled. Each runs in 15–40 s;
+mass balance 0.0 %. The demo hero is the 181 mm storm with the sewers full: the most street water (2.4 km²
+deeper than 0.5 m) that is still tied to observed rain.
 
 | Preset | Buildings with water close by | Flooded km² | Road km impassable | Max depth |
 |---|---|---|---|---|
+| Central Park rate, 181 mm, sewers full | 16,587 | 4.55 | 155 | 4.8 m |
+| Peak hour 80 mm / 1 h, sewers full | 14,922 | 3.23 | 120 | 4.7 m |
 | LaGuardia gauge, 118 mm | 12,531 | 2.24 | 92 | 4.5 m |
 | Central Park rate, 181 mm | 15,171 | 3.67 | 132 | 4.7 m |
 | 181 mm core over Woodside | 10,615 | 1.76 | 66 | 3.7 m |
@@ -274,12 +279,16 @@ geocoded to street addresses, so the baseline is random road cells.
 
 | Preset | Street reports hit (95 % CI) | Random road cells | Lift |
 |---|---|---|---|
+| Central Park rate, 181 mm, sewers full | 72 % (62–81 %) | 46 % | 1.6× |
+| Peak hour 80 mm / 1 h, sewers full | 71 % (60–80 %) | 42 % | 1.7× |
 | LaGuardia gauge, 118 mm | 64 % (53–74 %) | 36 % | 1.8× |
 | Central Park rate, 181 mm | 71 % (60–80 %) | 43 % | 1.7× |
 | 181 mm core over Woodside | 56 % (46–67 %) | 27 % | 2.1× |
 | 118 mm, sewers ×2 | 49 % (39–61 %) | 25 % | 1.9× |
 
-The model puts water where people reported it about twice as often as at random roads. Sewer backup and
+The model puts water where people reported it about twice as often as at random roads. A moving 5 km cell
+(181 mm, 2 m/s over Elmhurst) was tried as a demo and floods less (0.18 km² deeper than 0.5 m): a narrow cell
+drops much less water in total than its centre depth suggests. Sewer backup and
 basement reports score a little lower (55 % at 118 mm, lift 1.6×); much of that water comes up through building
 pipes, which the model does not represent. 311 cannot measure false alarms: a street with no report may still
 have flooded. At 50 m every hit rate rises (74 % at 118 mm) but so does the baseline (53 %), so the lift falls
