@@ -107,6 +107,10 @@ land cells only.
   fast fronts (dam-break test below).
 - **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
   soakaways and no unmapped drains. Against the satellite scenes the visible excess is small (drain-down check below).
+  `evals/validation/pits.py` shows where it sits: the DEM's closed depressions (priority-flood fill to the lagoon, sea
+  and grid edge) cover 21 km² of land at ≥ 0.15 m and could hold 147 mm over all land. At the 12 Jul pass, **96.5 % of
+  the land the model still has wet (1.42 of 1.48 km²) is in such depressions** (median depth 0.49 m), so the excess is
+  water that cannot drain overland, not slow flow.
 - **Two building counts:** `buildings_flooded` counts a building if any of the 3×3 cells around it reaches 0.15 m. On a
   30 m grid that means flood water within about 45 m, so read it as "buildings with flood water close by". Since
   contract 0.4.0, `buildings_flooded_own_cell` also counts only buildings whose own cell reaches 0.15 m. That count is
@@ -199,6 +203,19 @@ the effective channel and floodplain storage being under-represented. The replay
 calibrated forecast. Shelters are candidates at least 15 m above the nearest river cell (observed rise 11.3 m plus
 margin); all stayed dry in the replay. Impact (12 h, river plus 85 mm rain): 1,863 buildings with flood water close by
 (1,063 by own cell), 1,067 people, 115 road km. With the river alone it is 1,743 buildings, so the river dominates.
+
+**Scored against observations** (`evals/validation/texas_hwm.py`). Both references come from one observation set:
+FIMbench's extent is interpolated from the same high-water marks, and USGS rebuilt the Hunt peak flow (one of our
+inputs) from them after the gauge failed. So these are not independent tests.
+- **Flood extent vs FIMbench** (University of Alabama / CIROH, CC-BY-4.0, doi:10.5281/zenodo.22961099). The 10 m
+  flooded/dry map is aggregated to model cells (flooded if at least half the cell is) and scored inside its own
+  boundary: 81,861 cells, 4,581 observed flooded. At a 0.15 m model threshold, **CSI 0.71, POD 0.87, FAR 0.21**,
+  bias 1.10, and it barely moves between 0.05 and 0.3 m.
+- **Water level at USGS high-water marks** (STN event 357, 224 marks in the AOI, NAVD88 converted to EGM2008 with
+  PROJ, +1.02 m). For the 151 marks rated Excellent, Good or Fair, the highest model water surface in the 3×3 cells
+  around each mark is **+1.7 m high at the median** (mean +3.2 m, RMSE 4.8 m, n = 145). The model is dry at 6
+  marks. On the 43 marks that record the water depth there, the model is +0.8 m deeper at the median (observed
+  median 1.2 m). The extent is right and the levels run high, as the gauge depths already suggested.
 
 ### The 3D map: model ground vs the terrain it is drawn on
 The solver's DEM uses EGM2008 heights; Cesium World Terrain uses ellipsoid heights. The geoid offset N is +22.0 to
