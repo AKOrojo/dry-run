@@ -10,11 +10,13 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
+from dryrun import jobs
 from dryrun.contracts import AOIManifest, RunManifest
 
 MODE = os.getenv("DRYRUN_STORAGE", "local")  # local | gcs
@@ -93,9 +95,20 @@ def _exists(kind: str, rel: str) -> bool:
 
 
 # --------------------------------------------------------------------- AOI
+_VERSION_SUFFIX = re.compile(r"\s*\(v\d+\)\s*$")
+
+
+def display_name(name: str) -> str:
+    """Versions live in aoi_id only: "Lekki-Ajah, Lagos (v2)" is shown as "Lekki-Ajah, Lagos"."""
+    return _VERSION_SUFFIX.sub("", name)
+
+
 @lru_cache(maxsize=8)
 def load_aoi(aoi_id: str) -> AOIManifest:
-    return AOIManifest.model_validate_json(_read_bytes("data", f"{aoi_id}/manifest.json"))
+    # The stored name is left alone: run_ids hash the manifest bytes (aoi_hash), so renaming in storage would
+    # change every run_id. Callers (API, agent) get the display name.
+    m = AOIManifest.model_validate_json(_read_bytes("data", f"{aoi_id}/manifest.json"))
+    return m.model_copy(update={"name": display_name(m.name)})
 
 
 @lru_cache(maxsize=8)
@@ -145,6 +158,7 @@ def load_run(run_id: str) -> RunManifest:
 
 
 def save_run(manifest: RunManifest) -> None:
+    jobs.on_save_run(manifest.run_id, manifest.status.value)
     _DONE_RUNS.pop(manifest.run_id, None)
     _write_bytes(
         "runs", f"{manifest.run_id}/manifest.json",
@@ -153,6 +167,7 @@ def save_run(manifest: RunManifest) -> None:
 
 
 def write_run_file(run_id: str, rel: str, data: bytes, content_type: str) -> None:
+    jobs.on_write(run_id)  # live-job progress; raises jobs.Cancelled when every viewer has left
     _write_bytes("runs", f"{run_id}/{rel}", data, content_type)
 
 

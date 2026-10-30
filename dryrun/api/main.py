@@ -531,8 +531,10 @@ def compare(base_run_id: str, alt_run_id: str):
 # Eng C endpoints live in their own router to avoid merge conflicts.
 from dryrun.api.agent_routes import router as agent_router  # noqa: E402
 from dryrun.api.render_routes import router as render_router  # noqa: E402
+from dryrun.api.simulate_routes import router as simulate_router  # noqa: E402
 
 app.include_router(agent_router)
+app.include_router(simulate_router)
 app.include_router(render_router)
 
 
