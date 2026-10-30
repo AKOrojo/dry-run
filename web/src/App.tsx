@@ -239,7 +239,7 @@ export default function App() {
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
-            {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")}
+            {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
           </div>
           {side && aoi && pair && (
@@ -247,7 +247,6 @@ export default function App() {
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
             </div>
           )}
-          {plan && !side && <Graticule viewer={mainViewer} />}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
           {pair && <CompareMapOverlay a={pair.a} b={pair.b} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}

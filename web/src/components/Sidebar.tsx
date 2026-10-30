@@ -19,7 +19,7 @@ import { Button } from "./ds";
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
 export type Failure = { message: string; retryable: boolean };
 const TABS = ["Layers", "Inspect", "Scenario", "Sources"] as const;
-const COMPARE_TABS = ["Compare", "Inspect", "Sources"] as const;
+const COMPARE_TABS = ["Compare", "Layers", "Inspect", "Sources"] as const;
 const AGENT_TABS = ["Layers", "Inspect", "Agent", "Sources"] as const;
 type Tab = (typeof TABS)[number] | "Compare" | "Agent";
 

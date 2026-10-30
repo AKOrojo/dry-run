@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { ArrowCounterClockwise, CaretDown, Columns, House, RoadHorizon, Users, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
-import type * as Cesium from "cesium";
+import * as Cesium from "cesium";
 import { API } from "../lib/api";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { Change, DIFF_MIN_M, PlaceRow } from "../lib/compare";
@@ -282,10 +282,19 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   useEffect(() => {
     if (!leader || !v) return;
     v.scene.screenSpaceCameraController.enableInputs = false;  // driven by the left map
+    v.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    // Copy the whole camera, frustum included, so both halves show the same ground at the same scale.
     const sync = () => {
       if (v.isDestroyed() || leader.isDestroyed()) return;
-      const c = leader.camera;
-      v.camera.setView({ destination: c.positionWC.clone(), orientation: { heading: c.heading, pitch: c.pitch, roll: c.roll } });
+      const c = leader.camera, t = v.camera;
+      Cesium.Cartesian3.clone(c.positionWC, t.position);
+      Cesium.Cartesian3.clone(c.directionWC, t.direction);
+      Cesium.Cartesian3.clone(c.upWC, t.up);
+      Cesium.Cartesian3.clone(c.rightWC, t.right);
+      const f = t.frustum, lf = c.frustum;
+      if (f instanceof Cesium.PerspectiveFrustum && lf instanceof Cesium.PerspectiveFrustum) {
+        f.fov = lf.fov; f.aspectRatio = lf.aspectRatio; f.near = lf.near; f.far = lf.far;
+      }
     };
     sync();
     return leader.scene.postRender.addEventListener(sync);

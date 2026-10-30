@@ -39,6 +39,8 @@ export type MapStageProps = {
   onBuilding?: (id: string, shift: boolean) => void;
   /** Told when the camera switches between Orbit and Plan. */
   onView?: (view: "Orbit" | "Plan") => void;
+  /** Drawn on the map under every label, card and popup (Plan view's graticule). */
+  underlay?: ReactNode;
 };
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
@@ -431,13 +433,14 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
 
 function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
   return (
+    // Only the chip takes clicks: the dot and the gap stay click-through, so a building under them can be picked.
     <button type="button" onClick={onClick} aria-pressed={selected}
       style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
-        border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "auto" }}>
+        border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "none" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />
       <span style={{ display: "flex", flexDirection: "column", padding: "4px 9px 5px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", backdropFilter: "blur(6px)",
         border: selected ? "1px solid var(--danfo)" : "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap" }}>
+        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
       </span>
@@ -502,7 +505,7 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
 }
 
 // ---------- the stage ----------
-export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuilding, onView, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
+export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
@@ -1053,6 +1056,7 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuildin
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
         onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+        {underlay}
         {lay.places.on && places.map((p) => {
           const lp = evPlace.get(p.name)?.label_point;
           return (
