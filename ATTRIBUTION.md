@@ -9,6 +9,7 @@ once the data is actually in the pipeline and the required credit line is visibl
 |---|---|---|---|
 | Synthetic fixtures (`dryrun.pipeline.fixtures`) | default AOI, demo runs | ours | badged "Synthetic terrain" in the UI |
 | Muse Spark Open | sovereign-mode agent | Muse Model License | "Built with Muse Spark Open" (in the app footer) |
+| Cesium ion (Community tier) | serves the Bing basemap, World Terrain and Google 3D tiles; token restricted by URL | Cesium ion terms; Community tier is non-commercial | Cesium ion logo in the on-screen credit display. Owner decision 2026-10-30: the non-commercial tier is acceptable for this hackathon demo |
 | Bing Maps Aerial, via Cesium ion (default ion imagery asset) | basemap imagery on the globe | Cesium ion terms; Microsoft Bing Maps terms | Cesium's on-screen credit display (ion and Microsoft logos); never hide `viewer.creditDisplay` |
 | Google Photorealistic 3D Tiles (ion asset 2275207) | default 3D basemap (#82, live 2026-10-29); the Bing globe stays as the alternative basemap | Google Map Tiles API terms | Google logo and data attributions in Cesium's on-screen credit display; never hide or restyle `viewer.creditDisplay` |
 | Cesium World Terrain (ion asset 1) | 3D terrain under the globe and building bases (#82) | Cesium ion terms | "Cesium World Terrain" in the on-screen credit display |
@@ -55,7 +56,6 @@ before the data lands. Add the credit line to the UI in the same commit as the d
 |---|---|---|---|
 | Sentinel-1 (Copernicus), via Microsoft Planetary Computer | validation flood extent (30 Jun 2026 event) | RTC: CC BY 4.0; GRD: Copernicus legal notice | "Contains modified Copernicus Sentinel data [year]" |
 | Google Maps 2D Satellite (Map Tiles API, our own key; ion asset 3830182 as a second path) | judges-only Aerial option beside Bing (owner rule: Bing for everyone, Google for judges) | Google Map Tiles API terms | Google logo and imagery attributions in Cesium's on-screen credit display. Key: Secret Manager `google-tiles-key`, restricted to the Map Tiles API and our referrers, capped at 3,000 2D tiles/day (free tier: 100k/month). Move to In use when Eng B's toggle is live |
-| Cesium ion (Community tier) | serves the basemap above and terrain below; ion token restricted by URL | Community tier is non-commercial only | open question for the owner: the demo may be commercial-adjacent |
 
 ## Excluded
 
