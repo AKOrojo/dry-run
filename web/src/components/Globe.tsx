@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
-import { setBasemap, useLayers } from "../lib/layers";
+import { setAerial, setAerialNote, setBasemap, useLayers } from "../lib/layers";
+import { ApiError, getGoogleTilesKey } from "../lib/api";
 
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 // Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
 // with "The Resource is already being fetched" (React's dev double effect, quick basemap toggles).
 let googleQueue: Promise<unknown> = Promise.resolve();
 /** Cesium ion asset "Google Maps 2D Satellite" (added to the account from the ion Asset Depot). */
-const GOOGLE_2D_SATELLITE = 3830182;
 const cssColor = (name: string) =>
   Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const buildingColor = (depth: number) => {
@@ -55,6 +55,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   if (import.meta.env.DEV && import.meta.env.VITE_ION_SERVER) Cesium.Ion.defaultServer = new URL(import.meta.env.VITE_ION_SERVER, window.location.href).href;
   const el = useRef<HTMLDivElement>(null);
   const viewer = useRef<Cesium.Viewer>();
+  /** Google 2D imagery is the base layer right now (so switching back to Bing must swap it out). */
+  const googleShown = useRef(false);
   const terrainRef = useRef<Cesium.Terrain>();
   const layer = useRef<Cesium.ImageryLayer>();
   const frameLayers = useRef<{ t_s: number; layer: Cesium.ImageryLayer; url: string }[]>([]);
@@ -396,39 +398,58 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   // Default basemap per area: Google 3D where it has real buildings, otherwise our 3D houses on aerial imagery.
   useEffect(() => { setBasemap(aoi.photoreal_buildings ? "photoreal" : "aerial"); }, [aoi.aoi_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Aerial imagery: Google Maps 2D Satellite from ion when the account has it (sharp over Lagos), else ion's Bing.
+  // Aerial imagery: Bing through ion for everyone; Google Map Tiles 2D when picked (judges and the team, our own key
+  // from /api/tiles/google-key, capped per day). Google only replaces Bing once a real tile over the area loads, and
+  // falls back to Bing when tiles keep failing (daily limit returns 429).
   useEffect(() => {
     const v = viewer.current;
     if (!v || v.isDestroyed() || !token) return;
     let cancelled = false;
     let added: Cesium.ImageryLayer | undefined;
-    Cesium.IonImageryProvider.fromAssetId(GOOGLE_2D_SATELLITE).then(async (p) => {
-      if (cancelled || v.isDestroyed()) return;
-      // Only switch once a real tile over the area loads (the ion proxy can rate-limit with 429).
-      const centre = Cesium.Cartographic.fromDegrees((w + e) / 2, (s + n) / 2);
-      const xy = p.tilingScheme.positionToTileXY(centre, 15);
-      const probe = xy ? p.requestImage(xy.x, xy.y, 15) : undefined;
-      if (!probe) return;
-      await probe;
-      if (cancelled || v.isDestroyed()) return;
+    const swapIn = (p: Cesium.ImageryProvider) => {
       const old = v.imageryLayers.get(0);
-      added = v.imageryLayers.addImageryProvider(p, 0);
-      added.show = old.show; added.alpha = old.alpha; added.saturation = old.saturation; added.brightness = old.brightness;
+      const layer = v.imageryLayers.addImageryProvider(p, 0);
+      layer.show = old.show; layer.alpha = old.alpha; layer.saturation = old.saturation; layer.brightness = old.brightness;
       v.imageryLayers.remove(old, true);
-      // Fall back to Bing if tiles start failing later (quota or rate limit).
-      let failures = 0;
-      p.errorEvent.addEventListener(() => {
-        if (++failures !== 8 || cancelled || v.isDestroyed() || !added) return;
-        Cesium.IonImageryProvider.fromAssetId(2).then((bing) => {
-          if (cancelled || v.isDestroyed() || !added) return;
-          const back = v.imageryLayers.addImageryProvider(bing, 0);
-          back.show = added.show; back.alpha = added.alpha; back.saturation = added.saturation; back.brightness = added.brightness;
-          v.imageryLayers.remove(added, true); added = undefined;
-        }).catch(() => {});
+      return layer;
+    };
+    const toBing = (note: string | null) => Cesium.IonImageryProvider.fromAssetId(2).then((bing) => {
+      if (cancelled || v.isDestroyed()) return;
+      added = swapIn(bing);
+      if (note) setAerial("bing", note);
+    }).catch(() => { /* keep whatever imagery is showing */ });
+    if (layerState.aerial !== "google") {
+      // The viewer starts on ion's default (Bing); swap back only after Google was showing.
+      if (googleShown.current) { googleShown.current = false; toBing(null); }
+      return () => { cancelled = true; };
+    }
+    setAerialNote(null);
+    getGoogleTilesKey().then((key) => Cesium.Google2DImageryProvider.fromUrl({ key, mapType: "satellite", region: aoi.aoi_id.startsWith("lagos") ? "NG" : "US" }))
+      .then(async (p) => {
+        if (cancelled || v.isDestroyed()) return;
+        const centre = Cesium.Cartographic.fromDegrees((w + e) / 2, (s + n) / 2);
+        const xy = p.tilingScheme.positionToTileXY(centre, 15);
+        const probe = xy ? p.requestImage(xy.x, xy.y, 15) : undefined;
+        if (!probe) throw new Error("no tile");
+        await probe;
+        if (cancelled || v.isDestroyed()) return;
+        added = swapIn(p as unknown as Cesium.ImageryProvider);  // the d.ts types getTileCredits as possibly undefined
+        googleShown.current = true;
+        let failures = 0;
+        p.errorEvent.addEventListener(() => {
+          if (++failures !== 8 || cancelled || v.isDestroyed()) return;
+          googleShown.current = false;
+          toBing("Google reached today's tile limit; showing Bing.");
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const forbidden = err instanceof ApiError && (err.status === 403 || err.code === "forbidden");
+        setAerial("bing", forbidden ? "Google imagery needs the judge key." : "Google imagery is not available right now; showing Bing.");
+        if (googleShown.current) { googleShown.current = false; toBing(null); }
       });
-    }).catch(() => { /* Not in this ion account, or rate-limited: keep Bing. */ });
     return () => { cancelled = true; };
-  }, [aoi.aoi_id, token]);
+  }, [aoi.aoi_id, token, layerState.aerial]);
 
   // Photoreal basemap: Google 3D tiles through ion. The globe stays loaded (fully transparent) so terrain
   // heights and picking keep working; water is a textured ground primitive classifying the tiles (imagery layers on the tileset did not render).

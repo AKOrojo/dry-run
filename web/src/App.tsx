@@ -21,7 +21,7 @@ import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
 import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
 import type { RainState } from "./lib/rain";
-import { useLayers } from "./lib/layers";
+import { setGoogleAvailable, useLayers } from "./lib/layers";
 import { Tour, tourDisabled, tourDone } from "./components/Tour";
 import { CloseUpCards, CloseUpDock } from "./components/CloseUp";
 import { useCloseUp } from "./lib/patch3d";
@@ -137,7 +137,7 @@ export default function App() {
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
     getConfig().then(async (h) => {
-      setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token);
+      setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); setGoogleAvailable(!!h.google_tiles_available);
       const m = shared.run ? await getRun(shared.run).catch(() => undefined) : undefined;
       const want = m?.scenario.aoi_id ?? shared.aoi ?? h.default_aoi;
       const a = await getAOI(want).catch(() => getAOI(h.default_aoi));

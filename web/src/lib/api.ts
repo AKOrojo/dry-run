@@ -87,7 +87,10 @@ async function j<T>(r: Response): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean }>);
+/** The Google Map Tiles key, for judges (X-Judge-Key) and the team only; 403 without one, 404 when the server has none. */
+export const getGoogleTilesKey = () =>
+  fetch(`${API}/api/tiles/google-key`, { headers: { ...team(), ...judge() }, cache: "no-store" }).then(j<{ key: string }>).then((r) => r.key);
+export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean; google_tiles_available?: boolean }>);
 export type Replay = { question: string; aoi_id: string; provider: string; model: string; recorded_at: string };
 export const getReplays = () => fetch(`${API}/api/replays`).then(j<Replay[]>);
 export const getAOIs = () => fetch(`${API}/api/aois`).then(j<{ aoi_id: string; name: string }[]>);

@@ -4,7 +4,9 @@ import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
-import { LayerKey, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
+import { getJudgeKey, setJudgeKey } from "../lib/api";
+import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
+import type { AerialSource } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
 import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints";
 import { setFocus } from "../lib/focus";
@@ -34,7 +36,7 @@ function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTa
         const st: CSSProperties = on
           ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: "0 12px" }
           : { color: "var(--ink-muted)", padding: "0 12px" };
-        return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
+        return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : n === "Layers" ? "layers" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
           style={{ height: 38, marginRight: 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", ...st }}>{n}</button>;
       })}
     </nav>
@@ -77,6 +79,46 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "boundary", name: "Lagoon / sea edge", thumb: BOUNDARY_T },
   { key: "closeups", name: "3D close-ups", thumb: CLOSEUP_T, note: "Outlines" },
 ];
+
+const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit",
+  ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) });
+const KEY_NOTE = "Google imagery needs the judge key.";
+
+/** Aerial source: Bing for everyone, Google Map Tiles for judges (key from the server, behind the judge key). */
+function AerialSourceRow() {
+  const lay = useLayers();
+  const [key, setKey] = useState(getJudgeKey);
+  const keyRef = useRef<HTMLInputElement>(null);
+  const needKey = lay.aerialNote === KEY_NOTE;
+  useEffect(() => { if (needKey) keyRef.current?.focus(); }, [needKey]);
+  // The server decides (judge key or team token); a 403 comes back as KEY_NOTE and brings up the key box.
+  const pick = (a: AerialSource) => setAerial(a);
+  const aerial = lay.basemap === "aerial";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 14px 0", fontSize: 12, color: "var(--ink-muted)", opacity: aerial ? 1 : 0.45 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        Aerial
+        <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+          {(["bing", "google"] as const).map((a) => (
+            <button key={a} type="button" aria-pressed={lay.aerial === a} disabled={!aerial} onClick={() => pick(a)}
+              title={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"} style={seg(lay.aerial === a)}>
+              {a === "bing" ? "Bing" : "Google"}</button>
+          ))}
+        </span>
+      </div>
+      {lay.aerialNote && <span role="status" style={{ color: needKey ? "var(--ink)" : "var(--ink-muted)" }}>{lay.aerialNote}</span>}
+      {needKey && (
+        <form onSubmit={(e) => { e.preventDefault(); if (key.trim()) { setJudgeKey(key.trim()); setAerial("google"); } }} style={{ display: "flex", gap: 6 }}>
+          <input ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
+            style={{ flex: 1, minWidth: 0, height: 28, padding: "0 8px", background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
+              boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit", fontSize: 12 }} />
+          <button type="submit" disabled={!key.trim()} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
+            background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Use Google</button>
+        </form>
+      )}
+    </div>
+  );
+}
 
 function LayersCard() {
   const lay = useLayers();
@@ -128,6 +170,7 @@ function LayersCard() {
           })}
         </span>
       </div>
+      {lay.googleAvailable && <AerialSourceRow />}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", fontSize: 12, color: "var(--ink-muted)", opacity: lay.basemap === "aerial" ? 1 : 0.45 }}>
         Imagery
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>

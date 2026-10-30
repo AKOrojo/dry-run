@@ -6,7 +6,13 @@ export type LayerState = { on: boolean; opacity: number };
 export type ImageryMode = "colour" | "greyscale";
 /** Aerial: Bing imagery on World Terrain. Photoreal: Google Photorealistic 3D Tiles (via ion), water draped on it. */
 export type Basemap = "aerial" | "photoreal";
-export type LayersState = Record<LayerKey, LayerState> & { imageryMode: ImageryMode; basemap: Basemap };
+/** Aerial imagery source: Bing (ion, everyone) or Google Map Tiles 2D (judges and the team; key from /api/tiles/google-key). */
+export type AerialSource = "bing" | "google";
+export type LayersState = Record<LayerKey, LayerState> & {
+  imageryMode: ImageryMode; basemap: Basemap; aerial: AerialSource;
+  /** Why the map is on Bing although Google was picked (no key, daily limit), or null. */ aerialNote: string | null;
+  /** The server has a Google Map Tiles key (/api/config.google_tiles_available): offer Google as an Aerial source. */ googleAvailable: boolean;
+};
 
 let state: LayersState = {
   water: { on: true, opacity: 1 },
@@ -25,6 +31,9 @@ let state: LayersState = {
   closeups: { on: true, opacity: 1 },
   imageryMode: "colour",
   basemap: "photoreal",
+  aerial: "bing",
+  aerialNote: null,
+  googleAvailable: false,
 };
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
@@ -45,5 +54,17 @@ export function setBasemap(basemap: Basemap) {
 }
 export function setImageryMode(mode: ImageryMode) {
   state = { ...state, imageryMode: mode };
+  emit();
+}
+export function setAerial(aerial: AerialSource, aerialNote: string | null = null) {
+  state = { ...state, aerial, aerialNote };
+  emit();
+}
+export function setAerialNote(aerialNote: string | null) {
+  state = { ...state, aerialNote };
+  emit();
+}
+export function setGoogleAvailable(googleAvailable: boolean) {
+  state = { ...state, googleAvailable };
   emit();
 }
