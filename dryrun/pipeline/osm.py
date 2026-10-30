@@ -522,6 +522,17 @@ def _read_nyc_buildings(grid: GridSpec, paths: Sequence[str]) -> Iterable[dict]:
             yield record
 
 
+def building_credit(source: str) -> str:
+    """Manifest credit for the building layers, per building_source."""
+    return {
+        "open_buildings": f"Google Open Buildings v3, CC BY 4.0 (heights: {DEFAULT_HEIGHT_M:g} m assumed for all; "
+                          "no 2.5D data)",
+        "ms": "Microsoft Global ML Building Footprints, ODbL",
+        "nyc_footprints": "NYC Open Data BUILDING footprints (5zhs-2jue), City of New York, NYC Open Data terms of use; "
+                          f"height from HEIGHT_ROOF (ft -> m), {DEFAULT_HEIGHT_M:g} m where unknown",
+    }[source]
+
+
 def building_reader(source: str):
     readers = {"open_buildings": _read_open_buildings, "ms": _read_ms_buildings, "nyc_footprints": _read_nyc_buildings}
     if source not in readers:
@@ -550,7 +561,8 @@ CORRIDOR_TAGS = {"highway": True}
 
 def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xml: str | None = None,
                             place_aliases: dict | None = None, place_tags: dict | None = None,
-                            corridor_tags: dict | None = None) -> list[dict]:
+                            corridor_tags: dict | None = None,
+                            place_points: dict[str, tuple[float, float]] | None = None) -> list[dict]:
     """Neighbourhoods (polygons first, then Voronoi cells of named points), corridors (named roads
     buffered), then the largest open land. Priority order = output order."""
     from shapely.geometry import Point, box
@@ -576,6 +588,9 @@ def _fetch_place_candidates(grid: GridSpec, keywords: Sequence[str], features_xm
             polys.append({"name": k, "kind": "neighbourhood", "ring": ring(g)})
         elif isinstance(f.geometry, Point) and aoi.contains(f.geometry):
             pts.setdefault(k, (f.geometry.x, f.geometry.y))
+    for k, xy in (place_points or {}).items():  # named points just outside the box (the OSM extract is clipped)
+        if k in keywords:
+            pts.setdefault(k, (float(xy[0]), float(xy[1])))
     have = {p["name"] for p in polys}
     for k, r in point_places(grid, {k: v for k, v in pts.items() if k not in have}).items():
         polys.append({"name": k, "kind": "neighbourhood", "ring": r})
@@ -624,7 +639,8 @@ def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
           building_csvs: Sequence[str], osm_files: dict[str, str] | None = None,
           building_source: str = "open_buildings", keywords: Sequence[str] | None = None,
           place_aliases: dict | None = None, place_tags: dict | None = None, corridor_tags: dict | None = None,
-          river_mask: np.ndarray | None = None, shelter_min_above_river_m: float | None = None
+          river_mask: np.ndarray | None = None, shelter_min_above_river_m: float | None = None,
+          place_points: dict[str, tuple[float, float]] | None = None
           ) -> tuple[dict[str, str], dict[str, str], dict]:
     """Read OSM (osm_extract() files, or Overpass when osm_files is None) + Open Buildings, write the vector
     layers for `aoi_id` through storage. Returns (layers, sources, report) for the manifest that
@@ -647,15 +663,14 @@ def build(aoi_id: str, grid: GridSpec, dem: np.ndarray, exclude: np.ndarray,
                              river_mask, shelter_min_above_river_m)
     w(aoi_id, "shelters.geojson", json.dumps(shelters).encode(), "application/geo+json")
 
-    places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases, place_tags, corridor_tags))
+    places = places_collection(_fetch_place_candidates(grid, keywords, feats_xml, place_aliases, place_tags, corridor_tags,
+                                                        **({"place_points": place_points} if place_points else {})))
     w(aoi_id, "places.geojson", json.dumps(places).encode(), "application/geo+json")
 
     osm = "© OpenStreetMap contributors, ODbL 1.0"
     layers = {"roads_graph": "roads.graphml", "buildings": "buildings_index.json",
               "buildings_geojson": "buildings.geojson", "shelters": "shelters.geojson", "places": "places.geojson"}
-    ob = f"Google Open Buildings v3, CC BY 4.0 (heights: {DEFAULT_HEIGHT_M:g} m assumed for all; no 2.5D data)"
-    if building_source == "ms":
-        ob = "Microsoft Global ML Building Footprints, ODbL"
+    ob = building_credit(building_source)
     sources = {"roads_graph": osm, "buildings": ob, "buildings_geojson": ob,
                "shelters": f"{osm}; {SHELTER_LABEL}", "places": f"{osm}; derived polygons (see osm.py)"}
     found = {f["properties"]["name"] for f in places["features"]}

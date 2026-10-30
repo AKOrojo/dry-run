@@ -295,3 +295,13 @@ def test_edge_outflow_build(tmp_path, monkeypatch):
     assert m.sources["dem"].startswith("3DEP lidar (test)") and "unsmoothed" in m.sources["dem"]
     assert "outer cell ring" in m.sources["boundary_mask"] and "13 mm/h" in m.sources["drain_sink_mm_h"]
     storage.clear_caches()
+
+
+def test_place_point_outside_the_box_still_names_its_edge():
+    """NYC: Woodside's OSM node sits ~30 m west of the box; given as a place point it owns the west edge cells."""
+    grid, _ = ee_export.grid_for_bbox((0, 0, 20 / 3600, 20 / 3600))
+    inside = {"East": (15 / 3600, 10 / 3600)}
+    outside = {"West": (-0.5 / 3600, 10 / 3600)}
+    rings = osm.point_places(grid, {**inside, **outside})
+    assert set(rings) == {"East", "West"}
+    assert min(x for x, _ in rings["West"]) < 1 / 3600  # it reaches the west edge

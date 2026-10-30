@@ -230,7 +230,8 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
           place_tags: dict | None = None, corridor_tags: dict | None = None,
           coastal: bool = True, outlet_side: str | None = None, inflows_config: dict | None = None,
           shelter_min_above_river_m: float | None = None, edge_outflow: bool = False, smooth_dem: bool = True,
-          land_drain_mm_h: float | None = None, dem_credit: str | None = None) -> AOIManifest:
+          land_drain_mm_h: float | None = None, dem_credit: str | None = None, photoreal_buildings: bool = False,
+          place_points: dict | None = None) -> AOIManifest:
     """Publish serving layers from raw exports; the manifest is the final write.
 
     Inland AOIs: coastal=False plus outlet_side ("east", ...): the OSM river (waterway=river|stream from
@@ -266,8 +267,13 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         import osmnx as ox
 
         kinds = list(BASELINE_DRAIN_MM_H) + (["river", "stream"] if debug_layers or outlet_side else [])
-        features = ox.features_from_xml(features_path, tags={"waterway": kinds})
-        for idx, feature in features.iterrows():
+        try:
+            features = ox.features_from_xml(features_path, tags={"waterway": kinds})
+        except Exception as exc:  # osmnx raises on an empty match: no open drains at all (NYC's sewers are underground)
+            if type(exc).__name__ != "InsufficientResponseError":
+                raise
+            features = None
+        for idx, feature in ([] if features is None else features.iterrows()):
             if isinstance(idx, tuple) and idx[0] != "way":
                 continue
             kind, geom = feature.get("waterway"), feature.geometry
@@ -350,7 +356,8 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
             aoi_id, grid, dem, exclude, building_csvs, osm_files,
             building_source=building_source, keywords=keywords, place_aliases=place_aliases,
             place_tags=place_tags, corridor_tags=corridor_tags,
-            river_mask=river_mask if river_mask.any() else None, shelter_min_above_river_m=shelter_min_above_river_m)
+            river_mask=river_mask if river_mask.any() else None, shelter_min_above_river_m=shelter_min_above_river_m,
+            place_points=place_points)
     else:
         vector_layers = {"roads_graph": "roads.graphml", "shelters": "shelters.geojson",
                          "places": "places.geojson", "buildings": "buildings_index.json",
@@ -364,12 +371,7 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         storage.write_aoi_file(aoi_id, "buildings_index.json", json.dumps(index).encode(), "application/json")
         storage.write_aoi_file(aoi_id, "buildings.geojson", json.dumps(geo).encode(), "application/geo+json")
         if building_csvs:
-            ob = f"Google Open Buildings v3, CC BY 4.0; height {osm.DEFAULT_HEIGHT_M:g} m assumed"
-            if building_source == "ms":
-                ob = "Microsoft Global ML Building Footprints, ODbL"
-            elif building_source == "nyc_footprints":
-                ob = ("NYC Open Data BUILDING footprints (5zhs-2jue), City of New York, NYC Open Data terms of use; "
-                      "height from HEIGHT_ROOF")
+            ob = osm.building_credit(building_source)
             vector_sources.update(buildings=ob, buildings_geojson=ob)
     layers.update(vector_layers)
     sources.update(vector_sources)
@@ -384,6 +386,7 @@ def build(aoi_id: str, raw_dir: str, osm_files: dict[str, str] | None = None,
         layers["inflows"] = "inflows.json"
         sources["inflows"] = "USGS NWIS instantaneous values (provisional); " + (layer.get("note") or "see inflows.py")
     manifest = AOIManifest(aoi_id=aoi_id, name=name or aoi_id, grid=grid, layers=layers,
+                           photoreal_buildings=photoreal_buildings,
                            sources=sources, is_synthetic=False)
     storage.write_aoi_file(aoi_id, "manifest.json", manifest.model_dump_json(indent=2).encode(), "application/json")
     for key, arr in rasters.items():
@@ -439,7 +442,7 @@ def main() -> None:
     parser.add_argument("--keywords-file")
     parser.add_argument("--building-source", choices=("open_buildings", "ms", "nyc_footprints"), default="open_buildings")
     parser.add_argument("--debug-layers", action="store_true")
-    parser.add_argument("--place-config", help="JSON: {keywords, place_aliases, place_tags, corridor_tags}")
+    parser.add_argument("--place-config", help="JSON: {keywords, place_aliases, place_tags, corridor_tags, place_points: {name: [lon, lat]}}")
     parser.add_argument("--inland", action="store_true", help="no sea: no JRC boundary (needs --outlet-side)")
     parser.add_argument("--outlet-side", choices=("north", "south", "east", "west"),
                         help="edge where the OSM river leaves the AOI (free outflow)")
@@ -448,6 +451,8 @@ def main() -> None:
     parser.add_argument("--no-smooth", action="store_true", help="lidar DEM: skip the land smoothing")
     parser.add_argument("--land-drain-mm-h", type=float, help="uniform sink on all land cells (combined sewers)")
     parser.add_argument("--dem-credit", help="DEM credit when grid.json has none (DEM supplied separately)")
+    parser.add_argument("--photoreal-buildings", action="store_true",
+                        help="Google 3D tiles have real building meshes here (manifest.photoreal_buildings)")
     args = parser.parse_args()
     if args.inland and not (args.outlet_side or args.edge_outflow):
         parser.error("--inland needs --outlet-side or --edge-outflow, or water has no way out")
@@ -465,7 +470,8 @@ def main() -> None:
           coastal=not args.inland, outlet_side=args.outlet_side,
           inflows_config=json.loads(storage.read_local_file(args.inflows_config)) if args.inflows_config else None,
           edge_outflow=args.edge_outflow, smooth_dem=not args.no_smooth, land_drain_mm_h=args.land_drain_mm_h,
-          dem_credit=args.dem_credit)
+          dem_credit=args.dem_credit, photoreal_buildings=args.photoreal_buildings,
+          place_points=cfg.get("place_points"))
 
 
 if __name__ == "__main__":
