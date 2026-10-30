@@ -9,6 +9,9 @@ import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
 import type * as Cesium from "cesium";
+import { BuildingDock, BuildingOnMap, Graticule, HowToInspectCard, loadSelected, PlaceCard, SelectedBuildingCard } from "./components/PlanView";
+import type { Selected } from "./components/PlanView";
+import * as CesiumNS from "cesium";
 import { AgentDock, AgentMapOverlay, BriefPlaceBars, deriveSession, RunsCard, usePlaceStat } from "./components/AgentMode";
 import { ByPlace, CompareCard, CompareMapOverlay, CompareView, DeltaCard, SideGlobe, WaterBudgetCard, WhatChanges } from "./components/Compare";
 import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
@@ -106,7 +109,7 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => { setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {
     const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
@@ -145,6 +148,7 @@ export default function App() {
   const placeVals = usePlaceStat(session.place, session.runIds);
   const showAgentRun = (m: RunManifest) => { setRun(m); startClock(m); setAgentShown({ id: m.run_id, picked: true }); };
   const agentView = mode === "Agent" && agentList.length > 0;
+
 
   // ---- Compare: A defaults to the baseline of B's storm, B to the newest run that is not a baseline.
   const here = useMemo(() => runs.filter((r) => r.scenario.aoi_id === aoiId), [runs, aoiId]);
@@ -198,6 +202,31 @@ export default function App() {
   const framesB = useMemo(() => (pair && cmpView === "Swipe" ? framesOf(pair.b) : undefined), [pair?.b.run_id, cmpView, runsBase]);
   const side = !!pair && cmpView === "Side by side";
 
+  // ---- Plan view: click a building (shift: a second one to compare); ?building=<id> selects one on load.
+  const [plan, setPlan] = useState(false);
+  const [pick, setPick] = useState<{ id?: string; id2?: string; fly?: boolean }>(() => {
+    try { const id = new URLSearchParams(window.location.search).get("building") ?? undefined; return { id, fly: !!id }; } catch { return {}; }
+  });
+  const [sel, setSel] = useState<Selected | null>(null);
+  const [sel2, setSel2] = useState<Selected | null>(null);
+  const flyTo = (s: Selected) => mainViewer?.camera.flyTo({ destination: CesiumNS.Cartesian3.fromDegrees(s.b.lon, s.b.lat, 600),
+    orientation: { heading: 0, pitch: -CesiumNS.Math.PI_OVER_TWO, roll: 0 }, duration: 1.2 });
+  useEffect(() => {
+    if (!pick.id || !aoi || !aoiBuildingsUrl) { setSel(null); return; }
+    let off = false;
+    loadSelected(pick.id, aoi, aoiBuildingsUrl, mapRun, runsBase).then((s) => { if (!off) setSel(s); }, () => { if (!off) setSel(null); });
+    return () => { off = true; };
+  }, [pick.id, aoi?.aoi_id, aoiBuildingsUrl, mapRun?.run_id, runsBase]);
+  useEffect(() => {
+    if (!pick.id2 || !aoi || !aoiBuildingsUrl) { setSel2(null); return; }
+    let off = false;
+    loadSelected(pick.id2, aoi, aoiBuildingsUrl, mapRun, runsBase).then((s) => { if (!off) setSel2(s); }, () => { if (!off) setSel2(null); });
+    return () => { off = true; };
+  }, [pick.id2, aoi?.aoi_id, aoiBuildingsUrl, mapRun?.run_id, runsBase]);
+  useEffect(() => { if (sel && pick.fly && mainViewer) { flyTo(sel); setPick((p) => ({ ...p, fly: false })); } }, [sel, mainViewer]);
+  const onBuilding = (id: string, shift: boolean) => setPick((p) => (shift && p.id && p.id !== id ? { ...p, id2: id } : { id }));
+  const buildingView = !!sel && !pair && !agentView;
+
   const sources = Object.values(aoi?.sources ?? {});
   // Tide only applies to coastal areas: an AOI with river inflows is inland.
   const coastal = !Object.keys(aoi?.layers ?? {}).some((k) => k.includes("inflows"));
@@ -210,7 +239,7 @@ export default function App() {
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
-            {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer}
+            {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} />}
           </div>
           {side && aoi && pair && (
@@ -218,6 +247,8 @@ export default function App() {
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
             </div>
           )}
+          {plan && !side && <Graticule viewer={mainViewer} />}
+          {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
           {pair && <CompareMapOverlay a={pair.a} b={pair.b} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
@@ -225,13 +256,16 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && (agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+        {view.timeline && (buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
           third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} />)}
       </div>
       {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
       <div style={{ display: view.sidebar ? "contents" : "none" }}>
-      <Sidebar aoi={aoi} run={mapRun} sources={sources} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
+      <Sidebar aoi={aoi} run={mapRun} sources={sources} inspectFocus={pick.id}
+          inspect={sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
+            {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
+          inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>
             {agentList.length > 0 && <RunsCard runs={agentList} shown={run?.run_id} recommended={session.recommended} onShow={showAgentRun} />}
             <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onReplay={setReplayed} onEvents={setAgentEvents}

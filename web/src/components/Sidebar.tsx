@@ -345,16 +345,19 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false }: {
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus }: {
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
   /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
   compare?: ReactNode; onScenario?: () => void;
   /** Agent mode: the Agent tab's content. It stays mounted on other tabs so a running session keeps streaming. */
   agent?: ReactNode; agentMode?: boolean;
+  /** Replaces the Inspect tab (a selected building); `inspectAfter` is added below the usual cards. Inspect opens when `inspectFocus` changes. */
+  inspect?: ReactNode; inspectAfter?: ReactNode; inspectFocus?: string;
 }) {
   const [tab, setTab] = useState<Tab>("Scenario");
   const comparing = compare != null;
   useEffect(() => setTab(comparing ? "Compare" : agentMode ? "Agent" : "Scenario"), [comparing, agentMode]);
+  useEffect(() => { if (inspectFocus) setTab("Inspect"); }, [inspectFocus]);
   const { t_s } = useClock();
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
@@ -362,7 +365,8 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
       <Tabs tabs={comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS} active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
         {tab === "Layers" && <LayersCard />}
-        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} /></>}
+        {tab === "Inspect" && inspect}
+        {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
             <StormCard {...scenario} />

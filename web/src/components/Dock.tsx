@@ -153,6 +153,26 @@ function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest }: {
   );
 }
 
+/** A full-size depth chart that fills its box (Plan view's building dock); the clock drives the playhead. */
+export function DepthChart({ series, ts, ghost, threshold }: { series: number[]; ts: number[]; ghost?: number[]; threshold?: [number, string] }) {
+  const { t_s } = useClock();
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ flex: 1, minHeight: 120, padding: "10px 14px 6px", minWidth: 0 }}>
+      {box.w > 60 && <Chart series={series} ghost={ghost} color="var(--depth-3)" gid="bd" playI={nearest(ts, t_s)} tTotal={ts[ts.length - 1]} width={box.w - 28} height={Math.max(104, box.h - 16)}
+        ymaxMin={0.5} threshold={threshold} aria="Depth beside the selected building over time" />}
+    </div>
+  );
+}
+
 const sq: React.CSSProperties = { height: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "var(--radius-md)" };
 
 function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: { ts: TS; events: Ev[]; durS: number; rainStopS: number; nowS: number; playing: boolean; speed: number; note?: string }) {

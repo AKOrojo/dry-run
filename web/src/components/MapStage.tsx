@@ -35,6 +35,10 @@ export type MapStageProps = {
   framesB?: { t_s: number; url: string }[]; split?: number;
   /** Also told about the Cesium viewer (Compare's side-by-side map follows its camera). */
   onViewer?: (viewer: Cesium.Viewer | undefined) => void;
+  /** Plan view: a click on a building selects it (shift: as the second one) instead of pinning a point. */
+  onBuilding?: (id: string, shift: boolean) => void;
+  /** Told when the camera switches between Orbit and Plan. */
+  onView?: (view: "Orbit" | "Plan") => void;
 };
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
@@ -498,7 +502,7 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
 }
 
 // ---------- the stage ----------
-export function MapStage({ aoi, run, frames, framesB, split, onViewer, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
+export function MapStage({ aoi, run, frames, framesB, split, onViewer, onBuilding, onView, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
@@ -616,6 +620,11 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, tS, ionTo
   }, [viewer]);
 
   const view: "Orbit" | "Plan" = cam.pitchDeg <= -89 ? "Plan" : "Orbit";
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const onBuildingRef = useRef(onBuilding);
+  onBuildingRef.current = onBuilding;
+  useEffect(() => { onView?.(view); }, [view]);
   const pickView = (v: "Orbit" | "Plan") => reorient(v === "Plan" ? 0 : undefined, Cesium.Math.toRadians(v === "Plan" ? -90 : -30));
   const active: ViewName = mode === "free" ? "Free" : mode === "fly" ? "Fly along" : view;
   const backToOrbit = useCallback(() => {
@@ -694,6 +703,10 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, tS, ionTo
       const moved = Math.hypot(x - down.x, y - down.y) > 4;
       down = null;
       if (moved) return;
+      if (viewRef.current === "Plan" && onBuildingRef.current) {
+        const hit = s.pick(new Cesium.Cartesian2(x, y));
+        if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
+      }
       if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
       if (h && !h.loading) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
@@ -1167,7 +1180,7 @@ export function MapStage({ aoi, run, frames, framesB, split, onViewer, tS, ionTo
         <div style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
           <ScaleBar nice={cam.nice} px={cam.px} />
           <div style={{ ...groupStyle, gap: 2 }}>
-            <button type="button" aria-pressed={view === "Plan"} onClick={() => pickView("Plan")} style={segBtn(view === "Plan", 24)}>2D</button>
+            <button type="button" data-tour="plan" aria-pressed={view === "Plan"} onClick={() => pickView("Plan")} style={segBtn(view === "Plan", 24)}>2D</button>
             <button type="button" aria-pressed={view === "Orbit"} onClick={() => pickView("Orbit")} style={segBtn(view === "Orbit", 24)}>3D</button>
           </div>
           <div style={{ ...groupStyle, padding: "0 8px 0 10px", gap: 6, fontSize: 12, ...FIG }} aria-label="Zoom">{cam.zoom.toFixed(1)}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></div>
