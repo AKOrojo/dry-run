@@ -38,9 +38,12 @@ LANDCOVER_LUT = {  # WorldCover class: (manning_n, infiltration_mm_h)
     20: (0.08, 20.0),   # shrubland
     30: (0.05, 15.0),   # grassland
     40: (0.05, 12.0),   # cropland
-    50: (0.05, 2.0),    # built-up: n raised from 0.015 (smooth concrete) because buildings stay
+    50: (0.05, 6.0),    # built-up: n raised from 0.015 (smooth concrete) because buildings stay
     #                     sub-grid at 30 m (DEM_TREATMENT="leave"), so blockage acts as roughness;
-    #                     2 mm/h = mostly sealed, some unpaved compounds and setbacks
+    #                     6 mm/h is CALIBRATED (lagos-lekki-v2; v1 assumed 2): sealed surfaces plus
+    #                     soakaways, unpaved compounds and unmapped drains on coastal sand. The lowest
+    #                     rate that drains the closed DSM depressions by the 12 Jul 2026 S1 pass
+    #                     (evals/validation/calibrate_builtup.py); higher rates gain nothing there
     60: (0.03, 8.0),    # bare / sparse
     80: (0.03, 0.0),    # permanent water
     90: (0.07, 3.0),    # herbaceous wetland (saturated, shallow water table)

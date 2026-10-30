@@ -13,7 +13,9 @@
     "origin": {
       "maxItems": 2,
       "minItems": 2,
-      "prefixItems": [
+      "title": "Origin",
+      "type": "array",
+      "items": [
         {
           "type": "number"
         },
@@ -21,15 +23,15 @@
           "type": "number"
         }
       ],
-      "title": "Origin",
-      "type": "array"
+      "additionalItems": false
     },
     "destination": {
       "anyOf": [
         {
           "maxItems": 2,
           "minItems": 2,
-          "prefixItems": [
+          "type": "array",
+          "items": [
             {
               "type": "number"
             },
@@ -37,7 +39,7 @@
               "type": "number"
             }
           ],
-          "type": "array"
+          "additionalItems": false
         },
         {
           "type": "null"

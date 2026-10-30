@@ -102,7 +102,9 @@ land cells only.
 - **30 m grid:** streets and drains narrower than a cell are sub-grid. Flow paths in flat Lagos are sensitive to
   DEM noise.
 - **Sparse drain data:** OSM drain mapping is incomplete, so baseline drainage is uncertain both ways.
-- **Uniform rain, constant tide, fixed rates:** no storm cell movement, tidal cycle or soil saturation.
+- **Constant tide, fixed rates:** no tidal cycle or soil saturation. Rain is uniform by default; since contract 0.6.0
+  a storm can be a cell, a moving cell or a polygon (see "Where the rain falls" below), but observed events use one
+  AOI-mean IMERG series, which has no detail inside the AOI.
 - **Local-inertial physics:** no advection term. It is accurate for slow, deep floodplain flow and runs slightly slow for
   fast fronts (dam-break test below).
 - **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
@@ -126,15 +128,35 @@ land cells only.
 | Interventions | drains, new drains, green and ponds never worsen impacts; a 1.5 m tide worsens them |
 | Speed, 333 × 333 grid, 6 h simulated | 21 s, single thread (gate: < 60 s on 2 vCPU; `FT_PERF=1 pytest tests/test_solver.py`) |
 
-### Lagos (`lagos-lekki-v1`, 540 × 324 cells) on the solver
+### Lagos (`lagos-lekki-v2`, 540 × 324 cells) on the solver
 3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. On Cloud Run (2 vCPU,
 scaled from zero) the first uncached run took 39 s at 118 mm and a cached result returns in about 0.2 s.
 
 | Storm | Wall time | Mass balance | Buildings flooded, 3×3 / own cell (of 68,929) | Road km cut (of 1,406) | Max depth |
 |---|---|---|---|---|---|
-| 50 mm | 14 s | 0.0 % | 17,719 / 5,334 | 115 | 0.85 m |
-| 120 mm | 22 s | 0.0 % | 30,202 / 13,314 | 407 | 2.15 m |
-| 200 mm | 26 s | 0.0 % | 37,770 / 19,437 | 597 | 2.64 m |
+| 50 mm | 14 s | 0.0 % | 15,103 / 4,037 | 66 | 0.78 m |
+| 120 mm | 22 s | 0.0 % | 29,137 / 12,420 | 385 | 2.05 m |
+| 200 mm | 26 s | 0.0 % | 37,163 / 18,895 | 585 | 2.59 m |
+
+v2 differs from v1 only in the built-up loss rate (2 → 6 mm/h, calibrated below). v1 gave 17,719 / 30,202 / 37,770
+buildings and 115 / 407 / 597 road km at the same storms: the calibration matters most for small storms.
+
+**Built-up loss calibration (`lagos-lekki-v2`, `evals/validation/calibrate_builtup.py`).** One parameter, the loss on
+built-up cells (WorldCover 50, about half the land), fitted to the Sentinel-1 drain-down (calibration, not
+validation). Lekki stands on coastal sand, compounds drain to soakaways and many drains are unmapped, so 2 mm/h
+(v1, assumed) was a guess.
+
+| Built-up loss | Wet land at the 12 Jul pass | Of which open | 120 mm preset: flooded km² / buildings |
+|---|---|---|---|
+| 2 mm/h (v1) | 1.48 km² | 0.11 km² | 23.2 / 30,202 |
+| **6 mm/h (v2)** | **0.06 km²** | 0.06 km² | 21.9 / 29,137 |
+| 10 mm/h | 0.06 km² | 0.06 km² | 20.6 / 28,019 |
+| 15 mm/h | 0.06 km² | 0.06 km² | 18.9 / 26,442 |
+
+6 mm/h is the lowest rate that drains the closed depressions by the pass; higher rates gain nothing against the scene
+and only shrink the flood. The 0.06 km² left is open, non-built ground (wetland, grass), still under S1's relaxed
+bound of 0.12 km². IMERG underestimates intense rain, so the true rain was likely larger and 6 mm/h is a lower bound
+on the loss.
 
 The share of land that floods falls steadily with height: at 120 mm, 56 % of land at 1–2 m is wet, against 1 % above
 8 m. The water collects in pools rather than scattered single cells (942 of 24,566 wet cells are in patches of 4
@@ -167,6 +189,11 @@ cells or fewer). The 0 m lagoon fringe does not drive the counts (506 of those w
   synthetic 57 mm / 6 h storm the 48 h remainder in the open was 0.17 km², so part of the earlier "holds water too
   long" signal came from the assumed storm, not the model. Water still drains only by infiltration and drains, and
   the check cannot test the peak extent, which drives the impact stats.
+- **Press-reported places on v2:** at 120 mm / 3 h the reported roads' 90th-percentile depth beats 93.5 % of random
+  road samples (95 % on v1); at 50 mm, 80 % (90 % on v1). Driving the model with the observed IMERG rain for 28 Jun –
+  4 Jul 2026 (117 mm in a week, peak 6 mm/h as an AOI mean; `evals/validation/event_hotspots.py`) floods none of the
+  15 reported places on either version: IMERG's 11 km, 30 min average flattens the convective bursts that flooded
+  them, so the event replay cannot score the model.
 - **Reported flood locations** (`evals/validation/hotspots.py`, Eng D): 16 of 17 places named in Lagos press reports
   geocoded. At neighbourhood scale the model is consistent with the reports but does not single them out: lift
   about 1.0–1.2 over the same area's random discs, at every depth threshold. At road scale it does: on the 6 reported
@@ -216,6 +243,55 @@ inputs) from them after the gauge failed. So these are not independent tests.
   around each mark is **+1.7 m high at the median** (mean +3.2 m, RMSE 4.8 m, n = 145). The model is dry at 6
   marks. On the 43 marks that record the water depth there, the model is +0.8 m deeper at the median (observed
   median 1.2 m). The extent is right and the levels run high, as the gauge depths already suggested.
+
+**Channel depth and roughness sensitivity** (`evals/validation/calibrate_channel.py`). Lowering every river cell by
+0–10 m and scaling the channel Manning n by 0.6–1.0 moves the median water-surface error at the marks only from
++1.67 m to +1.28 m at best, while extent skill falls (CSI 0.71 to 0.64) and more marks go dry (6 to 18). So the
+channel shape is not the main cause of the high levels, and the published replay keeps the v0 channel unchanged.
+More likely causes are the estimated South Fork inflow (Hunt minus North Fork, the largest and least certain input)
+and floodplain storage the 2″ grid cannot resolve. The gauge-rise comparison was dropped: the channel starts dry, so
+the model has no pre-event level to measure a rise from.
+
+### Where the rain falls (contract 0.6.0)
+`Storm.spatial` sets the footprint; `null` keeps rain on the whole area. Every option builds one rain field on the
+grid, as TUFLOW, HEC-RAS 2D and LISFLOOD-FP do with rainfall grids (report: `docs/` research, not in the repo).
+- **Cell:** a centre (or a place's centroid) and radius R. Intensity falls with distance d as exp(−2(d/R)²)
+  (Gaussian), exp(−2d/R) (exponential) or 1 inside R (flat). `total_mm` is the point depth at the centre, so the
+  area average is lower. Defaults: R = 5 km, range 1–15 km (radar convective cells are about 35–90 km²).
+- **Moving cell:** the cell's centre travels in a straight line (heading, 0–20 m/s; West African squall lines move
+  about 11–18 m/s westward) and passes over the given centre when the rain is heaviest (the start for
+  `front_loaded`, mid-storm otherwise), so the storm's peak falls where the user put it. The field is refreshed every 60 s and the solver never steps across a refresh. A fast
+  cell leaves much less rain at any point than its centre depth.
+- **Polygon or place:** uniform depth inside, none outside.
+- **Mass balance:** `rain_generated_m3` (the whole storm), `rain_in_aoi_m3` (inside the grid) and `rain_volume_m3`
+  (applied to land). Rain outside the grid is not simulated. On a river AOI, rain upstream of the grid is also not
+  routed in; the gauge inflows carry the historical event. `POST /api/aoi/{aoi_id}/rain_field` previews the storm
+  total per cell and warns above 100 mm/h peak intensity (measured 1-hour extremes: 133–153 mm/h in Texas, July
+  2025) or when more than 25 % of the rain falls outside the grid.
+- The intensity profiles, radius range and track speeds come from radar studies elsewhere and the Texas event;
+  there are no measured sub-hourly cell sizes or intensities for Lagos.
+
+### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
+The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a
+close-up, a 60–300 m box can be re-solved in 3D with OpenFOAM v2406 `interFoam` (two-phase VOF, laminar), nested
+one way in a finished 2D run:
+- **Mesh:** hex cells of `cell_m` (1–4 m) horizontally and `cell_m`/8 vertically; ground and buildings (the AOI's
+  footprints and heights) are cut out with `subsetMesh`, so they are stair-stepped walls (no-slip).
+- **Sides:** a side whose net 2D discharge over the window enters the box takes the 2D water fraction and
+  depth-averaged velocity (outward parts clamped to zero); every other side holds the 2D water level as
+  hydrostatic pressure and lets water leave or return at that level. The top is open air. Our first version fixed
+  velocity and water fraction on all four sides. That removed water from cells where flow left the box, the water
+  fraction went unbounded (min −14) and the time step collapsed; this is why the sides now have two roles.
+- **Outputs** (`/api/runs/{run_id}/patch3d`): a water-surface depth PNG and a velocity PNG (surface and mid-depth
+  u, v) every 30 s, and the net horizontal force on each building from its
+  wall pressures (shear is not included). The manifest records the side
+  roles, cell count and the water volume at the start.
+- **Limits:** no turbulence model, so wakes and near-wall shear are under-resolved at metre cells; vertical
+  velocity profiles are therefore indicative. The forcing is depth-averaged, so the inflow profile is uniform with
+  depth. The 3D patch does not feed back into the 2D run.
+- **Cost:** solves take minutes to hours on CPUs, so the API never solves inside a request. Showcase patches are
+  precomputed; `POST /api/runs/{run_id}/patch3d` returns a stored patch or records it as queued (and starts the
+  `DRYRUN_PATCH3D_JOB` Cloud Run Job when one is configured).
 
 ### The 3D map: model ground vs the terrain it is drawn on
 The solver's DEM uses EGM2008 heights; Cesium World Terrain uses ellipsoid heights. The geoid offset N is +22.0 to

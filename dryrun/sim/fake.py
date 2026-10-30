@@ -22,12 +22,19 @@ def simulate(inp: SolverInputs, spec: ScenarioSpec, cell_m: float):
     out_every = spec.output_interval_min * 60
     t_end = t_end_s(spec)
     led = dict(rain_volume_m3=0.0, drained_volume_m3=0.0, infiltrated_volume_m3=0.0, boundary_outflow_m3=0.0)
+    field = inp.rain
+    if field is not None:
+        led.update(rain_generated_m3=0.0, rain_in_aoi_m3=0.0)
     frames: list[tuple[int, np.ndarray]] = [(0, h.copy())]
     t = 0
     while t < t_end:
         rain = rain_rate_mm_h(spec, t) / 1000 / 3600 * dt
-        h += rain
-        led["rain_volume_m3"] += rain * h.size * area
+        rs = 1.0 if field is None else field.shape(t).astype(np.float32)
+        h += rain * rs
+        led["rain_volume_m3"] += rain * float(np.sum(np.broadcast_to(rs, h.shape))) * area
+        if field is not None:  # the fake has no boundary cells: all rain inside the AOI lands
+            led["rain_generated_m3"] += rain * field.generated_m2
+            led["rain_in_aoi_m3"] += rain * float(np.sum(rs)) * area
 
         inf = np.minimum(h, inp.infiltration_mm_h / 1000 / 3600 * dt)
         h -= inf

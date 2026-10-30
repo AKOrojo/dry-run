@@ -415,6 +415,80 @@ def boundary_layer(aoi_id: str):
                     headers={"Cache-Control": "public, max-age=3600"})
 
 
+@app.post("/api/aoi/{aoi_id}/rain_field")
+def rain_field_preview(aoi_id: str, body: dict, request: Request):
+    """Where a Storm's rain falls, before running it: body {"storm": Storm, "sim_hours"?: float}. Returns the
+    storm-total depth as a PNG (data URL, AOI grid, north-up) plus the numbers the UI shows next to it."""
+    from dryrun import rain_preview
+
+    _check_aoi(aoi_id)
+    limit(request, "rain_field", per_hour=1200)
+    spec = ScenarioSpec.model_validate({"aoi_id": aoi_id, "storm": body.get("storm"),
+                                        **({"sim_hours": body["sim_hours"]} if "sim_hours" in body else {})})
+    return JSONResponse(rain_preview.preview(spec))
+
+
+@app.get("/api/runs/{run_id}/patch3d")
+def patch3d_list(run_id: str):
+    """3D patches computed for this run (precomputed showcase patches, or ones a batch job finished)."""
+    from dryrun.patch3d import run as P
+
+    _check_run(run_id)
+    return JSONResponse({"run_id": run_id, "patches": P.index(run_id)})
+
+
+@app.post("/api/runs/{run_id}/patch3d")
+def patch3d_request(run_id: str, body: dict, request: Request):
+    """Ask for a 3D patch. 3D solves take minutes to hours, so this never solves in the request: it returns the
+    manifest if the patch exists, else records it as queued and starts the batch runner if one is configured
+    (DRYRUN_PATCH3D_JOB, a Cloud Run Job)."""
+    from dryrun.contracts import Patch3DManifest, Patch3DRequest, RunStatus
+    from dryrun.patch3d import run as P
+
+    _check_run(run_id)
+    req = Patch3DRequest.model_validate({**body, "run_id": run_id})
+    m = storage.load_run(run_id)
+    if m.status.value != "done":
+        raise HTTPException(409, f"run is {m.status.value}")
+    pid = req.patch_id()
+    try:
+        return JSONResponse(json.loads(P.load_manifest(run_id, pid).model_dump_json()))
+    except Exception:  # noqa: BLE001 - not computed yet
+        pass
+    limit(request, "patch3d", per_hour=6)
+    from dryrun.patch3d import geometry
+
+    try:
+        geometry.build(m.scenario.aoi_id, req.center, req.size_m, req.size_m / 8, 0.0)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    job = os.getenv("DRYRUN_PATCH3D_JOB")
+    man = Patch3DManifest(patch_id=pid, request=req, status=RunStatus.queued,
+                          error=None if job else "no 3D batch runner on this deployment; showcase patches are "
+                                                 "precomputed (GET /api/runs/{run_id}/patch3d)")
+    P.write_manifest(man)
+    P.update_index(man)
+    if job:
+        from dryrun.patch3d import launch
+
+        launch.start(job, req)
+    return JSONResponse(json.loads(man.model_dump_json()), status_code=202)
+
+
+@app.get("/api/runs/{run_id}/patch3d/{patch_id}/{name:path}")
+def patch3d_file(run_id: str, patch_id: str, name: str):
+    """manifest.json, buildings.json or frames/NNNN_{surface,velocity}.png of a patch (302 to the bucket)."""
+    from fastapi.responses import RedirectResponse
+
+    _check_run(run_id)
+    if not re.match(r"^p_[0-9a-f]{16}$", patch_id) or not re.match(
+            r"^(manifest\.json|buildings\.json|frames/\d{4}_(surface|velocity)\.png)$", name):
+        raise HTTPException(404, "unknown patch file")
+    if not storage._exists("runs", f"{run_id}/patch3d/{patch_id}/{name}"):
+        raise HTTPException(404, "not computed")
+    return RedirectResponse(storage.public_run_url(run_id, f"patch3d/{patch_id}/{name}"), status_code=302)
+
+
 @app.get("/api/compare", response_model=CompareResult)
 def compare(base_run_id: str, alt_run_id: str):
     from dryrun.agent.tools import dispatch

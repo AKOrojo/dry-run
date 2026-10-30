@@ -55,6 +55,7 @@ DEFAULT_CONFIGS = {
     # Largest open_land polygon for the pond (0.20 km2; 4 building cells, so pond candidates carry a
     # small buildings_in_ponds); a dense, mostly sealed neighbourhood for green.
     "lagos-lekki-v1": AOIConfig("lagos-lekki-v1", "Lekki Phase 1", "Open land near Ajah"),
+    "lagos-lekki-v2": AOIConfig("lagos-lekki-v2", "Lekki Phase 1", "Open land near Ajah"),
 }
 
 

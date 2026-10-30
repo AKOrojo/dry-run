@@ -510,3 +510,138 @@ def test_events_pond_roads_are_not_flood_cuts():
         assert ev["first_cut"]["count"] == m.timeseries.edges_cut[i] - n0
     for p in derived.events(m.run_id)["places"]:
         assert p["first_road_cut_s"] != 0
+
+
+def test_spatial_rain_cell_polygon_track():
+    import numpy as np
+    from fastapi.testclient import TestClient
+
+    from dryrun.api.main import app
+    from dryrun.contracts import RainCell, RainPolygon, Storm, StormTrack
+    from dryrun.sim import interventions, solver
+
+    g = storage.load_aoi(fixtures.AOI_ID).grid
+    w, s, e, n = g.bounds_wgs84
+    mid = ((w + e) / 2, (s + n) / 2)
+
+    def with_rain(sp, total=60.0):
+        return ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=total, duration_h=1, spatial=sp))
+
+    # whole-area rain hashes exactly as before the field existed
+    assert with_rain(None).run_id() == ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=60, duration_h=1)).run_id()
+    cell = RainCell(center=mid, radius_m=1000)
+    assert with_rain(cell).run_id() != with_rain(None).run_id()
+
+    # a stationary gaussian cell well inside the grid: peak = total_mm at the centre, volume = total x pi R^2 / 2
+    sp = with_rain(cell)
+    mm = interventions.rain_total_mm(sp, g)
+    assert abs(mm.max() - 60) < 1.5
+    vol = mm.sum() / 1000 * g.dx_m * g.dy_m
+    assert abs(vol - 0.060 * np.pi * 1000 ** 2 / 2) / vol < 0.02
+    flat = interventions.rain_total_mm(with_rain(RainCell(center=mid, radius_m=1000, profile="flat")), g)
+    assert set(np.unique(flat)) <= {0.0, 60.0}
+
+    # polygon: depth inside, none outside
+    poly = [(w + 0.005, s + 0.005), (mid[0], s + 0.005), (mid[0], mid[1]), (w + 0.005, mid[1])]
+    pm = interventions.rain_total_mm(with_rain(RainPolygon(polygon=poly)), g)
+    inside = interventions.polygon_mask(g, poly)
+    assert (pm[inside] == 60).all() and (pm[~inside] == 0).all()
+    assert interventions.rain_total_mm(with_rain(RainPolygon(place="Open Field (synthetic)")), g).max() == 60
+
+    # a moving cell: same volume generated, lower point maximum, and the solver conserves mass
+    mv = with_rain(RainCell(center=(w + 0.004, mid[1]), radius_m=1000, track=StormTrack(heading_deg=90, speed_m_s=1.0)))
+    mmv = interventions.rain_total_mm(mv, g)
+    assert mmv.max() < 60
+    aoi, inp = __import__("dryrun.sim.engine", fromlist=["x"])._load_inputs(mv)
+    frames, led = solver.integrate(inp, [1800.0, 3600.0],
+                                   lambda a, b: (interventions.rain_cum_mm(mv, b) - interventions.rain_cum_mm(mv, a)) / 1000)
+    land = ~np.asarray(inp.boundary_mask, bool)
+    applied = (mmv * land).sum() / 1000 * g.dx_m * g.dy_m
+    assert abs(led["rain_volume_m3"] - applied) / applied < 0.01  # the run applies what the preview shows
+    assert led["rain_generated_m3"] >= led["rain_in_aoi_m3"] >= led["rain_volume_m3"] > 0
+
+    m = run_scenario(sp)
+    assert abs(m.stats.mass_balance_error_pct) < 1
+    assert m.stats.rain_generated_m3 >= m.stats.rain_in_aoi_m3 >= m.stats.rain_volume_m3
+
+    c = TestClient(app)
+    r = c.post(f"/api/aoi/{fixtures.AOI_ID}/rain_field", json={"storm": sp.storm.model_dump(mode="json")})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["png"].startswith("data:image/png;base64,") and abs(body["max_point_mm"] - 60) < 1.5
+    assert body["outside_share"] < 0.02 and body["volume_in_aoi_m3"] > 0
+    big = with_rain(RainCell(center=(w, s), radius_m=15000, track=StormTrack(heading_deg=0, speed_m_s=5)), 300)
+    b2 = c.post(f"/api/aoi/{fixtures.AOI_ID}/rain_field", json={"storm": big.storm.model_dump(mode="json")}).json()
+    assert b2["outside_share"] > 0.25 and len(b2["warnings"]) >= 2
+    bad = {"storm": {"total_mm": 50, "duration_h": 1, "spatial": {"kind": "cell", "radius_m": 3000}}}
+    assert c.post(f"/api/aoi/{fixtures.AOI_ID}/rain_field", json=bad).status_code in (400, 422)
+
+
+def test_patch3d_case_and_routes(tmp_path, monkeypatch):
+    import io
+
+    import numpy as np
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from dryrun.api.main import app
+    from dryrun.patch3d import case as C
+    from dryrun.patch3d import geometry, post
+
+    m = run_scenario(spec())
+    g = storage.load_aoi(fixtures.AOI_ID).grid
+    w, s, e, n = g.bounds_wgs84
+    center = ((w + e) / 2, (s + n) / 2)
+
+    p = geometry.build(fixtures.AOI_ID, center, 60, 4, 0.0)
+    assert (p.nx, p.ny) == (15, 15) and p.dz == 0.5 and p.nz > 0
+    with pytest.raises(ValueError):
+        geometry.build(fixtures.AOI_ID, (w, s), 60, 4, 0.0)
+    fluid = C.write_cellset(tmp_path, p)
+    assert 0 < fluid <= p.nx * p.ny * p.nz and fluid == int((~p.solid()).sum())
+    info = C.write_case(tmp_path, p, C.Forcing(m.run_id), 0.0, 60.0, 1)
+    assert isinstance(info, dict)
+    for f in ("system/blockMeshDict", "system/controlDict", "system/fvSchemes", "system/fvSolution", "constant/g"):
+        assert (tmp_path / f).exists(), f
+
+    depth = np.array([[0.0, 0.5], [1.25, 4.0]])
+    rgba = np.asarray(Image.open(io.BytesIO(post.surface_png(depth))))[::-1].astype(np.int64)
+    back = (rgba[..., 0] * 256 + rgba[..., 1]) / 65535 * post.DEPTH_MAX_M
+    assert np.allclose(back, depth, atol=1e-3) and rgba[0, 0, 3] == 0 and rgba[1, 1, 3] == 255
+
+    monkeypatch.delenv("DRYRUN_PATCH3D_JOB", raising=False)
+    c = TestClient(app)
+    assert c.get(f"/api/runs/{m.run_id}/patch3d").json()["patches"] == []
+    body = {"center": list(center), "size_m": 100, "cell_m": 2}
+    r = c.post(f"/api/runs/{m.run_id}/patch3d", json=body)
+    assert r.status_code == 202 and r.json()["status"] == "queued" and "precomputed" in r.json()["error"]
+    pid = r.json()["patch_id"]
+    assert c.post(f"/api/runs/{m.run_id}/patch3d", json=body).status_code == 200  # stored manifest, no re-queue
+    rows = c.get(f"/api/runs/{m.run_id}/patch3d").json()["patches"]
+    assert [x["patch_id"] for x in rows] == [pid]
+    assert c.post(f"/api/runs/{m.run_id}/patch3d", json={**body, "center": [w, s]}).status_code == 400
+    assert c.post(f"/api/runs/{m.run_id}/patch3d", json={**body, "size_m": 5}).status_code in (400, 422)
+    assert c.get(f"/api/runs/{m.run_id}/patch3d/{pid}/manifest.json", follow_redirects=False).status_code == 302
+    assert c.get(f"/api/runs/{m.run_id}/patch3d/{pid}/frames/0000_surface.png").status_code == 404
+    assert c.get(f"/api/runs/{m.run_id}/patch3d/{pid}/../../manifest.json").status_code == 404
+
+
+def test_moving_cell_passes_centre_at_rain_peak():
+    import numpy as np
+
+    from dryrun.contracts import RainCell, StormTrack
+    from dryrun.sim import interventions as I
+
+    g = storage.load_aoi(fixtures.AOI_ID).grid
+    w, s, e, n = g.bounds_wgs84
+    c = ((w + e) / 2, (s + n) / 2)
+    track = StormTrack(heading_deg=265, speed_m_s=12)
+    for pattern, tp in (("center_peaked", 5400.0), ("uniform", 5400.0), ("front_loaded", 0.0)):
+        sp = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=100, duration_h=3, pattern=pattern,
+                                                               spatial=RainCell(center=c, radius_m=2000, track=track)))
+        still = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=100, duration_h=3, pattern=pattern,
+                                                                  spatial=RainCell(center=c, radius_m=2000)))
+        assert I.peak_time_s(sp) == tp
+        f, f0 = I.rain_field(sp, g), I.rain_field(still, g)
+        assert np.allclose(f.shape(tp), f0.shape(0.0))
+        assert f.shape(tp + 1800).max() < 0.01  # 21.6 km on, the cell has left the fixture

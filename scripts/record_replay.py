@@ -1,6 +1,6 @@
 """Record a live agent session from the deployed API as a labelled demo-day fallback (provider "replay").
 
-  DRYRUN_TEAM_TOKEN=... python scripts/record_replay.py --provider meta --aoi lagos-lekki-v1 --question "..."
+  DRYRUN_TEAM_TOKEN=... python scripts/record_replay.py --provider meta --aoi lagos-lekki-v2 --question "..."
 
 Writes dryrun/presets/replays/<slug>.json. Only sessions that end in a brief with every claim verified are kept:
 a fallback that shows a failure is no fallback.

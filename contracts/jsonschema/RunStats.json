@@ -49,6 +49,32 @@
       "title": "Rain Volume M3",
       "type": "number"
     },
+    "rain_generated_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "rain the storm produces, including any that falls outside the AOI (spatial rain only; added in 0.6.0)",
+      "title": "Rain Generated M3"
+    },
+    "rain_in_aoi_m3": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "rain falling inside the AOI on land and water; rain_volume_m3 is the part applied to land (added in 0.6.0)",
+      "title": "Rain In Aoi M3"
+    },
     "inflow_volume_m3": {
       "default": 0.0,
       "description": "river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)",

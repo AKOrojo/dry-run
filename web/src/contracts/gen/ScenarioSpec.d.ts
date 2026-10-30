@@ -7,14 +7,49 @@
 
 export type ContractVersion = string;
 export type AoiId = string;
+/**
+ * rain depth over the storm: everywhere by default; inside the polygon for a rain polygon; at the centre of a stationary rain cell (a point depth, so the area average is lower)
+ */
 export type TotalMm = number;
 export type DurationH = number;
 export type StormPattern = "uniform" | "front_loaded" | "center_peaked";
-export type Polygon = [unknown, unknown][] | null;
+/**
+ * where the rain falls; None = the whole area
+ */
+export type Spatial = (RainCell | RainPolygon) | null;
+export type Kind = "cell";
+/**
+ * (lon, lat) of the cell centre; a moving cell is here at the rain peak (the start for front_loaded, mid-storm otherwise)
+ */
+export type Center = [number, number] | null;
+/**
+ * centre on this `places` feature instead (its centroid)
+ */
+export type Place = string | null;
+/**
+ * radar cells are ~35-90 km2: R ~ 3-5 km
+ */
+export type RadiusM = number;
+export type RainProfile = "gaussian" | "exponential" | "flat";
+/**
+ * direction the cell moves TOWARD, compass degrees (0 = north, 90 = east, 270 = west)
+ */
+export type HeadingDeg = number;
+/**
+ * West African squall lines move ~11-18 m/s westward
+ */
+export type SpeedMS = number;
+export type Polygon = [number, number][] | null;
 /**
  * name from get_aoi_info places
  */
-export type Place = string | null;
+export type Place1 = string | null;
+export type Kind1 = "polygon";
+export type Polygon1 = [number, number][] | null;
+/**
+ * name from get_aoi_info places
+ */
+export type Place2 = string | null;
 export type Type = "drain_upgrade";
 /**
  * multiplies EXISTING drains: 1.4 = +40%
@@ -24,19 +59,19 @@ export type CapacityFactor = number;
  * NEW drainage inside the area (where none is mapped)
  */
 export type AddMmH = number;
-export type Polygon1 = [unknown, unknown][] | null;
+export type Polygon2 = [number, number][] | null;
 /**
  * name from get_aoi_info places
  */
-export type Place1 = string | null;
+export type Place3 = string | null;
 export type Type1 = "green";
 export type InfiltrationMmH = number;
 export type Manning = number;
-export type Polygon2 = [unknown, unknown][] | null;
+export type Polygon3 = [number, number][] | null;
 /**
  * name from get_aoi_info places
  */
-export type Place2 = string | null;
+export type Place4 = string | null;
 export type Type2 = "pond";
 export type DepthM = number;
 export type Type3 = "tide";
@@ -44,11 +79,11 @@ export type Type3 = "tide";
  * water level at outflow boundary
  */
 export type BoundaryLevelM = number;
-export type Polygon3 = [unknown, unknown][] | null;
+export type Polygon4 = [number, number][] | null;
 /**
  * name from get_aoi_info places
  */
-export type Place3 = string | null;
+export type Place5 = string | null;
 export type Type4 = "road_closure";
 export type Interventions = (DrainUpgrade | GreenInfrastructure | RetentionPond | TideLevel | RoadClosure)[];
 export type SimHours = number;
@@ -71,20 +106,53 @@ export interface Storm {
   total_mm: TotalMm;
   duration_h: DurationH;
   pattern?: StormPattern;
+  spatial?: Spatial;
+}
+/**
+ * Rain from one storm cell. Intensity falls off with distance d from the centre:
+ * gaussian exp(-2 (d/R)^2), exponential exp(-2 d/R), flat 1 inside R, so R (radius_m) is where a gaussian or
+ * exponential cell is down to e^-2 = 13.5 % of its peak. Storm.total_mm is the POINT depth at the centre of a
+ * stationary cell; the rain field preview reports the area-average depth and volume.
+ */
+export interface RainCell {
+  kind?: Kind;
+  center?: Center;
+  place?: Place;
+  radius_m?: RadiusM;
+  profile?: RainProfile;
+  /**
+   * None = a stationary cell
+   */
+  track?: StormTrack | null;
+}
+/**
+ * A moving storm cell: the centre starts at RainCell.center and travels in a straight line.
+ */
+export interface StormTrack {
+  heading_deg: HeadingDeg;
+  speed_m_s: SpeedMS;
+}
+/**
+ * Rain only inside an area (uniform there, none outside): a polygon or a `places` name.
+ */
+export interface RainPolygon {
+  polygon?: Polygon;
+  place?: Place1;
+  kind?: Kind1;
 }
 /**
  * No polygon/place = whole AOI.
  */
 export interface DrainUpgrade {
-  polygon?: Polygon;
-  place?: Place;
+  polygon?: Polygon1;
+  place?: Place2;
   type?: Type;
   capacity_factor?: CapacityFactor;
   add_mm_h?: AddMmH;
 }
 export interface GreenInfrastructure {
-  polygon?: Polygon1;
-  place?: Place1;
+  polygon?: Polygon2;
+  place?: Place3;
   type?: Type1;
   infiltration_mm_h?: InfiltrationMmH;
   manning?: Manning;
@@ -93,8 +161,8 @@ export interface GreenInfrastructure {
  * Draw on open land. Buildings inside are reported as buildings_in_ponds (displaced), roads are cut.
  */
 export interface RetentionPond {
-  polygon?: Polygon2;
-  place?: Place2;
+  polygon?: Polygon3;
+  place?: Place4;
   type?: Type2;
   depth_m?: DepthM;
 }
@@ -103,7 +171,7 @@ export interface TideLevel {
   boundary_level_m: BoundaryLevelM;
 }
 export interface RoadClosure {
-  polygon?: Polygon3;
-  place?: Place3;
+  polygon?: Polygon4;
+  place?: Place5;
   type?: Type4;
 }

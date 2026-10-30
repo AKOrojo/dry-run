@@ -18,7 +18,8 @@
       "items": {
         "maxItems": 2,
         "minItems": 2,
-        "prefixItems": [
+        "type": "array",
+        "items": [
           {
             "type": "number"
           },
@@ -26,7 +27,7 @@
             "type": "number"
           }
         ],
-        "type": "array"
+        "additionalItems": false
       },
       "title": "Path",
       "type": "array"

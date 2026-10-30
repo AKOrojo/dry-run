@@ -15,6 +15,7 @@ from dryrun.contracts import (
     DrainUpgrade,
     GreenInfrastructure,
     GridSpec,
+    RainCell,
     RetentionPond,
     ScenarioSpec,
     TideLevel,
@@ -42,6 +43,22 @@ class SolverInputs:
     exclude_mask: np.ndarray | None = None  # bool: permanent water + pond cells (exposure ignores them)
     intervention_cells: list[int] | None = None  # cells touched per intervention (0 => warn)
     inflows: list[Inflow] | None = None  # river inflow sources (Texas preset); None = none
+    rain: RainField | None = None  # where the rain falls; None = uniform over the whole grid
+
+
+@dataclass(frozen=True)
+class RainField:
+    """Spatial rain: the storm's depth at a cell = rain_cum_mm increment x shape(t)[cell] (0..1).
+
+    generated_m2: area integral of the shape (m2), including any part outside the grid, so rain generated =
+    depth increment x generated_m2. moving: the shape changes with t (re-evaluated every RAIN_UPDATE_S)."""
+
+    shape: Callable[[float], np.ndarray]
+    generated_m2: float
+    moving: bool = False
+
+
+RAIN_UPDATE_S = 60.0  # a moving cell's field is refreshed this often (<= radius / (4 x speed) for R >= 4.8 km)
 
 
 def polygon_mask(grid: GridSpec, polygon: list[tuple[float, float]]) -> np.ndarray:
@@ -91,6 +108,87 @@ def area_mask(spec: ScenarioSpec, grid: GridSpec, iv, default_all: bool = False)
     raise ValueError("intervention needs polygon or place")
 
 
+def _local_xy(grid: GridSpec, lon0: float, lat0: float) -> tuple[np.ndarray, np.ndarray]:
+    """Cell-centre offsets (east, north) in metres from (lon0, lat0), local equirectangular."""
+    w, s, e, n = grid.bounds_wgs84
+    lon = w + (np.arange(grid.nx) + 0.5) * (e - w) / grid.nx
+    lat = n - (np.arange(grid.ny) + 0.5) * (n - s) / grid.ny
+    kx = 111320.0 * np.cos(np.deg2rad(lat0))
+    return np.meshgrid((lon - lon0) * kx, (lat - lat0) * 110540.0)
+
+
+def _ring_area_m2(ring: list[tuple[float, float]]) -> float:
+    a = np.asarray(ring, float)
+    kx = 111320.0 * np.cos(np.deg2rad(a[:, 1].mean()))
+    x, y = a[:, 0] * kx, a[:, 1] * 110540.0
+    return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) / 2)
+
+
+def cell_center(spec: ScenarioSpec, cell: RainCell) -> tuple[float, float]:
+    if cell.center is not None:
+        return float(cell.center[0]), float(cell.center[1])
+    ring = np.asarray(place_polygon(spec.aoi_id, cell.place), float)
+    return float(ring[:, 0].mean()), float(ring[:, 1].mean())
+
+
+def cell_profile(d: np.ndarray, radius_m: float, profile: str) -> np.ndarray:
+    """0..1 intensity at distance d (m); radius_m is the e^-2 point (gaussian, exponential) or the edge (flat)."""
+    q = d / radius_m
+    if profile == "gaussian":
+        return np.exp(-2.0 * q * q)
+    if profile == "exponential":
+        return np.exp(-2.0 * q)
+    return (q <= 1.0).astype(np.float64)
+
+
+def cell_area_m2(radius_m: float, profile: str) -> float:
+    """Integral of cell_profile over the plane: gaussian sigma = R/2 -> 2 pi sigma^2; exponential
+    lambda = R/2 -> 2 pi lambda^2; flat pi R^2."""
+    return {"gaussian": np.pi * radius_m ** 2 / 2, "exponential": np.pi * radius_m ** 2 / 2,
+            "flat": np.pi * radius_m ** 2}[profile]
+
+
+def rain_field(spec: ScenarioSpec, grid: GridSpec) -> RainField | None:
+    sp = spec.storm.spatial
+    if sp is None:
+        return None
+    if isinstance(sp, RainCell):
+        lon0, lat0 = cell_center(spec, sp)
+        x, y = _local_xy(grid, lon0, lat0)
+        prof, r = sp.profile.value, float(sp.radius_m)
+        vx = vy = 0.0
+        if sp.track is not None and sp.track.speed_m_s > 0:
+            h = np.deg2rad(sp.track.heading_deg)
+            vx, vy = sp.track.speed_m_s * np.sin(h), sp.track.speed_m_s * np.cos(h)
+
+        tp = peak_time_s(spec)  # the cell is over its centre when the rain is heaviest
+
+        def shape(t: float) -> np.ndarray:
+            return cell_profile(np.hypot(x - vx * (t - tp), y - vy * (t - tp)), r, prof)
+
+        return RainField(shape, cell_area_m2(r, prof), moving=bool(vx or vy))
+    ring = place_polygon(spec.aoi_id, sp.place) if sp.place is not None else list(sp.polygon)
+    m = polygon_mask(grid, ring).astype(np.float64)
+    return RainField(lambda t: m, _ring_area_m2(ring))
+
+
+def rain_total_mm(spec: ScenarioSpec, grid: GridSpec, t_end: float | None = None) -> np.ndarray:
+    """Storm depth (mm) per cell over the run, exactly as the solver applies it (moving cells per RAIN_UPDATE_S)."""
+    t_end = t_end_s(spec) if t_end is None else t_end
+    f = rain_field(spec, grid)
+    if f is None:
+        return np.full((grid.ny, grid.nx), rain_cum_mm(spec, t_end))
+    if not f.moving:
+        return rain_cum_mm(spec, t_end) * f.shape(0.0)
+    out = np.zeros((grid.ny, grid.nx))
+    t = 0.0
+    while t < t_end:
+        t1 = min(t + RAIN_UPDATE_S, t_end)
+        out += (rain_cum_mm(spec, t1) - rain_cum_mm(spec, t)) * f.shape(t)
+        t = t1
+    return out
+
+
 def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs) -> SolverInputs:
     dem = base.dem.copy()
     manning = base.manning.copy()
@@ -122,7 +220,7 @@ def apply(spec: ScenarioSpec, grid: GridSpec, base: SolverInputs) -> SolverInput
         else:  # RoadClosure: routing-only
             changed.append(int(area_mask(spec, grid, iv).sum()))
     return SolverInputs(dem, manning, infil, sink, tide, base.boundary_mask, base.dx_m, base.dy_m,
-                        exclude, changed, base.inflows)
+                        exclude, changed, base.inflows, rain_field(spec, grid))
 
 
 def pond_mask(spec: ScenarioSpec, grid: GridSpec, existing_water: np.ndarray | None = None) -> np.ndarray:
@@ -139,11 +237,19 @@ def validate_areas(spec: ScenarioSpec, grid: GridSpec) -> None:
     for iv in spec.interventions:
         if getattr(iv, "place", None) is not None:
             place_polygon(spec.aoi_id, iv.place)
+    if getattr(spec.storm.spatial, "place", None) is not None:
+        place_polygon(spec.aoi_id, spec.storm.spatial.place)
 
 
 def t_end_s(spec: ScenarioSpec) -> int:
     """Simulation end time, rounded to whole minutes. Both backends and the engine use this."""
     return int(round(spec.sim_hours * 60)) * 60
+
+
+def peak_time_s(spec: ScenarioSpec) -> float:
+    """When the hyetograph peaks: the start for front_loaded, the middle for center_peaked and uniform. A moving
+    cell passes over its centre at this time."""
+    return 0.0 if spec.storm.pattern.value == "front_loaded" else spec.storm.duration_h * 3600 / 2
 
 
 def rain_rate_mm_h(spec: ScenarioSpec, t_s: float) -> float:

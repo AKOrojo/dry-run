@@ -35,8 +35,12 @@ export type Ny = number;
  * @minItems 4
  * @maxItems 4
  */
-export type BoundsWgs84 = [unknown, unknown, unknown, unknown];
+export type BoundsWgs84 = [number, number, number, number];
 export type IsSynthetic = boolean;
+/**
+ * Google Photorealistic 3D Tiles have real (photogrammetric) buildings here: the UI hides its own extrusions and draws only flooded ones (added in 0.6.0)
+ */
+export type PhotorealBuildings = boolean;
 
 /**
  * Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.
@@ -49,6 +53,7 @@ export interface AOIManifest {
   layers: Layers;
   sources: Sources;
   is_synthetic?: IsSynthetic;
+  photoreal_buildings?: PhotorealBuildings;
 }
 /**
  * Describes every raster in an AOI. All AOI rasters share this grid exactly.

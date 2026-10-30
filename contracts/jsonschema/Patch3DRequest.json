@@ -1,0 +1,74 @@
+{
+  "additionalProperties": false,
+  "description": "A 3D patch: a small square around `center`, solved with a 3D free-surface solver (OpenFOAM interFoam) and\ndriven at its edges by the parent 2D run (one-way nesting). A batch job, not the live request path.",
+  "properties": {
+    "run_id": {
+      "description": "the parent 2D run (must be done)",
+      "pattern": "^r_[0-9a-f]{16}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "center": {
+      "description": "(lon, lat) of the patch centre",
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Center",
+      "type": "array",
+      "items": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "additionalItems": false
+    },
+    "size_m": {
+      "default": 200,
+      "description": "side of the square patch",
+      "maximum": 300,
+      "minimum": 60,
+      "title": "Size M",
+      "type": "number"
+    },
+    "cell_m": {
+      "default": 2.0,
+      "description": "horizontal cell size; vertical cells are cell_m / 8",
+      "maximum": 4.0,
+      "minimum": 1.0,
+      "title": "Cell M",
+      "type": "number"
+    },
+    "t_window_s": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "[t0, t1] seconds since storm start; default: 10 min ending at the 2D peak at the patch",
+      "title": "T Window S"
+    }
+  },
+  "required": [
+    "run_id",
+    "center"
+  ],
+  "title": "Patch3DRequest",
+  "type": "object"
+}

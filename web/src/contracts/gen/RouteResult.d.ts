@@ -11,7 +11,7 @@ export type Reachable = boolean;
 /**
  * lon/lat polyline
  */
-export type Path = [unknown, unknown][];
+export type Path = [number, number][];
 export type LengthKm = number | null;
 /**
  * assumes walking 4 km/h unless noted

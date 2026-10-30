@@ -44,7 +44,7 @@ from typing import Callable
 import numpy as np
 
 from dryrun.contracts import ScenarioSpec
-from dryrun.sim.interventions import SolverInputs, rain_cum_mm, t_end_s
+from dryrun.sim.interventions import RAIN_UPDATE_S, SolverInputs, rain_cum_mm, t_end_s
 
 G = 9.81
 ALPHA = 0.7  # Courant-type safety factor (Bates et al. 2010 recommend 0.3-0.7)
@@ -91,7 +91,11 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
     inf = np.where(bnd, 0.0, np.asarray(inp.infiltration_mm_h, np.float64) / 1000 / 3600)
     snk = np.where(bnd, 0.0, np.asarray(inp.drain_sink_mm_h, np.float64) / 1000 / 3600)
     land = (~bnd).astype(np.float64)
-    land_cells = float(land.sum())
+    field = inp.rain
+    rs = np.ones((ny, nx)) if field is None else np.ascontiguousarray(field.shape(0.0), np.float64)
+    land_rain = float((rs * land).sum())  # rain depth x this x area = rain applied to land
+    all_rain = float(rs.sum())
+    next_shape = RAIN_UPDATE_S if field is not None and field.moving else math.inf
 
     h = np.zeros((ny, nx)) if h0 is None else np.array(h0, np.float64)
     h[bnd] = target[bnd]
@@ -109,6 +113,8 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
 
     led = dict(rain_volume_m3=0.0, drained_volume_m3=0.0, infiltrated_volume_m3=0.0, boundary_outflow_m3=0.0,
                inflow_volume_m3=0.0)
+    if field is not None:
+        led.update(rain_generated_m3=0.0, rain_in_aoi_m3=0.0)
     frames: list[tuple[float, np.ndarray]] = [(0, h.astype(np.float32))]
     t, hmax = 0.0, float(h.max())
     for t_out in out_times:
@@ -116,6 +122,12 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
             dt = DT_MAX if hmax <= H_MIN else min(DT_MAX, ALPHA * min(dx, dy) / math.sqrt(G * hmax))
             if t + dt >= t_out - 1e-6:  # land exactly on the output time
                 dt = t_out - t
+            if t >= next_shape - 1e-9:  # a moving cell: the field for [t, t + RAIN_UPDATE_S)
+                rs = np.ascontiguousarray(field.shape(t), np.float64)
+                land_rain, all_rain = float((rs * land).sum()), float(rs.sum())
+                next_shape += RAIN_UPDATE_S
+            if t + dt > next_shape + 1e-9:  # never step across a field change
+                dt = next_shape - t
             r = rain_m(t, t + dt) if rain_m is not None else 0.0
             for src in inflows:  # trapezoid volume over the step, spread evenly over the source cells
                 vol = 0.5 * (src.discharge_m3s(t) + src.discharge_m3s(t + dt)) * dt
@@ -123,8 +135,11 @@ def integrate(inp: SolverInputs, out_times: list[float], rain_m: Callable[[float
                 led["inflow_volume_m3"] += vol
                 hmax = max(hmax, float(h.flat[src.cells].max()))
             hmax, d_inf, d_drn, d_out = step(h, qx, qy, z, n, inf, snk, land, bnd, target, work,
-                                             dt, dx, dy, r)
-            led["rain_volume_m3"] += r * land_cells * area
+                                             dt, dx, dy, r, rs)
+            led["rain_volume_m3"] += r * land_rain * area
+            if field is not None:
+                led["rain_generated_m3"] += r * field.generated_m2
+                led["rain_in_aoi_m3"] += r * all_rain * area
             led["infiltrated_volume_m3"] += d_inf * area
             led["drained_volume_m3"] += d_drn * area
             led["boundary_outflow_m3"] += d_out * area
@@ -157,7 +172,7 @@ def _use_numba(kernel: str | None) -> bool:
     return True
 
 
-def _numpy_step(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, rain):
+def _numpy_step(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, rain, rs):
     """One explicit step, vectorised. Same maths and order as _step_loops."""
     eta = z + h
     p = 7.0 / 3.0
@@ -183,7 +198,7 @@ def _numpy_step(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, 
 
     # continuity, then sources on land, then the held boundary
     v = h + (qx[:, :-1] - qx[:, 1:]) * dt / dx + (qy[:-1, :] - qy[1:, :]) * dt / dy
-    v = np.maximum(v, 0.0) + rain * land  # max(): only fp round-off can go negative after the limiter
+    v = np.maximum(v, 0.0) + rain * rs * land  # max(): only fp round-off can go negative after the limiter
     a = np.minimum(v, inf * dt)
     v -= a
     b = np.minimum(v, snk * dt)
@@ -194,7 +209,7 @@ def _numpy_step(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, 
     return float(h.max()), float(a.sum()), float(b.sum()), d_out
 
 
-def _step_loops(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, rain):
+def _step_loops(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, rain, rs):
     """Same step as _numpy_step, written as loops for numba."""
     ny, nx = h.shape
     p = 7.0 / 3.0
@@ -237,7 +252,7 @@ def _step_loops(h, qx, qy, z, n, inf, snk, land, bnd, target, work, dt, dx, dy, 
     for i in range(ny):
         for j in range(nx):
             v = h[i, j] + (qx[i, j] - qx[i, j + 1]) * dt / dx + (qy[i, j] - qy[i + 1, j]) * dt / dy
-            v = max(v, 0.0) + rain * land[i, j]
+            v = max(v, 0.0) + rain * rs[i, j] * land[i, j]
             a = min(v, inf[i, j] * dt)
             v -= a
             b = min(v, snk[i, j] * dt)

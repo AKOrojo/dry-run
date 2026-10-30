@@ -25,7 +25,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-CONTRACT_VERSION = "0.5.1"
+CONTRACT_VERSION = "0.6.0"
 
 
 class _Base(BaseModel):
@@ -66,6 +66,9 @@ class AOIManifest(_Base):
     )
     sources: dict[str, str] = Field(description="Layer name -> attribution / licence string")
     is_synthetic: bool = False
+    photoreal_buildings: bool = Field(False, description="Google Photorealistic 3D Tiles have real (photogrammetric) "
+                                      "buildings here: the UI hides its own extrusions and draws only flooded ones "
+                                      "(added in 0.6.0)")
 
 
 # AOI ids are IMMUTABLE: never overwrite files under an existing aoi_id; publish -v2 instead.
@@ -98,12 +101,6 @@ class StormPattern(str, Enum):
     center_peaked = "center_peaked"  # SCS-like
 
 
-class Storm(_Base):
-    total_mm: float = Field(ge=0, le=600, examples=[120])
-    duration_h: float = Field(gt=0, le=12, examples=[3])
-    pattern: StormPattern = StormPattern.center_peaked
-
-
 Polygon = list[tuple[float, float]]  # closed or open ring of (lon, lat)
 
 
@@ -121,6 +118,58 @@ class _Area(_Base):
         if self.polygon is not None and self.place is not None:
             raise ValueError("give polygon or place, not both")
         return self
+
+
+class RainProfile(str, Enum):
+    gaussian = "gaussian"
+    exponential = "exponential"
+    flat = "flat"
+
+
+class StormTrack(_Base):
+    """A moving storm cell: the centre starts at RainCell.center and travels in a straight line."""
+
+    heading_deg: float = Field(ge=0, lt=360, description="direction the cell moves TOWARD, compass degrees "
+                               "(0 = north, 90 = east, 270 = west)")
+    speed_m_s: float = Field(ge=0, le=20, description="West African squall lines move ~11-18 m/s westward")
+
+
+class RainCell(_Base):
+    """Rain from one storm cell. Intensity falls off with distance d from the centre:
+    gaussian exp(-2 (d/R)^2), exponential exp(-2 d/R), flat 1 inside R, so R (radius_m) is where a gaussian or
+    exponential cell is down to e^-2 = 13.5 % of its peak. Storm.total_mm is the POINT depth at the centre of a
+    stationary cell; the rain field preview reports the area-average depth and volume."""
+
+    kind: Literal["cell"] = "cell"
+    center: tuple[float, float] | None = Field(None, description="(lon, lat) of the cell centre; a moving cell is here at the rain peak (the start for front_loaded, mid-storm otherwise)")
+    place: str | None = Field(None, description="centre on this `places` feature instead (its centroid)")
+    radius_m: float = Field(5000, ge=1000, le=15000, description="radar cells are ~35-90 km2: R ~ 3-5 km")
+    profile: RainProfile = RainProfile.gaussian
+    track: StormTrack | None = Field(None, description="None = a stationary cell")
+
+    @model_validator(mode="after")
+    def _one_centre(self):
+        if (self.center is None) == (self.place is None):
+            raise ValueError("give exactly one of center or place")
+        return self
+
+
+class RainPolygon(_Area):
+    """Rain only inside an area (uniform there, none outside): a polygon or a `places` name."""
+
+    kind: Literal["polygon"] = "polygon"
+
+
+RainArea = Annotated[Union[RainCell, RainPolygon], Field(discriminator="kind")]
+
+
+class Storm(_Base):
+    total_mm: float = Field(ge=0, le=600, examples=[120], description=(
+        "rain depth over the storm: everywhere by default; inside the polygon for a rain polygon; at the centre "
+        "of a stationary rain cell (a point depth, so the area average is lower)"))
+    duration_h: float = Field(gt=0, le=12, examples=[3])
+    pattern: StormPattern = StormPattern.center_peaked
+    spatial: RainArea | None = Field(None, description="where the rain falls; None = the whole area")
 
 
 class DrainUpgrade(_Area):
@@ -181,6 +230,8 @@ class ScenarioSpec(_Base):
         from dryrun.sim import SOLVER_VERSION
 
         payload = self.model_dump(mode="json", exclude={"label"})
+        if payload["storm"].get("spatial") is None:  # whole-area rain hashes as before the field existed
+            payload["storm"].pop("spatial", None)
         payload["_solver"] = SOLVER_VERSION
         payload["_aoi"] = storage.aoi_hash(self.aoi_id)
         blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -218,6 +269,10 @@ class RunStats(_Base):
     max_depth_m: float
     peak_t_s: int = Field(description="time of maximum flooded area")
     rain_volume_m3: float
+    rain_generated_m3: float | None = Field(None, description="rain the storm produces, including any that falls "
+                                            "outside the AOI (spatial rain only; added in 0.6.0)")
+    rain_in_aoi_m3: float | None = Field(None, description="rain falling inside the AOI on land and water; "
+                                         "rain_volume_m3 is the part applied to land (added in 0.6.0)")
     inflow_volume_m3: float = Field(0.0, description="river inflow entering the domain (gauge hydrograph); added in "
                                     "contract 0.5.0 (0 on older runs and on AOIs without inflows)")
     drained_volume_m3: float
@@ -231,6 +286,47 @@ class RunStats(_Base):
     buildings_in_ponds: int = Field(0, description="buildings inside pond polygons (displaced, not 'saved')")
     passability_threshold_m: float = 0.3
     is_surrogate: bool = Field(False, description="True if produced by the ML emulator, not the solver")
+
+
+class Patch3DRequest(_Base):
+    """A 3D patch: a small square around `center`, solved with a 3D free-surface solver (OpenFOAM interFoam) and
+    driven at its edges by the parent 2D run (one-way nesting). A batch job, not the live request path."""
+
+    run_id: str = Field(pattern=r"^r_[0-9a-f]{16}$", description="the parent 2D run (must be done)")
+    center: tuple[float, float] = Field(description="(lon, lat) of the patch centre")
+    size_m: float = Field(200, ge=60, le=300, description="side of the square patch")
+    cell_m: float = Field(2.0, ge=1.0, le=4.0, description="horizontal cell size; vertical cells are cell_m / 8")
+    t_window_s: tuple[float, float] | None = Field(
+        None, description="[t0, t1] seconds since storm start; default: 10 min ending at the 2D peak at the patch")
+
+    def patch_id(self) -> str:
+        blob = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        return "p_" + hashlib.sha256((blob + CONTRACT_VERSION).encode()).hexdigest()[:16]
+
+
+class Patch3DFrame(_Base):
+    t_s: float = Field(description="seconds since storm start")
+    surface: str = Field(description="PNG: water depth above the patch ground, see Patch3DManifest.encoding")
+    velocity: str = Field(description="PNG: surface and mid-depth velocity, see Patch3DManifest.encoding")
+
+
+class Patch3DManifest(_Base):
+    patch_id: str
+    request: Patch3DRequest
+    status: RunStatus
+    error: str | None = None
+    solver: str = "OpenFOAM interFoam (VOF), one-way nested in the 2D run"
+    bounds_wgs84: tuple[float, float, float, float] | None = None
+    nx: int | None = None
+    ny: int | None = None
+    t_window_s: tuple[float, float] | None = None
+    frames: list[Patch3DFrame] = Field(default_factory=list)
+    encoding: dict = Field(default_factory=dict, description="how to decode the frame PNGs (scales in m and m/s)")
+    buildings: str | None = Field(None, description='JSON {"ids", "peak_force_kN", "t_s", ...} for footprints '
+                                  "in the patch")
+    checks: dict = Field(default_factory=dict, description="water volume vs the 2D run, mesh size, timings")
+    cells: int | None = None
+    elapsed_s: float | None = None
 
 
 class RunManifest(_Base):

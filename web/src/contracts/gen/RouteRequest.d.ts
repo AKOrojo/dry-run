@@ -14,11 +14,11 @@ export type TS = number;
  * @minItems 2
  * @maxItems 2
  */
-export type Origin = [unknown, unknown];
+export type Origin = [number, number];
 /**
  * None = nearest shelter
  */
-export type Destination = [unknown, unknown] | null;
+export type Destination = [number, number] | null;
 
 export interface RouteRequest {
   run_id: RunId;

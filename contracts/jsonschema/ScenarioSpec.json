@@ -10,7 +10,8 @@
               "items": {
                 "maxItems": 2,
                 "minItems": 2,
-                "prefixItems": [
+                "type": "array",
+                "items": [
                   {
                     "type": "number"
                   },
@@ -18,7 +19,7 @@
                     "type": "number"
                   }
                 ],
-                "type": "array"
+                "additionalItems": false
               },
               "type": "array"
             },
@@ -77,7 +78,8 @@
               "items": {
                 "maxItems": 2,
                 "minItems": 2,
-                "prefixItems": [
+                "type": "array",
+                "items": [
                   {
                     "type": "number"
                   },
@@ -85,7 +87,7 @@
                     "type": "number"
                   }
                 ],
-                "type": "array"
+                "additionalItems": false
               },
               "type": "array"
             },
@@ -133,6 +135,143 @@
       "title": "GreenInfrastructure",
       "type": "object"
     },
+    "RainCell": {
+      "additionalProperties": false,
+      "description": "Rain from one storm cell. Intensity falls off with distance d from the centre:\ngaussian exp(-2 (d/R)^2), exponential exp(-2 d/R), flat 1 inside R, so R (radius_m) is where a gaussian or\nexponential cell is down to e^-2 = 13.5 % of its peak. Storm.total_mm is the POINT depth at the centre of a\nstationary cell; the rain field preview reports the area-average depth and volume.",
+      "properties": {
+        "kind": {
+          "const": "cell",
+          "default": "cell",
+          "title": "Kind",
+          "type": "string"
+        },
+        "center": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array",
+              "items": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "additionalItems": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "(lon, lat) of the cell centre; a moving cell is here at the rain peak (the start for front_loaded, mid-storm otherwise)",
+          "title": "Center"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "centre on this `places` feature instead (its centroid)",
+          "title": "Place"
+        },
+        "radius_m": {
+          "default": 5000,
+          "description": "radar cells are ~35-90 km2: R ~ 3-5 km",
+          "maximum": 15000,
+          "minimum": 1000,
+          "title": "Radius M",
+          "type": "number"
+        },
+        "profile": {
+          "$ref": "#/$defs/RainProfile",
+          "default": "gaussian"
+        },
+        "track": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StormTrack"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = a stationary cell"
+        }
+      },
+      "title": "RainCell",
+      "type": "object"
+    },
+    "RainPolygon": {
+      "additionalProperties": false,
+      "description": "Rain only inside an area (uniform there, none outside): a polygon or a `places` name.",
+      "properties": {
+        "polygon": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array",
+                "items": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "additionalItems": false
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polygon"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "name from get_aoi_info places",
+          "title": "Place"
+        },
+        "kind": {
+          "const": "polygon",
+          "default": "polygon",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "RainPolygon",
+      "type": "object"
+    },
+    "RainProfile": {
+      "enum": [
+        "gaussian",
+        "exponential",
+        "flat"
+      ],
+      "title": "RainProfile",
+      "type": "string"
+    },
     "RetentionPond": {
       "additionalProperties": false,
       "description": "Draw on open land. Buildings inside are reported as buildings_in_ponds (displaced), roads are cut.",
@@ -143,7 +282,8 @@
               "items": {
                 "maxItems": 2,
                 "minItems": 2,
-                "prefixItems": [
+                "type": "array",
+                "items": [
                   {
                     "type": "number"
                   },
@@ -151,7 +291,7 @@
                     "type": "number"
                   }
                 ],
-                "type": "array"
+                "additionalItems": false
               },
               "type": "array"
             },
@@ -201,7 +341,8 @@
               "items": {
                 "maxItems": 2,
                 "minItems": 2,
-                "prefixItems": [
+                "type": "array",
+                "items": [
                   {
                     "type": "number"
                   },
@@ -209,7 +350,7 @@
                     "type": "number"
                   }
                 ],
-                "type": "array"
+                "additionalItems": false
               },
               "type": "array"
             },
@@ -247,6 +388,7 @@
       "additionalProperties": false,
       "properties": {
         "total_mm": {
+          "description": "rain depth over the storm: everywhere by default; inside the polygon for a rain polygon; at the centre of a stationary rain cell (a point depth, so the area average is lower)",
           "examples": [
             120
           ],
@@ -267,6 +409,33 @@
         "pattern": {
           "$ref": "#/$defs/StormPattern",
           "default": "center_peaked"
+        },
+        "spatial": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "cell": "#/$defs/RainCell",
+                  "polygon": "#/$defs/RainPolygon"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RainCell"
+                },
+                {
+                  "$ref": "#/$defs/RainPolygon"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "where the rain falls; None = the whole area",
+          "title": "Spatial"
         }
       },
       "required": [
@@ -284,6 +453,32 @@
       ],
       "title": "StormPattern",
       "type": "string"
+    },
+    "StormTrack": {
+      "additionalProperties": false,
+      "description": "A moving storm cell: the centre starts at RainCell.center and travels in a straight line.",
+      "properties": {
+        "heading_deg": {
+          "description": "direction the cell moves TOWARD, compass degrees (0 = north, 90 = east, 270 = west)",
+          "exclusiveMaximum": 360,
+          "minimum": 0,
+          "title": "Heading Deg",
+          "type": "number"
+        },
+        "speed_m_s": {
+          "description": "West African squall lines move ~11-18 m/s westward",
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Speed M S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "heading_deg",
+        "speed_m_s"
+      ],
+      "title": "StormTrack",
+      "type": "object"
     },
     "TideLevel": {
       "additionalProperties": false,
@@ -312,7 +507,7 @@
   "additionalProperties": false,
   "properties": {
     "contract_version": {
-      "default": "0.5.1",
+      "default": "0.6.0",
       "title": "Contract Version",
       "type": "string"
     },

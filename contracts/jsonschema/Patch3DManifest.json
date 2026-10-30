@@ -1,0 +1,284 @@
+{
+  "$defs": {
+    "Patch3DFrame": {
+      "additionalProperties": false,
+      "properties": {
+        "t_s": {
+          "description": "seconds since storm start",
+          "title": "T S",
+          "type": "number"
+        },
+        "surface": {
+          "description": "PNG: water depth above the patch ground, see Patch3DManifest.encoding",
+          "title": "Surface",
+          "type": "string"
+        },
+        "velocity": {
+          "description": "PNG: surface and mid-depth velocity, see Patch3DManifest.encoding",
+          "title": "Velocity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_s",
+        "surface",
+        "velocity"
+      ],
+      "title": "Patch3DFrame",
+      "type": "object"
+    },
+    "Patch3DRequest": {
+      "additionalProperties": false,
+      "description": "A 3D patch: a small square around `center`, solved with a 3D free-surface solver (OpenFOAM interFoam) and\ndriven at its edges by the parent 2D run (one-way nesting). A batch job, not the live request path.",
+      "properties": {
+        "run_id": {
+          "description": "the parent 2D run (must be done)",
+          "pattern": "^r_[0-9a-f]{16}$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "center": {
+          "description": "(lon, lat) of the patch centre",
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Center",
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        "size_m": {
+          "default": 200,
+          "description": "side of the square patch",
+          "maximum": 300,
+          "minimum": 60,
+          "title": "Size M",
+          "type": "number"
+        },
+        "cell_m": {
+          "default": 2.0,
+          "description": "horizontal cell size; vertical cells are cell_m / 8",
+          "maximum": 4.0,
+          "minimum": 1.0,
+          "title": "Cell M",
+          "type": "number"
+        },
+        "t_window_s": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array",
+              "items": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "additionalItems": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "[t0, t1] seconds since storm start; default: 10 min ending at the 2D peak at the patch",
+          "title": "T Window S"
+        }
+      },
+      "required": [
+        "run_id",
+        "center"
+      ],
+      "title": "Patch3DRequest",
+      "type": "object"
+    },
+    "RunStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "done",
+        "failed"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "patch_id": {
+      "title": "Patch Id",
+      "type": "string"
+    },
+    "request": {
+      "$ref": "#/$defs/Patch3DRequest"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "solver": {
+      "default": "OpenFOAM interFoam (VOF), one-way nested in the 2D run",
+      "title": "Solver",
+      "type": "string"
+    },
+    "bounds_wgs84": {
+      "anyOf": [
+        {
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bounds Wgs84"
+    },
+    "nx": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nx"
+    },
+    "ny": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ny"
+    },
+    "t_window_s": {
+      "anyOf": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "T Window S"
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/Patch3DFrame"
+      },
+      "title": "Frames",
+      "type": "array"
+    },
+    "encoding": {
+      "additionalProperties": true,
+      "description": "how to decode the frame PNGs (scales in m and m/s)",
+      "title": "Encoding",
+      "type": "object"
+    },
+    "buildings": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "JSON {\"ids\", \"peak_force_kN\", \"t_s\", ...} for footprints in the patch",
+      "title": "Buildings"
+    },
+    "checks": {
+      "additionalProperties": true,
+      "description": "water volume vs the 2D run, mesh size, timings",
+      "title": "Checks",
+      "type": "object"
+    },
+    "cells": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cells"
+    },
+    "elapsed_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Elapsed S"
+    }
+  },
+  "required": [
+    "patch_id",
+    "request",
+    "status"
+  ],
+  "title": "Patch3DManifest",
+  "type": "object"
+}

@@ -199,11 +199,15 @@ def score(run_id, geocoded, threshold_m=0.15, levels=DEPTH_LEVELS_M):
     average one equal-cell-count sample per road hotspot, using unique land road cells.
     """
     run = storage.load_run(run_id)
-    aoi_id = run.scenario.aoi_id
+    out = score_depth(run.scenario.aoi_id, storage.load_depth(run_id, 'max_depth.npy'), geocoded, threshold_m, levels)
+    return dict(run_id=run_id, **out)
+
+
+def score_depth(aoi_id, depth, geocoded, threshold_m=0.15, levels=DEPTH_LEVELS_M):
+    """score() on a max-depth array, e.g. from an offline event replay (event_hotspots.py)."""
     grid = storage.load_aoi(aoi_id).grid
     land = ~(storage.load_raster(aoi_id, 'exclude_mask') > 0.5)
     land &= ~(storage.load_raster(aoi_id, 'boundary_mask') > 0.5)
-    depth = storage.load_depth(run_id, 'max_depth.npy')
     wet = depth >= threshold_m
     rows = {}
     for name, entry in geocoded.items():
@@ -249,7 +253,7 @@ def score(run_id, geocoded, threshold_m=0.15, levels=DEPTH_LEVELS_M):
                             wet_fractions=fraction, p90_depth_m=p90)
                  for name, value, fraction, p90 in zip(road_names, road_values, road_fractions, road_p90s)}
     road_summary.update(matched=len(road_names), hotspots=road_rows)
-    return dict(run_id=run_id, aoi_id=aoi_id, threshold_m=threshold_m, hotspots=rows,
+    return dict(aoi_id=aoi_id, threshold_m=threshold_m, hotspots=rows,
                 unmatched=getattr(geocoded, 'unmatched', []), matched=len(valid),
                 hit_rate=sum(v['hit'] for v in valid) / len(valid) if valid else None,
                 weak_excluded_hit_rate=sum(v['hit'] for v in strong) / len(strong) if strong else None,

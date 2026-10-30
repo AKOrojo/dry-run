@@ -47,7 +47,9 @@
           "description": "west, south, east, north in degrees; used by the UI to place frames",
           "maxItems": 4,
           "minItems": 4,
-          "prefixItems": [
+          "title": "Bounds Wgs84",
+          "type": "array",
+          "items": [
             {
               "type": "number"
             },
@@ -61,8 +63,7 @@
               "type": "number"
             }
           ],
-          "title": "Bounds Wgs84",
-          "type": "array"
+          "additionalItems": false
         }
       },
       "required": [
@@ -81,7 +82,7 @@
   "description": "Written by the data pipeline (Eng D) to gs://<data-bucket>/aoi/<aoi_id>/manifest.json.",
   "properties": {
     "contract_version": {
-      "default": "0.5.1",
+      "default": "0.6.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -119,6 +120,12 @@
     "is_synthetic": {
       "default": false,
       "title": "Is Synthetic",
+      "type": "boolean"
+    },
+    "photoreal_buildings": {
+      "default": false,
+      "description": "Google Photorealistic 3D Tiles have real (photogrammetric) buildings here: the UI hides its own extrusions and draws only flooded ones (added in 0.6.0)",
+      "title": "Photoreal Buildings",
       "type": "boolean"
     }
   },

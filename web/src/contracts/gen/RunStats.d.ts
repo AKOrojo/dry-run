@@ -34,6 +34,14 @@ export type MaxDepthM = number;
 export type PeakTS = number;
 export type RainVolumeM3 = number;
 /**
+ * rain the storm produces, including any that falls outside the AOI (spatial rain only; added in 0.6.0)
+ */
+export type RainGeneratedM3 = number | null;
+/**
+ * rain falling inside the AOI on land and water; rain_volume_m3 is the part applied to land (added in 0.6.0)
+ */
+export type RainInAoiM3 = number | null;
+/**
  * river inflow entering the domain (gauge hydrograph); added in contract 0.5.0 (0 on older runs and on AOIs without inflows)
  */
 export type InflowVolumeM3 = number;
@@ -72,6 +80,8 @@ export interface RunStats {
   max_depth_m: MaxDepthM;
   peak_t_s: PeakTS;
   rain_volume_m3: RainVolumeM3;
+  rain_generated_m3?: RainGeneratedM3;
+  rain_in_aoi_m3?: RainInAoiM3;
   inflow_volume_m3?: InflowVolumeM3;
   drained_volume_m3: DrainedVolumeM3;
   infiltrated_volume_m3: InfiltratedVolumeM3;
