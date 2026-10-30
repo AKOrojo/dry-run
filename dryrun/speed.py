@@ -103,7 +103,7 @@ def domain_cells(aoi: AOIManifest, spec: ScenarioSpec) -> int:
             from dryrun.sim import interventions
 
             r, c = interventions.rain_window(spec, aoi.grid)
-            return (r.stop - r.start) * (c.stop - c.start)
+            return int((r.stop - r.start) * (c.stop - c.start))  # plain int: callers put it in JSON
         except Exception:  # noqa: BLE001 - an estimate must never fail a request
             pass
     return aoi.grid.nx * aoi.grid.ny
