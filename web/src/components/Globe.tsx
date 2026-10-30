@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
+import { useLayers } from "../lib/layers";
 
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 const cssColor = (name: string) =>
@@ -32,10 +33,12 @@ function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
   });
 }
 
-export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus }: {
+export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer }: {
   aoi: AOIManifest; frameUrl?: string; frames?: { t_s: number; url: string }[]; tS?: number;
   ionToken: string; buildingsUrl?: string;
   buildingDepthsUrl?: string; onBuildingsStatus?: (status: string) => void;
+  /** Called with the Cesium viewer once created (and with undefined when it is destroyed). */
+  onViewer?: (viewer: Cesium.Viewer | undefined) => void;
 }) {
   // Token comes from /api/config at runtime (dev: VITE_CESIUM_ION_TOKEN overrides).
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN || ionToken;
@@ -47,7 +50,9 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   const frameLayers = useRef<{ t_s: number; layer: Cesium.ImageryLayer }[]>([]);
   const tSRef = useRef(tS);
   tSRef.current = tS;
-  const [mode3D, setMode3D] = useState(true);
+  const layerState = useLayers();
+  const layerRef = useRef(layerState);
+  layerRef.current = layerState;
   const buildings = useRef<{ primitive: Cesium.Primitive; ids: string[] }>();
   const depths = useRef(new Map<string, number>());
   const [buildingStatus, setBuildingStatus] = useState("unavailable");
@@ -56,9 +61,10 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
   const recolour = () => {
     const current = buildings.current;
     if (!current || current.primitive.isDestroyed() || !current.primitive.ready) return;
+    current.primitive.show = layerRef.current.buildings.on;
     for (const id of current.ids) {
       const depth = depths.current.get(id) ?? 0;
-      const color = buildingColor(depth);
+      const color = buildingColor(depth).withAlpha(layerRef.current.buildings.opacity);
       const attributes = current.primitive.getGeometryInstanceAttributes(id);
       if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
     }
@@ -92,8 +98,14 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     v.camera.lookAt(Cesium.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2, 0),
       new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 3500));
     v.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);  // release the lock so the user can pan freely
+    // Orbit, tilt and zoom stay above the ground; the pitch clamp lives in MapStage.
+    const ctl = v.scene.screenSpaceCameraController;
+    ctl.enableCollisionDetection = true;
+    ctl.minimumZoomDistance = 150;
+    ctl.maximumZoomDistance = 25000;
     viewer.current = v;
-    return () => { layer.current = undefined; viewer.current = undefined; if (!v.isDestroyed()) v.destroy(); };
+    onViewer?.(v);
+    return () => { layer.current = undefined; viewer.current = undefined; onViewer?.(undefined); if (!v.isDestroyed()) v.destroy(); };
   }, [aoi.aoi_id, token]);
 
   useEffect(() => {
@@ -155,7 +167,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       }));
       if (!instances.length) { setBuildingStatus(ids.size.toLocaleString()); return; }
       primitive = v.scene.primitives.add(new Cesium.Primitive({
-        geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false }),
+        geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: true }),
         asynchronous: true,
       }));
       buildings.current = { primitive: primitive!, ids: [...ids] };
@@ -201,7 +213,8 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     const t = tSRef.current ?? 0;
     let best = list[0];
     for (const f of list) if (Math.abs(f.t_s - t) < Math.abs(best.t_s - t)) best = f;
-    for (const f of list) f.layer.show = f === best;
+    const water = layerRef.current.water;
+    for (const f of list) { f.layer.show = water.on && f === best; f.layer.alpha = water.opacity; }
   };
 
   // Preloaded frames: every PNG is a hidden layer; playback only flips `show`.
@@ -214,7 +227,7 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
       if (cancelled || v.isDestroyed()) return;
       frameLayers.current = providers.map((p, i) => {
         const layer = v.imageryLayers.addImageryProvider(p);
-        layer.alpha = 1.0;  // PNGs carry their own alpha ramp
+        layer.alpha = layerRef.current.water.opacity;  // PNGs carry their own alpha ramp
         layer.show = false;
         added.push(layer);
         return { t_s: frames[i].t_s, layer };
@@ -228,7 +241,21 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     };
   }, [frames]);
 
-  useEffect(showNearest, [tS]);
+  useEffect(showNearest, [tS, layerState.water.on, layerState.water.opacity]);
+
+  // Base imagery: opacity, on/off and colour/greyscale.
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || v.isDestroyed() || !v.imageryLayers.length) return;
+    const base = v.imageryLayers.get(0);
+    const { imagery, imageryMode } = layerState;
+    base.show = imagery.on;
+    base.alpha = imagery.opacity;
+    base.saturation = imageryMode === "greyscale" ? 0 : 1;
+    base.brightness = imageryMode === "greyscale" ? 0.9 : 1;
+  }, [layerState.imagery.on, layerState.imagery.opacity, layerState.imageryMode, aoi.aoi_id, token]);
+
+  useEffect(recolour, [layerState.buildings.on, layerState.buildings.opacity]);
 
   // Single-frame path, used when no preloaded frames are given.
   useEffect(() => {
@@ -245,20 +272,9 @@ export function Globe({ aoi, frameUrl, frames, tS, ionToken, buildingsUrl, build
     return () => { cancelled = true; };
   }, [frameUrl, frames]);
 
-  const morph = (to3D: boolean) => {
-    const scene = viewer.current?.scene;
-    if (!scene) return;
-    if (to3D) scene.morphTo3D(0); else scene.morphTo2D(0);
-    setMode3D(to3D);
-  };
-
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <div ref={el} style={{ position: "absolute", inset: 0 }} />
-      <div className="dr-mode-toggle">
-        <button className="ft-btn ft-btn-ghost" aria-pressed={!mode3D} onClick={() => morph(false)}>2D</button>
-        <button className="ft-btn ft-btn-ghost" aria-pressed={mode3D} onClick={() => morph(true)}>3D</button>
-      </div>
     </div>
   );
 }
