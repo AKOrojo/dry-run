@@ -1,8 +1,10 @@
 // Twin UI shell (rev 5 frame). Top bar, map + dock on the left, sidebar on the right.
 // Flow: load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, AOIManifest, API, getAOI, getAOIs, getConfig, getRun, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
+import { ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
+import { setExtras } from "./lib/extras";
+import { usePinnedSeries } from "./lib/inspect";
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
 import { ProvenanceBadge } from "./components/ds";
@@ -34,6 +36,26 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("Scenario");
   const [agentRuns, setAgentRuns] = useState(0);
   const { t_s } = useClock();
+  const pinSeries = usePinnedSeries();
+  const aoiId = aoi?.aoi_id;
+  const runId = run?.status === "done" ? run.run_id : undefined;
+
+  // Read-only rev 5 data. A missing endpoint (404) just leaves the matching feature off.
+  useEffect(() => {
+    setExtras({ boundary: null, inflows: null });
+    if (!aoiId) return;
+    let cancelled = false;
+    getBoundary(aoiId).then((b) => { if (!cancelled) setExtras({ boundary: b?.features?.length ? b : null }); });
+    getInflows(aoiId).then((f) => { if (!cancelled) setExtras({ inflows: f?.features?.length ? f : null }); });
+    return () => { cancelled = true; };
+  }, [aoiId]);
+  useEffect(() => {
+    setExtras({ events: null });
+    if (!runId) return;
+    let cancelled = false;
+    getRunEvents(runId).then((e) => { if (!cancelled) setExtras({ events: e }); });
+    return () => { cancelled = true; };
+  }, [runId]);
 
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
@@ -78,7 +100,7 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        <Dock run={run} series={undefined} />
+        <Dock run={run} series={pinSeries ?? undefined} />
       </div>
       {mode === "Agent" ? (
         <aside className="dr-panel">

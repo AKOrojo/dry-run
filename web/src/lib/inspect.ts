@@ -18,3 +18,16 @@ export function setInspect(next: Inspect) {
   state = next;
   subs.forEach((f) => f());
 }
+
+// Depth series (one value per frame) of the pinned point, for the dock chart.
+let pinSeries: number[] | null = null;
+const pinSubs = new Set<() => void>();
+export const pinnedSeries = {
+  get: () => pinSeries,
+  subscribe: (f: () => void) => { pinSubs.add(f); return () => { pinSubs.delete(f); }; },
+};
+export const usePinnedSeries = () => useSyncExternalStore(pinnedSeries.subscribe, pinnedSeries.get);
+export function setPinnedSeries(next: number[] | null) {
+  pinSeries = next;
+  pinSubs.forEach((f) => f());
+}
