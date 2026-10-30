@@ -78,10 +78,13 @@ _current: contextvars.ContextVar[Job | None] = contextvars.ContextVar("dryrun_jo
 
 
 def attach(run_id: str, t_end_s: int, est_s: float | None, writes_total: int) -> tuple[Job, bool]:
-    """Watch run_id's job, creating it if needed. Returns (job, created): the creator starts the work."""
+    """Watch run_id's job, creating it if needed. Returns (job, created): the creator starts the work.
+
+    A job that is being cancelled is never joined: a Simulate pressed right after Stop gets a fresh job, whose work
+    waits on the engine's per-run lock until the old thread has unwound (Eng C found the race)."""
     with _LOCK:
         job = _JOBS.get(run_id)
-        created = job is None or job.finished.is_set()
+        created = job is None or job.finished.is_set() or job.cancelled
         if created:
             job = _JOBS[run_id] = Job(run_id, t_end_s, est_s, writes_total)
         job.watchers += 1
@@ -159,7 +162,8 @@ def tick(t_s: float, t_end_s: float) -> None:
 
 def on_save_run(run_id: str, status: str) -> None:
     """storage.save_run hook: the engine writes the "running" manifest when it actually starts solving."""
-    job = _JOBS.get(run_id)
+    bound = _current.get()  # the engine thread carries its own job; prefer it over the newest job for this run_id
+    job = bound if bound is not None and bound.run_id == run_id else _JOBS.get(run_id)
     if job is None or status != "running":
         return
     if job.cancelled:  # left while queued behind another solve: never start this one

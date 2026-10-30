@@ -191,3 +191,23 @@ def test_stale_running_manifest_reads_as_none(client):
     storage.save_run(RunManifest(run_id=s.run_id(), scenario=s, status=RunStatus.running, backend="fake"))
     e = client.post("/api/simulate/estimate", json=spec(53)).json()
     assert e["run_id"] == s.run_id() and e["status"] == "none" and e["cached"] is False
+
+
+def test_simulate_right_after_stop_gets_a_fresh_job():
+    """Eng C's race: Stop, then Simulate on the same spec before the old work has unwound."""
+    old, _ = jobs.attach("r_race", 3600, None, 10)
+    jobs.watch(old, "w_old", "t_old")
+    assert jobs.cancel("w_old", "t_old") is True and old.cancelled and not old.finished.is_set()
+    new, created = jobs.attach("r_race", 3600, None, 10)
+    assert created and new is not old and not new.cancelled
+    token = jobs.bind(old)  # the old engine thread reaching its running save must not move the new job
+    try:
+        with pytest.raises(jobs.Cancelled):
+            jobs.on_save_run("r_race", "running")
+    finally:
+        jobs.unbind(token)
+    assert new.phase == "queued"
+    jobs.finish(old, error=jobs.Cancelled("r_race"))
+    assert jobs.active("r_race")  # finishing the old job does not drop the new one
+    jobs.detach(new)
+    jobs.finish(new)
