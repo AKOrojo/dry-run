@@ -388,3 +388,20 @@ def test_events_series_boundary_routes():
     assert c.get(f"/api/runs/{m.run_id}/series", params={"lon": "nan", "lat": lat}).status_code == 400
     r = c.get(f"/api/aoi/{fixtures.AOI_ID}/boundary.geojson")
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/geo+json")
+
+
+def test_warm_start_preloads_the_baseline_series(monkeypatch):
+    from dryrun import derived, presets
+    from dryrun.api import main
+
+    base = spec()
+    monkeypatch.setattr(presets, "demo", lambda: {"scenarios": [json.loads(base.model_dump_json())]})
+    derived._stacks.pop(base.run_id(), None)
+    storage._DONE_RUNS.pop(base.run_id(), None)
+    for p in (storage.LOCAL_RUNS / base.run_id()).glob("**/*"):  # an earlier test may have run it already
+        p.unlink() if p.is_file() else None
+    main._preload_series(fixtures.AOI_ID)  # not warmed yet: a no-op, not an error
+    assert base.run_id() not in derived._stacks
+    run_scenario(base)
+    main._preload_series(fixtures.AOI_ID)
+    assert base.run_id() in derived._stacks

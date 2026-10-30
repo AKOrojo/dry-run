@@ -58,7 +58,8 @@ def warm_start(aoi_id: str) -> dict:
     steps = [("rasters", lambda: [storage.load_raster(aoi_id, k) for k in (
                  "dem", "manning", "infiltration_mm_h", "drain_sink_mm_h", "boundary_mask", "exclude_mask",
                  "population")]),
-             ("roads", lambda: exposure.edge_arrays(aoi_id)), ("buildings", lambda: exposure.building_cells(aoi_id))]
+             ("roads", lambda: exposure.edge_arrays(aoi_id)), ("buildings", lambda: exposure.building_cells(aoi_id)),
+             ("series", lambda: _preload_series(aoi_id))]
     if SIM_BACKEND == "solver":
         from dryrun.sim import solver
 
@@ -72,6 +73,20 @@ def warm_start(aoi_id: str) -> dict:
             took[name] = f"failed: {type(exc).__name__}: {exc}"
     log.warning("warm_start %s %s", aoi_id, took)  # WARNING so it shows in Cloud Run logs by default
     return took
+
+
+def _preload_series(aoi_id: str) -> None:
+    """The demo's first hover lands on the AOI's first preset (its baseline): load that run's frame stack and
+    exclude mask now, so the first hover doesn't pay several seconds. Skipped if the run isn't warmed yet."""
+    from dryrun import derived, presets
+
+    w, s_, e, n = storage.load_aoi(aoi_id).grid.bounds_wgs84  # an unknown AOI fails here, like the other steps
+    spec = next((s for s in presets.demo()["scenarios"] if s["aoi_id"] == aoi_id), None)
+    if spec is None:
+        return
+    run_id = ScenarioSpec.model_validate(spec).run_id()
+    if storage.run_exists(run_id) and storage.load_run(run_id).status.value == "done":
+        derived.series(run_id, (w + e) / 2, (s_ + n) / 2)
 
 
 @asynccontextmanager
