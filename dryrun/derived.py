@@ -130,8 +130,12 @@ def legend(kind: str, edges: list[int], m) -> dict:
             "note": f"to the nearest frame; threshold {exposure.FLOODED_M} m is an assumption"}
 
 
+EVENTS_REV = 2  # bump when events() changes: outputs are cached per run, so a new rev is a new object
+
+
 def rel(kind: str, ext: str) -> str:
-    return f"derived/{kind}.{ext}"
+    """Object path. events carries its revision, so a fix reaches already-derived runs on the next derive."""
+    return f"derived/events.v{EVENTS_REV}.json" if kind == "events" else f"derived/{kind}.{ext}"
 
 
 def derive(run_id: str) -> None:
@@ -184,7 +188,11 @@ def _hhmm(t_s: float) -> str:
 def events(run_id: str) -> dict:
     """Key events and per-place timings. Counts and times of run-wide events are the ENGINE's (timeseries,
     float32); map points come from the stored float16 frames, which can differ by a few edges at the 0.3 m
-    line. No "deepest cell" point: the deepest land cell tends to sit against a closed domain edge."""
+    line. No "deepest cell" point: the deepest land cell tends to sit against a closed domain edge.
+
+    Roads crossing a planned pond count as cut from t=0 in the engine (edges_cut), by design. Here they are a
+    separate "pond_closure" event, and every flood event (first cut, jumps, per-place first cut) counts only
+    roads cut by water, so a pond never reads as "first road impassable at T+00:00"."""
     from dryrun.sim import interventions
 
     m = storage.load_run(run_id)
@@ -194,7 +202,8 @@ def events(run_id: str) -> dict:
     ponds = interventions.pond_mask(m.scenario, g, storage.load_raster(aoi_id, "exclude_mask") > 0.5)
     ea = exposure.edge_arrays(aoi_id)
     ts, depth = stack(run_id)
-    cuts = np.array([exposure.cut_mask(aoi_id, d.astype(np.float32), excl, ponds) for d in depth])
+    by_pond = exposure.edges_touching(ea, ponds)
+    cuts = np.array([exposure.cut_mask(aoi_id, d.astype(np.float32), excl, ponds) for d in depth]) & ~by_pond
     places = place_masks(aoi_id)
     on_place = {name: exposure.edges_touching(ea, mk) for name, _, mk in places}
     ends = np.append(ea.starts[1:], len(ea.flat))
@@ -203,11 +212,12 @@ def events(run_id: str) -> dict:
     def newly_cut(j: int) -> np.ndarray:
         return cuts[j] & ~cuts[j - 1] if j else cuts[j]
 
-    def cut_event(label: str, i: int, count: int, kind: str) -> dict:
-        j = i
-        while j < len(ts) - 1 and not newly_cut(j).any():
-            j += 1  # the float16 frame may cross the line one frame late
-        new = newly_cut(j)
+    def cut_event(label: str, i: int, count: int, kind: str, new: np.ndarray | None = None) -> dict:
+        if new is None:
+            j = i
+            while j < len(ts) - 1 and not newly_cut(j).any():
+                j += 1  # the float16 frame may cross the line one frame late
+            new = newly_cut(j)
         by_place = {name: int((new & on).sum()) for name, on in on_place.items() if (new & on).any()}
         top = max(by_place, key=by_place.get) if by_place else None
         idx = np.nonzero(new)[0]
@@ -223,7 +233,13 @@ def events(run_id: str) -> dict:
                 "new_cuts_by_place": dict(sorted(by_place.items(), key=lambda x: -x[1])[:5])}
 
     out = []
-    cut_series = np.array(series.edges_cut)
+    n_pond = int(by_pond.sum())
+    if n_pond:
+        closure = cut_event("roads closed by the planned pond", 0, n_pond, "pond_closure", new=by_pond)
+        if closure:  # the same km the engine's road_km_impassable carries from t=0
+            closure["road_km"] = round(exposure.road_km_cut(aoi_id, by_pond), 3)
+        out.append(closure)
+    cut_series = np.maximum(np.array(series.edges_cut) - n_pond, 0)  # engine count minus pond roads
     if cut_series.any():
         i0 = int(np.argmax(cut_series > 0))
         out.append(cut_event("first road impassable", i0, int(cut_series[i0]), "first_cut"))
@@ -260,9 +276,10 @@ def events(run_id: str) -> dict:
                     "peak_pct_wet": round(float(100 * frac.max()), 1)})
     return {"run_id": run_id, "aoi_id": aoi_id, "threshold_m": {"flooded": exposure.FLOODED_M,
             "road_impassable": exposure.PASSABLE_M}, "frame_interval_s": int(ts[1] - ts[0]) if len(ts) > 1 else None,
-            "events": out, "places": per,
-            "note": "times to the nearest frame; run-wide counts from the engine timeseries; per-place values and "
-                    "map points from the stored float16 frames; thresholds are assumptions"}
+            "events": out, "places": per, "events_rev": EVENTS_REV,
+            "note": "times to the nearest frame; run-wide counts from the engine timeseries (minus roads closed by a "
+                    "planned pond); per-place values and map points from the stored float16 frames; thresholds are "
+                    "assumptions"}
 
 
 # ------------------------------------------------------------------ live: point series, boundary

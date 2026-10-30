@@ -378,10 +378,10 @@ def test_events_series_boundary_routes():
     m = run_scenario(spec())
     c = TestClient(app)
     r = c.get(f"/api/runs/{m.run_id}/derived/events.json", follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"].endswith("derived/events.json")
+    assert r.status_code == 302 and r.headers["location"].endswith(derived.rel("events", "json"))
     assert c.get(f"/api/runs/{m.run_id}/derived/events.png").status_code == 404
     assert all(derived.exists(m.run_id, k) for k in derived.KINDS)
-    lon, lat = json.loads(storage.read_run_file(m.run_id, "derived/events.json"))["places"][0]["label_point"]
+    lon, lat = json.loads(storage.read_run_file(m.run_id, derived.rel("events", "json")))["places"][0]["label_point"]
     r = c.get(f"/api/runs/{m.run_id}/series", params={"lon": lon, "lat": lat})
     assert r.status_code == 200 and len(r.json()["depth_m"]) == len(m.frames)
     assert c.get(f"/api/runs/{m.run_id}/series", params={"lon": 0, "lat": 0}).status_code == 400
@@ -405,3 +405,21 @@ def test_warm_start_preloads_the_baseline_series(monkeypatch):
     run_scenario(base)
     main._preload_series(fixtures.AOI_ID)
     assert base.run_id() in derived._stacks
+
+
+def test_events_pond_roads_are_not_flood_cuts():
+    """A planned pond closes its roads from t=0 (engine edges_cut); events must not call that the first flood cut."""
+    from dryrun import derived
+
+    m = run_scenario(spec(RetentionPond(polygon=POLY)))
+    n0 = m.timeseries.edges_cut[0]
+    assert n0 > 0  # the fixture pond crosses roads
+    ev = {e["kind"]: e for e in derived.events(m.run_id)["events"]}
+    assert ev["pond_closure"]["count"] == n0 and ev["pond_closure"]["t_s"] == 0
+    assert ev["pond_closure"]["road_km"] == m.timeseries.road_km_impassable[0]
+    if "first_cut" in ev:
+        assert ev["first_cut"]["t_s"] > 0
+        i = m.timeseries.t_s.index(ev["first_cut"]["t_s"])
+        assert ev["first_cut"]["count"] == m.timeseries.edges_cut[i] - n0
+    for p in derived.events(m.run_id)["places"]:
+        assert p["first_road_cut_s"] != 0
