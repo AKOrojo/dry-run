@@ -175,7 +175,9 @@ export default function App() {
     getConfig().then(async (h) => {
       setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); setGoogleAvailable(!!h.google_tiles_available);
       const m = shared.run ? await getRun(shared.run).catch(() => undefined) : undefined;
-      const want = m?.scenario.aoi_id ?? shared.aoi ?? h.default_aoi;
+      // An old area id with no run opens its successor (a new version of the same area); a run keeps the area it ran on.
+      const linked = shared.aoi && !m ? (h.aoi_successors?.[shared.aoi] ?? shared.aoi) : shared.aoi;
+      const want = m?.scenario.aoi_id ?? linked ?? h.default_aoi;
       const a = await getAOI(want).catch(() => getAOI(h.default_aoi));
       setAoi(a);
       if (m?.status === "done" && m.scenario.aoi_id === a.aoi_id) {
