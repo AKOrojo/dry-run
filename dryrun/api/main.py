@@ -296,6 +296,26 @@ def aoi_vector_layer(aoi_id: str, layer: str):
                     headers={"Cache-Control": "public, max-age=3600"})
 
 
+@app.get("/api/runs/{run_id}/derived/{name}")
+def derived_map(run_id: str, name: str, request: Request):
+    """arrival|duration .png|.json, computed once from the stored depth frames, then served from the runs bucket."""
+    from fastapi.responses import RedirectResponse
+
+    from dryrun import derived
+
+    kind, _, ext = name.partition(".")
+    if kind not in derived.KINDS or ext not in ("png", "json"):
+        raise HTTPException(404, "unknown derived map")
+    _check_run(run_id)
+    if not derived.exists(run_id, kind):
+        m = storage.load_run(run_id)
+        if m.status.value != "done" or not m.frames:
+            raise HTTPException(409, f"run is {m.status.value}")
+        limit(request, "derive", per_hour=120)
+        derived.derive(run_id)
+    return RedirectResponse(storage.public_run_url(run_id, derived.rel(kind, ext)), status_code=302)
+
+
 @app.get("/api/compare", response_model=CompareResult)
 def compare(base_run_id: str, alt_run_id: str):
     from dryrun.agent.tools import dispatch

@@ -277,3 +277,53 @@ def test_place_names_match_case_and_apostrophe_alike(monkeypatch):
                         if layer == "places" else real(a, layer))
     assert tools.canonical_place(fixtures.AOI_ID, "heart o' the hills") == "Heart O’ the Hills"
     assert tools.canonical_place(fixtures.AOI_ID, "Nowhere") == "Nowhere"
+
+
+def test_derived_maps_from_stored_frames():
+    """arrival/duration come from the depth .npy frames, never change run_id, and agree with the timeseries."""
+    import io as _io
+    import json
+
+    import numpy as np
+    from PIL import Image
+
+    from dryrun import derived
+    from dryrun.sim import SOLVER_VERSION, exposure
+
+    m = run_scenario(spec())
+    before = (m.run_id, SOLVER_VERSION)
+    maps = derived.compute(m.run_id)
+    arr, dur = maps["arrival"], maps["duration"]
+    assert np.array_equal(np.isnan(arr), np.isnan(dur))
+    # wet cells at each frame == cells whose arrival is at or before that frame (ignoring later drying)
+    for t, area in zip(m.timeseries.t_s, m.timeseries.flooded_area_km2):
+        if area > 0:
+            assert (arr <= t / 60).sum() > 0
+    first = next(t for t, a in zip(m.timeseries.t_s, m.timeseries.flooded_area_km2) if a > 0)
+    assert np.nanmin(arr) == first / 60
+    assert np.nanmax(dur) <= m.frames[-1].t_s / 60 and np.nanmin(dur) >= 0
+    derived.derive(m.run_id)
+    for kind in derived.KINDS:
+        img = np.array(Image.open(_io.BytesIO(storage.read_run_file(m.run_id, derived.rel(kind, "png")))))
+        assert img.shape[:2] == arr.shape and img.shape[2] == 4
+        assert ((img[..., 3] > 0) == ~np.isnan(arr)).all()
+        leg = json.loads(storage.read_run_file(m.run_id, derived.rel(kind, "json")))
+        assert leg["threshold_m"] == exposure.FLOODED_M and len(leg["alphas"]) == len(leg["edges_min"]) + 1
+        assert derived.exists(m.run_id, kind)
+    assert (run_scenario(spec()).run_id, SOLVER_VERSION) == before
+
+
+def test_derived_route():
+    from fastapi.testclient import TestClient
+
+    from dryrun.api.main import app
+
+    m = run_scenario(spec())
+    c = TestClient(app)
+    assert c.get(f"/api/runs/{m.run_id}/derived/velocity.png").status_code == 404
+    assert c.get(f"/api/runs/{m.run_id}/derived/arrival.gif").status_code == 404
+    assert c.get("/api/runs/r_0000000000000000/derived/arrival.png").status_code == 404
+    r = c.get(f"/api/runs/{m.run_id}/derived/arrival.png", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"].endswith(f"{m.run_id}/derived/arrival.png")
+    r = c.get(f"/api/runs/{m.run_id}/derived/duration.json", follow_redirects=False)
+    assert r.headers["location"].endswith("derived/duration.json")
