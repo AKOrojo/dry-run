@@ -1,5 +1,5 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -17,6 +17,7 @@ import { Notice } from "./Notice";
 import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 import { useRain } from "../lib/rain";
+import { setCloseUp, useCloseUp } from "../lib/patch3d";
 
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
 export type Failure = { message: string; retryable: boolean };
@@ -59,6 +60,7 @@ const PHOTO_T = svgThumb(<><circle cx="10" cy="11" r="3" fill="var(--observed)" 
 const ARRIVAL_T = svgThumb(<><rect width="30" height="30" fill="var(--hazard)" opacity=".28" /><path d="M0 18 C8 12 14 22 30 14 V30 H0z" fill="var(--hazard)" opacity=".55" /><path d="M0 24 C9 20 16 28 30 22 V30 H0z" fill="var(--hazard)" /></>);
 
 const RAIN_T = svgThumb(<><rect width="30" height="30" fill="var(--depth-3)" opacity=".18" /><circle cx="15" cy="15" r="9" fill="var(--depth-3)" opacity=".5" /><circle cx="15" cy="15" r="4" fill="var(--depth-3)" /><circle cx="15" cy="15" r="12" fill="none" stroke="var(--danfo)" strokeWidth="1.2" strokeDasharray="3 2" /></>);
+const CLOSEUP_T = svgThumb(<><rect x="6" y="6" width="18" height="18" fill="var(--depth-3)" opacity=".28" /><rect x="6" y="6" width="18" height="18" fill="none" stroke="var(--ink)" strokeWidth="1.2" strokeDasharray="3 2" /><rect x="12" y="11" width="7" height="7" fill="var(--ink-muted)" /></>);
 const BOUNDARY_T = svgThumb(<path d="M-2 21 C7 13 15 23 32 9" stroke="var(--depth-1)" strokeWidth="2" fill="none" opacity=".9" />);
 
 const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; note?: string }[] = [
@@ -73,6 +75,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "imagery", name: "Aerial imagery", thumb: imgThumb("aerial"), slider: true },
   { key: "rain", name: "Rain area", thumb: RAIN_T, slider: true },
   { key: "boundary", name: "Lagoon / sea edge", thumb: BOUNDARY_T },
+  { key: "closeups", name: "3D close-ups", thumb: CLOSEUP_T, note: "Outlines" },
 ];
 
 function LayersCard() {
@@ -80,9 +83,11 @@ function LayersCard() {
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
   const rainSet = useRain().mode !== "whole";
+  const patches = useCloseUp().patches;
+  const hasCloseups = patches.length > 0;
   return (
     <section style={{ display: "flex", flexDirection: "column", flex: "none", padding: "4px 0", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
-      {ROWS.filter((r) => (r.key !== "boundary" || boundary) && (r.key !== "rain" || rainSet)).map((r) => {
+      {ROWS.filter((r) => (r.key !== "boundary" || boundary) && (r.key !== "rain" || rainSet) && (r.key !== "closeups" || hasCloseups)).map((r) => {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
@@ -101,6 +106,11 @@ function LayersCard() {
                   <MiniSlider pct={pct} label={`${r.name} opacity`} onChange={(p) => setLayer(r.key, { opacity: p / 100 })} />
                   <span style={{ width: 34, textAlign: "right", fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{pct}%</span>
                 </>
+              ) : r.key === "closeups" ? (
+                // The box may be off screen, so the row can open it too.
+                <button type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
+                  style={{ height: 24, padding: "0 9px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                  Open</button>
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
             </span>
           </label>
@@ -356,7 +366,7 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus }: {
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus, closeup = false }: {
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
   /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
   compare?: ReactNode; onScenario?: () => void;
@@ -364,11 +374,20 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   agent?: ReactNode; agentMode?: boolean;
   /** Replaces the Inspect tab (a selected building); `inspectAfter` is added below the usual cards. Inspect opens when `inspectFocus` changes. */
   inspect?: ReactNode; inspectAfter?: ReactNode; inspectFocus?: string;
+  /** In a 3D close-up: Inspect opens (with `inspect` showing its cards) and the tab it left is restored afterwards. */
+  closeup?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Scenario");
   const comparing = compare != null;
   useEffect(() => setTab(comparing ? "Compare" : agentMode ? "Agent" : "Scenario"), [comparing, agentMode]);
   useEffect(() => { if (inspectFocus) setTab("Inspect"); }, [inspectFocus]);
+  const before = useRef<Tab>("Scenario");
+  const wasCloseup = useRef(false);
+  useEffect(() => {
+    if (closeup && !wasCloseup.current) { before.current = tab; setTab("Inspect"); }
+    else if (!closeup && wasCloseup.current) setTab(before.current);
+    wasCloseup.current = closeup;
+  }, [closeup]);
   const { t_s } = useClock();
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (

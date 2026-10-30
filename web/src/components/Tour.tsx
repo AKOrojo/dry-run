@@ -9,7 +9,7 @@ const GAP = 14;
 const PAD = 6;
 const MARGIN = 12;
 
-const STEPS = [
+const ALL_STEPS = [
   { id: "scenario", title: "Set up a storm", body: "Choose rain total, duration and pattern, and the lagoon level on coastal areas." },
   { id: "rain", title: "Choose where it rains", body: "Place a storm cell, draw an area or pick a place, and see the rain before you simulate." },
   { id: "simulate", title: "Run the flood model", body: "Simulate runs the storm on the 30 m model and fills the map and timeline." },
@@ -19,9 +19,14 @@ const STEPS = [
   { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
   { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "plan", title: "Inspect a building", body: "Switch to the 2D plan view and click a building for its depths and the street beside it." },
+  { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
 ] as const;
+type Step = (typeof ALL_STEPS)[number];
+/** Steps whose anchor is only on the page sometimes (a run with a 3D close-up) are left out when it is not there. */
+const OPTIONAL = new Set<string>(["closeup"]);
+const stepsOnPage = (): readonly Step[] => ALL_STEPS.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.id}"]`));
 
 export function tourDone(): boolean {
   try { return localStorage.getItem(DONE_KEY) === "1"; } catch { return false; }
@@ -60,6 +65,7 @@ export function Tour({ onClose }: { onClose: () => void }) {
   const [target, setTarget] = useState<Box | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: MARGIN, top: MARGIN });
   const cardRef = useRef<HTMLElement>(null);
+  const [STEPS] = useState(stepsOnPage);
   const last = i === STEPS.length - 1;
   const step = STEPS[i];
 

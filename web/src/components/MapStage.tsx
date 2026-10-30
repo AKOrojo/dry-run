@@ -27,6 +27,8 @@ import { clock } from "../lib/clock";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { Anchored } from "./Anchored";
+import { CloseUpMap } from "./CloseUp";
+import { useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
 
 type CamMode = "orbit" | "free" | "fly";
@@ -492,6 +494,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const lay = useLayers();
   const wps = useWaypoints();
   const rs = useRain();
+  const closeUp = useCloseUp();
   const runId = run?.run_id;
   const tSRef = useRef(tS);
   tSRef.current = tS;
@@ -1096,7 +1099,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         )}
 
         <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />
-        {run && !!frames?.length && (
+        {run && !!frames?.length && !closeUp.active && (
           <div style={{ position: "absolute", top: 30, left: 64, pointerEvents: "auto" }}>
             <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
           </div>
@@ -1132,6 +1135,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             onClear={() => { clearFlyRoute(); setRouteReady(false); }} onClose={() => setRouteReady(false)} />
         )}
 
+        <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
         {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         {rs.visible && rs.preview && (

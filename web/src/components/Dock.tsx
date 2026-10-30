@@ -52,11 +52,17 @@ function niceMax(v: number) {
 }
 const tickLabel = (v: number) => String(+v.toFixed(2));
 
-function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, threshold, baseline, events = [], ymaxMin = 0, ghost }: {
+export function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, threshold, baseline, events = [], ymaxMin = 0, ghost, xTicks, span, yFmt }: {
   series: number[]; color: string; playI: number; tTotal: number; width: number; height?: number; aria: string; gid: string;
   threshold?: [number, string]; baseline?: [number, string]; events?: Ev[]; ymaxMin?: number;
   /** Compare mode: run A on the same frame times, drawn dashed in muted ink under run B. */
   ghost?: number[];
+  /** Replaces the hour ticks: x labels and grid lines at these sample indices (the 3D close-up's ten minutes). */
+  xTicks?: { i: number; label: string }[];
+  /** A shaded stretch of the x axis between two sample indices, with a label (the close-up's settling time). */
+  span?: { from: number; to: number; label: string };
+  /** Formats y tick labels. */
+  yFmt?: (v: number) => string;
 }) {
   const W = width, H = height, L = 32, R = 6, T = 8, B = 20;
   const pw = W - L - R, ph = H - T - B, base = T + ph;
@@ -78,11 +84,15 @@ function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, t
         <linearGradient id={`${gid}p`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.42" /><stop offset="1" stopColor={color} stopOpacity="0.06" /></linearGradient>
         <linearGradient id={`${gid}f`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={color} stopOpacity="0.14" /><stop offset="1" stopColor={color} stopOpacity="0.02" /></linearGradient>
       </defs>
-      {Array.from({ length: hours + 1 }, (_, h) => { const x = L + (pw * h) / hours; return <line key={h} x1={x} y1={T} x2={x} y2={base} stroke="var(--hairline)" strokeWidth="1" opacity="0.55" />; })}
+      {span && <>
+        <rect x={X(span.from)} y={T} width={Math.max(0, X(span.to) - X(span.from))} height={ph} fill="var(--ink)" opacity="0.07" />
+        <text x={X(span.from) + 6} y={T + 11} fill="var(--ink-muted)" fontSize="10">{span.label}</text>
+      </>}
+      {(xTicks ?? Array.from({ length: hours + 1 }, (_, h) => ({ i: (h * (n - 1)) / hours, label: "" }))).map((tk, k) => { const x = xTicks ? X(tk.i) : L + (pw * tk.i) / Math.max(1, n - 1); return <line key={k} x1={x} y1={T} x2={x} y2={base} stroke="var(--hairline)" strokeWidth="1" opacity="0.55" />; })}
       {yticks.map((v) => (
         <g key={v}>
           {v > 0 && <line x1={L} y1={Y(v)} x2={W - R} y2={Y(v)} stroke="var(--hairline)" strokeWidth="1" />}
-          <text x={L - 6} y={Y(v) + 3.5} textAnchor="end" fill="var(--ink-muted)">{tickLabel(v)}</text>
+          <text x={L - 6} y={Y(v) + 3.5} textAnchor="end" fill="var(--ink-muted)">{yFmt ? yFmt(v) : tickLabel(v)}</text>
         </g>
       ))}
       {ghost && ghost.length > 1 && <path d={path(ghost.map((v, i) => [X(i), Y(v)] as const))} fill="none" stroke="var(--ink-muted)" strokeWidth="1.5" strokeDasharray="3 3" />}
@@ -106,7 +116,9 @@ function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, t
         </g>
       )}
       <line x1={L} y1={base} x2={W - R} y2={base} stroke="var(--control-edge)" strokeWidth="1" />
-      {xl.map((h, k) => (
+      {xTicks ? xTicks.map((tk, k) => (
+        <text key={k} x={X(tk.i)} y={H - 5} textAnchor={k === 0 ? "start" : k === xTicks.length - 1 ? "end" : "middle"} fill="var(--ink-muted)">{tk.label}</text>
+      )) : xl.map((h, k) => (
         <text key={h} x={L + (pw * h) / hours} y={H - 5} textAnchor={k === 0 ? "start" : h === hours ? "end" : "middle"} fill="var(--ink-muted)">T+{String(h).padStart(2, "0")}:00</text>
       ))}
       {events.map((e) => pts[e.i] && (
@@ -123,7 +135,7 @@ function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, t
   );
 }
 
-function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest }: {
+export function ChartFigure({ title, unit, now, ab, last, series, empty, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
   /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
   ab?: ReactNode;

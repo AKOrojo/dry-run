@@ -30,7 +30,7 @@ function Slider({ label, value, min, max, step, text, lo, hi, onChange }: { labe
   );
 }
 
-function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
+export function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
   return (
     <label style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
       <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} style={{ position: "absolute", zIndex: 1, opacity: 0, width: 34, height: 20, margin: 0, cursor: "pointer" }} />

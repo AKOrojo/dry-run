@@ -1,6 +1,6 @@
 // Twin UI shell (rev 5 frame). Top bar, map + dock on the left, sidebar on the right.
 // Flow: load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
@@ -19,9 +19,13 @@ import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
-import { buildStorm, rainSummary, initRain, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
+import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
+import type { RainState } from "./lib/rain";
 import { useLayers } from "./lib/layers";
 import { Tour, tourDisabled, tourDone } from "./components/Tour";
+import { CloseUpCards, CloseUpDock } from "./components/CloseUp";
+import { useCloseUp } from "./lib/patch3d";
+import type { Spatial } from "./lib/api";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -31,6 +35,19 @@ const shared = readSharedView();
 const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
 const sameStorm = (x: RunManifest, y: RunManifest) =>
   JSON.stringify([x.scenario.storm, x.scenario.sim_hours]) === JSON.stringify([y.scenario.storm, y.scenario.sim_hours]);
+
+/** The rain-area state a run's storm.spatial stands for; null = the whole area. */
+function rainPatchOf(sp: Spatial | undefined): Partial<RainState> {
+  const base = { picking: null, polygon: null as RainState["polygon"], place: null as string | null, placeAsCell: false };
+  if (!sp) return { ...base, mode: "whole" };
+  if (sp.kind === "cell") {
+    const t = sp.track;
+    return { ...base, mode: sp.place && !sp.center ? "place" : "cell", placeAsCell: !!sp.place && !sp.center, place: sp.place ?? null,
+      ...(sp.center ? { center: sp.center } : {}), radius_m: sp.radius_m, profile: sp.profile, moving: !!t,
+      ...(t ? { heading_deg: t.heading_deg, speed_m_s: t.speed_m_s } : {}) };
+  }
+  return sp.polygon ? { ...base, mode: "draw", polygon: sp.polygon } : { ...base, mode: "place", place: sp.place ?? null };
+}
 
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
@@ -64,6 +81,7 @@ export default function App() {
   const addRun = (m: RunManifest) => { if (m.status === "done") setRuns((p) => [m, ...p.filter((r) => r.run_id !== m.run_id)]); };
   const { t_s } = useClock();
   const view = useView();
+  const cu = useCloseUp();
   const pinSeries = usePinnedSeries();
   const aoiId = aoi?.aoi_id;
   const rainState = useRain();
@@ -76,6 +94,21 @@ export default function App() {
   const rainVisible = !!spatial && rainReady && (lay.rain.on || rainState.lastSimKey !== stormNow);
   useEffect(() => { patchRain({ visible: rainVisible }); }, [rainVisible]);
   const runId = run?.status === "done" ? run.run_id : undefined;
+  // A loaded run (shared link, agent run, Compare pick) puts its storm and rain area back in the editor, so the area
+  // matches what the run used and the water layers show instead of the preview. A run made by Simulate already matches.
+  const justSimulated = useRef<string>();
+  const adoptRun = (m: RunManifest) => {
+    if (m.status !== "done" || m.scenario.aoi_id !== aoiId) return;
+    const st = m.scenario.storm, pat = st.pattern ?? "uniform";
+    setRain(st.total_mm); setDurationH(st.duration_h); setPattern(pat);
+    patchRain(rainPatchOf(st.spatial));
+    patchRain({ lastSimKey: stormKey(st.total_mm, st.duration_h, pat, spatialOf(rainStore.get()).spatial) });
+  };
+  useEffect(() => {
+    if (!run) return;
+    if (justSimulated.current === run.run_id) justSimulated.current = undefined;
+    else adoptRun(run);
+  }, [run?.run_id, aoiId]);
 
   // First visit only; ?notour=1 keeps it off in automated runs. The delay lets the layout settle.
   useEffect(() => {
@@ -144,6 +177,7 @@ export default function App() {
     const interventions: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
     try {
       const m = await simulate({ aoi_id: aoi!.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions });
+      justSimulated.current = m.run_id;
       patchRain({ lastSimKey: stormNow });
       setRun(m);
       addRun(m);
@@ -184,6 +218,7 @@ export default function App() {
   const aRun = here.find((r) => r.run_id === cmp.a), bRun = here.find((r) => r.run_id === cmp.b);
   const pair = comparing && aRun && bRun && aRun !== bRun ? { a: aRun, b: bRun } : undefined;
   useEffect(() => { if (pair) clock.set({ max_s: pair.b.frames.at(-1)?.t_s ?? 0 }); }, [pair?.b.run_id]);
+  useEffect(() => { if (pair) adoptRun(pair.b); }, [pair?.b.run_id]);
   // Side by side: A on the left map, B on the right one. A single run view shows that run; the others show B's buildings.
   const mapRun = pair ? (cmpView === "A" || cmpView === "Side by side" ? pair.a : pair.b) : run;
   const framesOf = (m?: RunManifest) => m?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, m.run_id, f.png) }));
@@ -268,14 +303,14 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && (buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+        {view.timeline && (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
           third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} />)}
       </div>
       {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
       <div style={{ display: view.sidebar ? "contents" : "none" }}>
-      <Sidebar aoi={aoi} run={mapRun} sources={sources} inspectFocus={pick.id}
-          inspect={sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
+      <Sidebar aoi={aoi} run={mapRun} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
+          inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
           inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>
