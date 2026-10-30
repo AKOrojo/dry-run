@@ -324,9 +324,14 @@ function StormCard(p: ScenarioProps) {
 }
 
 const PRESETS = [{ label: "Normal", v: null }, { label: "Spring high", v: 0.5 }, { label: "High + surge", v: 1.0 }, { label: "Extreme", v: 1.5 }] as const;
-const SENS = [["Normal", "−0.5", "23.2", "30,202"], ["+0.5 m", "+0.5", "29.0", "30,406"], ["+1.0 m", "+1.0", "29.8", "30,595"], ["+1.5 m", "+1.5", "31.4", "31,061"]];
+/** Level sensitivity measured per area (120 mm / 3 h runs at each level): [level m, flooded km², buildings]. Only areas
+ *  that were measured; any other area shows no table rather than another area's numbers. */
+const SENS: Record<string, [number, string, string][]> = {
+  "lagos-lekki-v1": [[-0.5, "23.2", "30,202"], [0.5, "29.0", "30,406"], [1.0, "29.8", "30,595"], [1.5, "31.4", "31,061"]],
+};
 
-function LevelCard({ level, onLevel }: Pick<ScenarioProps, "level" | "onLevel">) {
+function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onLevel"> & { aoiId?: string }) {
+  const sens = aoiId ? SENS[aoiId] : undefined;
   const v = level ?? -0.5;
   const pct = ((v + 0.5) / 2.0) * 100;
   const active = PRESETS.find((p) => p.v === level)?.label ?? null;
@@ -352,21 +357,23 @@ function LevelCard({ level, onLevel }: Pick<ScenarioProps, "level" | "onLevel">)
           Holds the lagoon and sea edge at one level for the whole run. A scenario level, not an observed tide. Coastal areas only.
         </p>
       </div>
+      {sens && <>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, borderTop: "1px solid var(--hairline)" }}>
         <thead><tr style={{ color: "var(--ink-muted)" }}>
           <th style={{ padding: "7px 0 4px 14px", textAlign: "left", fontWeight: 500 }}>Level</th>
           <th style={{ padding: "7px 8px 4px", textAlign: "right", fontWeight: 500 }}>Flooded km²</th>
           <th style={{ padding: "7px 14px 4px 8px", textAlign: "right", fontWeight: 500 }}>Buildings</th></tr></thead>
-        <tbody>{SENS.map((r) => (
-          <tr key={r[0]} style={r[0] === "+1.0 m" ? { background: "var(--surface-raised)" } : undefined}>
-            <td style={{ padding: "5px 0 5px 14px", ...FIG }}>{r[1]} m</td>
-            <td style={{ padding: "5px 8px", textAlign: "right", ...FIG }}>{r[2]}</td>
-            <td style={{ padding: "5px 14px 5px 8px", textAlign: "right", ...FIG }}>{r[3]}</td></tr>))}
+        <tbody>{sens.map(([lv, km2, nb]) => (
+          <tr key={lv} style={Math.abs(lv - v) < 0.05 ? { background: "var(--surface-raised)" } : undefined}>
+            <td style={{ padding: "5px 0 5px 14px", ...FIG }}>{lv > 0 ? "+" : lv < 0 ? "−" : ""}{Math.abs(lv).toFixed(1)} m</td>
+            <td style={{ padding: "5px 8px", textAlign: "right", ...FIG }}>{km2}</td>
+            <td style={{ padding: "5px 14px 5px 8px", textAlign: "right", ...FIG }}>{nb}</td></tr>))}
         </tbody>
       </table>
       <p style={{ margin: 0, padding: "8px 14px 10px", color: "var(--ink-muted)", fontSize: 11, lineHeight: "15px" }}>
         Sensitivity on 120 mm / 3 h. Ground height error (about 2 m) is larger than one step, so read this as a trend, not who floods.
       </p>
+      </>}
     </Card>
   );
 }
@@ -445,7 +452,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
             <StormCard {...scenario} />
             <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard /></div>
             <RainPreviewCard />
-            {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} />}
+            {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} aoiId={aoi?.aoi_id} />}
             <SimulateBar busy={scenario.busy} canRun={scenario.canRun} onSimulate={scenario.onSimulate} />
             {scenario.err && (
               <Notice message={scenario.err.message}>
