@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ClockCounterClockwise, Copy, Key, PaperPlaneTilt, Columns, Flask, ArrowClockwise, Sparkle, Stop } from "@phosphor-icons/react";
 import { ApiError, askAgent, AgentEvent, getJudgeKey, getReplays, Replay, setJudgeKey } from "../lib/api";
+import { lockoutText, useLockout } from "../lib/lockout";
+import { LockoutNote } from "./LockoutNote";
 import { Notice } from "./Notice";
 import { Card, Field, Segmented, FIG } from "./rev5";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
@@ -49,7 +51,9 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   useEffect(() => { if (!busy) return; const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, [busy]);
   const [key, setKey] = useState(getJudgeKey);
   const keyRef = useRef<HTMLInputElement>(null);
-  const needsKey = (judgeKeyRequired || err?.code === "forbidden") && provider !== "fake" && provider !== "replay";
+  const lock = useLockout();
+  const keyProvider = provider !== "fake" && provider !== "replay";  // Replay and Fake never send a key: never locked
+  const needsKey = (judgeKeyRequired || err?.code === "forbidden" || !!lock) && keyProvider;
   useEffect(() => { if (err?.code === "forbidden") keyRef.current?.focus(); }, [err]);
   const [replays, setReplays] = useState<Replay[]>([]);
   useEffect(() => { getReplays().then(setReplays, () => setReplays([])); }, []);
@@ -68,7 +72,9 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
         if (ev.kind === "error") fail(ev.data);
       }
     } catch (e) {
-      fail(e instanceof ApiError ? { code: e.code, message: e.message, retryable: e.retryable, retry_after_s: e.retryAfterS }
+      // A lockout counts down under the key box (minutes to hours), not as a Retry timer.
+      if (e instanceof ApiError && e.lockout) fail({ code: "rate_limited", message: e.message, retryable: false });
+      else fail(e instanceof ApiError ? { code: e.code, message: e.message, retryable: e.retryable, retry_after_s: e.retryAfterS }
         : { code: "unavailable", message: "The server is busy. Try again.", retryable: true });
     } finally { setBusy(false); }
   };
@@ -94,9 +100,10 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
           onChange={(e) => { setKey(e.target.value); setJudgeKey(e.target.value.trim()); }}
           style={{ flex: 1, minWidth: 0, padding: 0, border: 0, outline: "none", background: "transparent", color: "var(--ink)", font: "inherit" }} />
       </label>
+      {lock && <LockoutNote lock={lock} />}
     </Field>
   );
-  const canAsk = !busy && q.trim() !== "" && !(needsKey && !key.trim()) && !(provider === "replay" && !replay);
+  const canAsk = !busy && q.trim() !== "" && !(needsKey && !key.trim()) && !(keyProvider && lock) && !(provider === "replay" && !replay);
   const copy = () => { if (brief) navigator.clipboard?.writeText(briefText(brief)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {}); };
 
   const stack = { display: "flex", flexDirection: "column", gap: 12, minHeight: "100%" } as const;
@@ -176,11 +183,11 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
       {brief && <><BriefCard brief={brief} />{briefExtra}<ClaimsCard brief={brief} /></>}
       {err && (
         <Card title="Live model" right={<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--hazard)" }}>
-          <Dot color="var(--hazard)" />{wait > 0 ? "Rate-limited" : "Unavailable"}</span>}>
-          <Notice message={err.message} wait={wait} total={waitTotal}
+          <Dot color="var(--hazard)" />{wait > 0 || (lock && err.code === "rate_limited") ? "Rate-limited" : "Unavailable"}</span>}>
+          <Notice message={lock && err.code === "rate_limited" ? lockoutText(lock.scope, lock.leftS) : err.message} wait={wait} total={waitTotal}
             detail={wait > 0 ? <>Retrying in <span style={FIG}>{wait}</span> s.</> : undefined} note="Your steps so far are kept.">
             {err.retryable && <Btn kind="raised" icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} disabled={busy || wait > 0} onClick={() => ask()}>Retry now</Btn>}
-            {FAKE_HELPS.includes(err.code) && provider !== "fake" &&
+            {(FAKE_HELPS.includes(err.code) || (!!lock && err.code === "rate_limited")) && provider !== "fake" &&
               <Btn kind="ghost" icon={<Flask size={16} weight="bold" aria-hidden="true" />} disabled={busy} onClick={useFake}>Use the fake agent</Btn>}
           </Notice>
           {needsKey && <Pad>{keyField}</Pad>}

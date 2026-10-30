@@ -18,6 +18,8 @@ import { useClock } from "../lib/clock";
 import { Card, CardLock, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 import { Notice } from "./Notice";
+import { LockoutNote } from "./LockoutNote";
+import { useLockout } from "../lib/lockout";
 import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 import { useRain } from "../lib/rain";
@@ -93,10 +95,12 @@ function AerialSourceRow() {
   const lay = useLayers();
   const [key, setKey] = useState(getJudgeKey);
   const keyRef = useRef<HTMLInputElement>(null);
+  const lock = useLockout();
   const needKey = lay.aerialNote === KEY_NOTE;
   useEffect(() => { if (needKey) keyRef.current?.focus(); }, [needKey]);
   // The server decides (judge key or team token); a 403 comes back as KEY_NOTE and brings up the key box.
-  const pick = (a: AerialSource) => setAerial(a);
+  // While key checks are locked (kept across reloads), Google opens the key box with the countdown instead of asking.
+  const pick = (a: AerialSource) => (a === "google" && lock ? setAerial("bing", KEY_NOTE) : setAerial(a));
   const aerial = lay.basemap === "aerial";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 14px 0", fontSize: 12, color: "var(--ink-muted)", opacity: aerial ? 1 : 0.45 }}>
@@ -112,14 +116,16 @@ function AerialSourceRow() {
       </div>
       {lay.aerialNote && <span role="status" style={{ color: needKey ? "var(--ink)" : "var(--ink-muted)" }}>{lay.aerialNote}</span>}
       {needKey && (
-        <form onSubmit={(e) => { e.preventDefault(); if (key.trim()) { setJudgeKey(key.trim()); setAerial("google"); } }} style={{ display: "flex", gap: 6 }}>
+        <form onSubmit={(e) => { e.preventDefault(); if (key.trim() && !lock) { setJudgeKey(key.trim()); setAerial("google"); } }} style={{ display: "flex", gap: 6 }}>
           <input ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
             style={{ flex: 1, minWidth: 0, height: 28, padding: "0 8px", background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
               boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit", fontSize: 12 }} />
-          <button type="submit" disabled={!key.trim()} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
-            background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Use Google</button>
+          <button type="submit" disabled={!key.trim() || !!lock} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
+            background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500,
+            cursor: lock ? "default" : "pointer", opacity: lock ? 0.6 : 1 }}>Use Google</button>
         </form>
       )}
+      {needKey && lock && <LockoutNote lock={lock} />}
     </div>
   );
 }

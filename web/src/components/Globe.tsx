@@ -444,7 +444,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       })
       .catch((err) => {
         if (cancelled) return;
-        const forbidden = err instanceof ApiError && (err.status === 403 || err.code === "forbidden");
+        // A judge-key lockout (429, X-Auth-Lockout) also brings up the key box, which shows the countdown.
+        const forbidden = err instanceof ApiError && (err.status === 403 || err.code === "forbidden" || !!err.lockout);
         setAerial("bing", forbidden ? "Google imagery needs the judge key." : "Google imagery is not available right now; showing Bing.");
         if (googleShown.current) { googleShown.current = false; toBing(null); }
       });

@@ -2,6 +2,8 @@
 // Types are GENERATED from the Python contracts: `make contracts` -> src/contracts/gen/*.d.ts
 // Until the first generation lands, the minimal hand-written types below unblock work.
 // Delete them once gen/ exists and import from "../contracts/gen/..." instead.
+import { noteLockout } from "./lockout";
+import type { LockScope } from "./lockout";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -67,7 +69,7 @@ const judge = (): Record<string, string> => { const k = getJudgeKey(); return k 
 /** A failed request, carrying the server's error envelope: {"detail", "error": {code, message, retryable}}. */
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly code: string, readonly retryable: boolean,
-              readonly retryAfterS?: number) { super(message); }
+              readonly retryAfterS?: number, readonly lockout?: LockScope) { super(message); }
 }
 
 async function apiError(r: Response): Promise<ApiError> {
@@ -81,7 +83,11 @@ async function apiError(r: Response): Promise<ApiError> {
   const b = await r.json().catch(() => ({}));
   const e = b?.error ?? {};
   const msg = e.message ?? (typeof b?.detail === "string" ? b.detail : "The request failed.");
-  return new ApiError(msg, r.status, e.code ?? "server_error", e.retryable ?? r.status >= 500, ra);
+  // A judge-key lockout: every key box shows it and counts down, even after a reload.
+  const lock = r.status === 429 ? r.headers.get("x-auth-lockout") : null;
+  const scope = lock === "ip" || lock === "global" ? lock : undefined;
+  if (scope) noteLockout(scope, ra);
+  return new ApiError(msg, r.status, e.code ?? "server_error", e.retryable ?? r.status >= 500, ra, scope);
 }
 
 async function j<T>(r: Response): Promise<T> {
