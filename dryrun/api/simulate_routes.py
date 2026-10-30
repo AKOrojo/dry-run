@@ -2,7 +2,8 @@
 
 POST /api/simulate/estimate  ScenarioSpec ->
     {run_id, cached, status: done|running|failed|none, est_s, est_basis: cached|speed_model|history|null, t_end_s,
-     output_interval_s, frames_total, domain_cells, grid_cells}   (domain_cells == grid_cells: no rain-area speed-up)
+     output_interval_s, frames_total, domain_cells, grid_cells, drainage}   (domain_cells == grid_cells: no speed-up;
+     drainage: the resolved {system, capacity_mm_h, blockage_pct, outfall}, or null = the constant drain sink)
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
     started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
     progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}
@@ -92,6 +93,19 @@ def _domain_cells(aoi, spec: ScenarioSpec, grid_cells: int) -> int:
         return grid_cells
 
 
+def _drainage(aoi, spec: ScenarioSpec) -> dict | None:
+    """The drainage the run will model, with the AOI's drainage_default filled in (Eng A's drainage.settings).
+    None = the AOI has no drain network, so the constant drain_sink_mm_h applies. Invalid combinations are a 400
+    from validate() before this runs."""
+    from dryrun.sim import drainage
+
+    s = drainage.settings(spec, aoi)
+    if s is None:
+        return None
+    return {"system": s.system, "capacity_mm_h": s.capacity_mm_h, "blockage_pct": round(s.blockage * 100, 1),
+            "outfall": s.outfall}
+
+
 def estimate_for(spec: ScenarioSpec) -> dict:
     from dryrun.sim import interventions
 
@@ -103,7 +117,8 @@ def estimate_for(spec: ScenarioSpec) -> dict:
     grid_cells = aoi.grid.nx * aoi.grid.ny
     out = {"run_id": run_id, "cached": status == "done", "status": status, "est_s": None, "est_basis": None,
            "t_end_s": t_end, "output_interval_s": interval, "frames_total": t_end // interval + 1,
-           "domain_cells": _domain_cells(aoi, spec, grid_cells), "grid_cells": grid_cells}
+           "domain_cells": _domain_cells(aoi, spec, grid_cells), "grid_cells": grid_cells,
+           "drainage": _drainage(aoi, spec)}
     if status == "done":
         return {**out, "est_s": 0.0, "est_basis": "cached"}
     try:

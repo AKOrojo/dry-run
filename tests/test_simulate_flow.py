@@ -43,6 +43,7 @@ def test_estimate_then_stream_then_cached(client):
     assert e["cached"] is False and e["status"] == "none" and e["t_end_s"] > 0
     g = storage.load_aoi(fixtures.AOI_ID).grid
     assert e["grid_cells"] == g.nx * g.ny and 0 < e["domain_cells"] <= e["grid_cells"]
+    assert e["drainage"] is None  # the fixture AOI has no drain network: constant sink
     evs = events(client.post("/api/simulate/stream", json=spec(41)).text)
     kinds = [ev["kind"] for ev in evs]
     assert kinds[0] == "started" and kinds[-1] == "done" and "progress" in kinds
@@ -213,3 +214,19 @@ def test_simulate_right_after_stop_gets_a_fresh_job():
     assert jobs.active("r_race")  # finishing the old job does not drop the new one
     jobs.detach(new)
     jobs.finish(new)
+
+
+def test_estimate_echoes_resolved_drainage():
+    from dryrun.api.simulate_routes import _drainage
+    from dryrun.contracts.schemas import Drainage, DrainageDefault
+
+    dflt = DrainageDefault(system="closed", label="Closed sewers", capacity_mm_h=38.1, return_period_yr=3,
+                           design_mm_h_by_return_period={"3": 38.1, "10": 54.1}, blockage_pct=10,
+                           blockage_range_pct=(0, 50), flap_gates=False, roadside_gutters=False,
+                           receiving="East River", storage_mm=10, limits=["test"])
+    aoi = storage.load_aoi(fixtures.AOI_ID).model_copy(update={"drainage_default": dflt})
+    s = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=50, duration_h=1),
+                     drainage=Drainage(return_period_yr=10, blockage_pct=30))
+    assert _drainage(aoi, s) == {"system": "closed", "capacity_mm_h": 54.1, "blockage_pct": 30.0, "outfall": "tide"}
+    plain = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=50, duration_h=1))
+    assert _drainage(aoi, plain)["capacity_mm_h"] == 38.1  # nothing set: the AOI default
