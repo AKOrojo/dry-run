@@ -6,6 +6,7 @@ run_ids and the warmed runs stay valid. Nothing is added to RunManifest; the UI 
 
   arrival   minutes from storm start until a cell first reaches FLOODED_M (0.15 m)
   duration  minutes a cell spends at or above FLOODED_M
+  velocity  depth-averaged flow (u east, v north, m/s) per frame on ~90 m blocks, PNG-encoded (.json manifest)
   events    key events with map points (first road cut, largest jump in cut roads, peak flooded area) and
             per named place: when 10 % of its land is wet, its first road cut, a label point (.json only)
 
@@ -33,7 +34,7 @@ from dryrun import storage
 from dryrun.sim import exposure
 
 MAPS = ("arrival", "duration")
-KINDS = MAPS + ("events",)  # every kind has a .json; MAPS also have a .png
+KINDS = MAPS + ("events", "velocity")  # every kind has a .json; MAPS also have a .png, velocity one per frame
 HAZARD_RGB = (0xFF, 0x6B, 0x2C)
 LONG_RUN_MIN = 360  # runs longer than this (the Texas replay, 12 h) get wider bins
 
@@ -85,17 +86,20 @@ def stack(run_id: str) -> tuple[np.ndarray, np.ndarray]:
 
 def _exclude(m) -> np.ndarray:
     """The run's own exclude mask (permanent water plus any pond the scenario adds), as the engine used."""
-    return _exclude_for(m.run_id, m.scenario.model_dump_json())
+    return _inputs_for(m.run_id, m.scenario.model_dump_json()).exclude_mask
 
 
 @lru_cache(maxsize=16)  # per run: the hover route calls this on every request, and applying interventions is not free
-def _exclude_for(run_id: str, scenario_json: str) -> np.ndarray:
+def _inputs_for(run_id: str, scenario_json: str):
+    """The solver inputs the engine built for this run (interventions applied), arrays read-only."""
     from dryrun.contracts import ScenarioSpec
     from dryrun.sim import engine
 
-    mask = engine._load_inputs(ScenarioSpec.model_validate_json(scenario_json))[1].exclude_mask
-    mask.setflags(write=False)
-    return mask
+    inp = engine._load_inputs(ScenarioSpec.model_validate_json(scenario_json))[1]
+    for a in (inp.exclude_mask, inp.dem, inp.manning, inp.boundary_mask):
+        if isinstance(a, np.ndarray):
+            a.setflags(write=False)
+    return inp
 
 
 def compute(run_id: str) -> dict[str, np.ndarray]:
@@ -131,11 +135,21 @@ def legend(kind: str, edges: list[int], m) -> dict:
 
 
 EVENTS_REV = 2  # bump when events() changes: outputs are cached per run, so a new rev is a new object
+VELOCITY_REV = 1
 
 
 def rel(kind: str, ext: str) -> str:
-    """Object path. events carries its revision, so a fix reaches already-derived runs on the next derive."""
-    return f"derived/events.v{EVENTS_REV}.json" if kind == "events" else f"derived/{kind}.{ext}"
+    """Object path. events and velocity carry their revision, so a fix reaches already-derived runs on the next
+    derive."""
+    if kind == "events":
+        return f"derived/events.v{EVENTS_REV}.json"
+    if kind == "velocity":
+        return f"derived/velocity.v{VELOCITY_REV}.json"
+    return f"derived/{kind}.{ext}"
+
+
+def velocity_rel(i: int) -> str:
+    return f"derived/velocity.v{VELOCITY_REV}/{i:04d}.png"
 
 
 def derive(run_id: str) -> None:
@@ -149,6 +163,15 @@ def derive(run_id: str) -> None:
         storage.write_run_file(run_id, rel(kind, "json"), json.dumps(legend(kind, edges, m)).encode(),
                                "application/json")
     storage.write_run_file(run_id, rel("events", "json"), json.dumps(events(run_id)).encode(), "application/json")
+    derive_velocity(run_id)
+
+
+def derive_kind(run_id: str, kind: str) -> None:
+    """Write one missing kind (velocity alone is cheap to add to runs whose maps already exist)."""
+    if kind == "velocity":
+        derive_velocity(run_id)
+    else:
+        derive(run_id)
 
 
 # ------------------------------------------------------------------ events
@@ -361,6 +384,120 @@ def boundary_geojson(aoi_id: str) -> bytes:
             "properties": {"kind": "sea_lagoon", "default_level_m": DEFAULT_TIDE_M,
                            "note": "open water held at one level for the whole run (the tide intervention sets it)"}}
     return json.dumps({"type": "FeatureCollection", "features": [feat]}).encode()
+
+
+# ------------------------------------------------------------------ velocity
+VEL_BLOCK_M = 90.0  # target block size; the block is a whole number of model cells
+VEL_WET_M = 0.05  # blocks shallower than this are transparent, as in the depth PNGs (alpha ramp starts at 5 cm)
+
+
+def face_flux(h: np.ndarray, z: np.ndarray, n: np.ndarray, dx: float, dy: float):
+    """Unit discharge (m2/s) on the solver's x and y faces from one depth frame, by the solver's own momentum
+    equation at steady state (no inertia): q = -sign(S) hf^(5/3) sqrt(|S|) / n, the Manning flow down the
+    water-surface slope S, with hf as in solver._numpy_step. Capped at Froude 1 (q <= hf sqrt(g hf)): the
+    frames carry no inertia, so steep fronts would otherwise give unphysical speeds."""
+    from dryrun.sim.solver import H_MIN, G
+
+    eta = z + h
+    out = []
+    for el, er, zl, zr, nl, nr, d in ((eta[:, :-1], eta[:, 1:], z[:, :-1], z[:, 1:], n[:, :-1], n[:, 1:], dx),
+                                      (eta[:-1, :], eta[1:, :], z[:-1, :], z[1:, :], n[:-1, :], n[1:, :], dy)):
+        hf = np.maximum(el, er) - np.maximum(zl, zr)
+        hs = np.where(hf > H_MIN, hf, 0.0)
+        s = (er - el) / d
+        q = -np.sign(s) * hs ** (5 / 3) * np.sqrt(np.abs(s)) / (0.5 * (nl + nr))
+        cap = hs * np.sqrt(G * hs)
+        out.append(np.clip(q, -cap, cap))
+    return out
+
+
+def velocity_frame(h, z, n, bnd, dx, dy, k):
+    """(u east, v north, wet) on k x k blocks: block discharge over block depth, so shallow cells don't
+    dominate. Held open-water boundary cells carry no flow and don't count."""
+    from dryrun.sim.solver import G
+
+    qx, qy = face_flux(h, z, n, dx, dy)
+    ny, nx = h.shape
+    qxc = np.zeros((ny, nx))
+    qyc = np.zeros((ny, nx))
+    qxc[:, 1:] += 0.5 * qx
+    qxc[:, :-1] += 0.5 * qx
+    qyc[1:, :] -= 0.5 * qy  # solver y faces are positive southward
+    qyc[:-1, :] -= 0.5 * qy
+    hw = np.where(bnd, 0.0, h)
+    qxc[bnd] = 0.0
+    qyc[bnd] = 0.0
+    py, px = -ny % k, -nx % k
+
+    def block(a):
+        a = np.pad(a, ((0, py), (0, px)))
+        return a.reshape(a.shape[0] // k, k, a.shape[1] // k, k).sum(axis=(1, 3))
+
+    hs = block(hw)
+    cells = block((~bnd).astype(np.float64))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        u = np.where(hs > 0, block(qxc) / hs, 0.0)
+        v = np.where(hs > 0, block(qyc) / hs, 0.0)
+        hbar = hs / np.maximum(cells, 1)
+        wet = (cells > 0) & (hbar >= VEL_WET_M)
+        # Froude 1 on the block too: half of a deep face's flux lands in a shallow neighbour cell
+        f = np.minimum(1.0, np.sqrt(G * hbar) / np.maximum(np.hypot(u, v), 1e-12))
+    return u * f, v * f, wet
+
+
+def velocity_png(u, v, wet, vmax: float) -> bytes:
+    scale = vmax / 127
+    rgba = np.zeros(u.shape + (4,), np.uint8)
+    rgba[..., 0] = np.clip(np.round(u / scale) + 128, 1, 255)
+    rgba[..., 1] = np.clip(np.round(v / scale) + 128, 1, 255)
+    rgba[..., 2] = np.clip(np.round(np.hypot(u, v) / vmax * 255), 0, 255)
+    rgba[..., 3] = np.where(wet, 255, 0)
+    rgba[~wet, :3] = (128, 128, 0)
+    buf = io.BytesIO()
+    Image.fromarray(rgba, "RGBA").save(buf, "PNG", compress_level=6)
+    return buf.getvalue()
+
+
+def velocity(run_id: str):
+    """(manifest, [(u, v, wet) per frame]) for a done run."""
+    m = storage.load_run(run_id)
+    inp = _inputs_for(m.run_id, m.scenario.model_dump_json())
+    grid = storage.load_aoi(m.scenario.aoi_id).grid
+    ts, depth = stack(run_id)
+    z = np.asarray(inp.dem, np.float64)
+    n = np.asarray(inp.manning, np.float64)
+    bnd = (np.zeros(z.shape, bool) if inp.boundary_mask is None else np.asarray(inp.boundary_mask, bool))
+    k = max(1, round(VEL_BLOCK_M / grid.dx_m))
+    frames = [velocity_frame(d.astype(np.float64), z, n, bnd, grid.dx_m, grid.dy_m, k) for d in depth]
+    speeds = np.concatenate([np.hypot(u, v)[w] for u, v, w in frames] or [np.zeros(1)])
+    peak = float(speeds.max()) if speeds.size else 0.0
+    vmax = max(0.5, float(np.ceil(np.percentile(speeds, 99.5) * 2) / 2)) if speeds.size else 0.5
+    ny, nx = frames[0][0].shape
+    w, s, e, nn = grid.bounds_wgs84
+    manifest = {
+        "kind": "velocity", "rev": VELOCITY_REV, "units": "m/s",
+        "block_cells": k, "block_m": round(k * grid.dx_m, 1), "nx": nx, "ny": ny,
+        # the last block row/column may extend past the AOI edge (padding); bounds are the padded extent
+        "bounds_wgs84": [w, nn - ny * k / grid.ny * (nn - s), w + nx * k / grid.nx * (e - w), nn],
+        "vmax_m_s": vmax, "scale_m_s": round(vmax / 127, 6), "peak_speed_m_s": round(peak, 2),
+        "wet_threshold_m": VEL_WET_M,
+        "encoding": {"r": "u (east) = (R - 128) * scale_m_s", "g": "v (north) = (G - 128) * scale_m_s",
+                     "b": "speed = B / 255 * vmax_m_s (clipped at vmax)", "a": "255 = block depth >= wet_threshold_m",
+                     "origin": "row 0 = north edge, column 0 = west edge"},
+        "frames": [{"i": i, "t_s": float(t), "path": f"velocity/{i}"} for i, t in enumerate(ts)],
+        "method": "estimated from each stored depth frame with the solver's friction law at steady state "
+                  "(Manning flow down the water-surface slope), capped at Froude 1; not the solver's internal "
+                  "fluxes. Good for flow direction and relative speed; speeds at fast-changing fronts are approximate.",
+    }
+    return manifest, frames
+
+
+def derive_velocity(run_id: str) -> None:
+    manifest, frames = velocity(run_id)
+    vmax = manifest["vmax_m_s"]
+    list(_IO.map(lambda iv: storage.write_run_file(run_id, velocity_rel(iv[0]), velocity_png(*iv[1], vmax), "image/png"),
+                 enumerate(frames)))
+    storage.write_run_file(run_id, rel("velocity", "json"), json.dumps(manifest).encode(), "application/json")
 
 
 def exists(run_id: str, kind: str) -> bool:

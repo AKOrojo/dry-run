@@ -330,6 +330,49 @@ def test_derived_route():
     assert r.headers["location"].endswith("derived/duration.json")
 
 
+def test_velocity_flows_downhill_and_route():
+    import io as _io
+    import json
+
+    import numpy as np
+    from fastapi.testclient import TestClient
+    from PIL import Image
+
+    from dryrun import derived
+    from dryrun.api.main import app
+
+    # a 0.5 m sheet on a bed falling eastward and northward: flow runs east (u > 0) and north (v > 0)
+    ny, nx = 9, 12
+    z = (-0.01 * np.arange(nx))[None, :] + (0.01 * np.arange(ny))[:, None]
+    h = np.full((ny, nx), 0.5)
+    n = np.full((ny, nx), 0.03)
+    u, v, wet = derived.velocity_frame(h, z, n, np.zeros((ny, nx), bool), 30.0, 30.0, 3)
+    assert wet.all() and (u[:, 1:-1] > 0).all() and (v[1:-1, :] > 0).all()
+    manning = 0.5 ** (2 / 3) * np.sqrt(0.01 / 30) / 0.03  # interior block, uniform slope: Manning velocity
+    assert abs(u[1, 1] - manning) < 1e-6 and abs(v[1, 1] - manning) < 1e-6
+    still = derived.velocity_frame(np.full((ny, nx), 0.5) - z + z.min(), z, n, np.zeros((ny, nx), bool), 30, 30, 3)
+    assert np.allclose(still[0], 0) and np.allclose(still[1], 0)  # flat water surface: no flow
+
+    m = run_scenario(spec())
+    manifest, frames = derived.velocity(m.run_id)
+    assert len(frames) == len(m.frames) == len(manifest["frames"])
+    derived.derive_velocity(m.run_id)
+    assert derived.exists(m.run_id, "velocity")
+    img = np.array(Image.open(_io.BytesIO(storage.read_run_file(m.run_id, derived.velocity_rel(len(frames) - 1)))))
+    u, v, wet = frames[-1]
+    assert img.shape == (manifest["ny"], manifest["nx"], 4) and ((img[..., 3] > 0) == wet).all()
+    s = manifest["scale_m_s"]
+    ok = wet & (np.hypot(u, v) < manifest["vmax_m_s"])
+    assert np.allclose((img[..., 0][ok].astype(int) - 128) * s, u[ok], atol=s)
+    assert json.loads(storage.read_run_file(m.run_id, derived.rel("velocity", "json")))["frames"][0]["t_s"] == 0
+    c = TestClient(app)
+    r = c.get(f"/api/runs/{m.run_id}/derived/velocity.json", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"].endswith("derived/velocity.v1.json")
+    r = c.get(f"/api/runs/{m.run_id}/derived/velocity/3", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"].endswith("derived/velocity.v1/0003.png")
+    assert c.get(f"/api/runs/{m.run_id}/derived/velocity/{len(m.frames)}").status_code == 404
+
+
 def test_events_series_boundary():
     import numpy as np
 

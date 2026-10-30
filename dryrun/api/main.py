@@ -332,8 +332,8 @@ def _inflows_geojson(m, raw: dict) -> dict:
 
 @app.get("/api/runs/{run_id}/derived/{name}")
 def derived_map(run_id: str, name: str, request: Request):
-    """arrival|duration .png|.json and events.json, computed once from the stored depth frames, then served from
-    the runs bucket."""
+    """arrival|duration .png|.json, events.json and velocity.json (the manifest), computed once from the stored
+    depth frames, then served from the runs bucket."""
     from fastapi.responses import RedirectResponse
 
     from dryrun import derived
@@ -347,8 +347,27 @@ def derived_map(run_id: str, name: str, request: Request):
         if m.status.value != "done" or not m.frames:
             raise HTTPException(409, f"run is {m.status.value}")
         limit(request, "derive", per_hour=120)
-        derived.derive(run_id)
+        derived.derive_kind(run_id, kind)
     return RedirectResponse(storage.public_run_url(run_id, derived.rel(kind, ext)), status_code=302)
+
+
+@app.get("/api/runs/{run_id}/derived/velocity/{frame}")
+def derived_velocity_frame(run_id: str, frame: int, request: Request):
+    """One velocity frame (PNG, encoding in velocity.json). Derives the whole run on first use."""
+    from fastapi.responses import RedirectResponse
+
+    from dryrun import derived
+
+    _check_run(run_id)
+    m = storage.load_run(run_id)
+    if m.status.value != "done" or not m.frames:
+        raise HTTPException(409, f"run is {m.status.value}")
+    if not 0 <= frame < len(m.frames):
+        raise HTTPException(404, "no such frame")
+    if not derived.exists(run_id, "velocity"):
+        limit(request, "derive", per_hour=120)
+        derived.derive_velocity(run_id)
+    return RedirectResponse(storage.public_run_url(run_id, derived.velocity_rel(frame)), status_code=302)
 
 
 @app.get("/api/runs/{run_id}/series")
