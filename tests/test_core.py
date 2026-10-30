@@ -642,6 +642,40 @@ def test_patch3d_case_and_routes(tmp_path, monkeypatch):
     assert c.get(f"/api/runs/{m.run_id}/patch3d/{pid}/../../manifest.json").status_code == 404
 
 
+def test_patch3d_browser_inputs():
+    import base64
+
+    import numpy as np
+    from fastapi.testclient import TestClient
+
+    from dryrun.api.main import app
+    from dryrun.patch3d import geometry
+    from dryrun.patch3d import inputs as I
+
+    m = run_scenario(spec())
+    w, s, e, n = storage.load_aoi(fixtures.AOI_ID).grid.bounds_wgs84
+    lon, lat = (w + e) / 2, (s + n) / 2
+    c = TestClient(app)
+    q = {"lon": lon, "lat": lat, "size_m": 60, "cell_m": 4}
+    dims = c.get(f"/api/runs/{m.run_id}/patch3d_inputs", params={**q, "dims_only": 1}).json()
+    r = c.get(f"/api/runs/{m.run_id}/patch3d_inputs", params=q)
+    assert r.status_code == 200
+    d = r.json()
+    p = geometry.build(fixtures.AOI_ID, (lon, lat), 60, 4, 0.0)
+    assert (d["nx"], d["ny"]) == (p.nx, p.ny) == (dims["nx"], dims["ny"]) and d["nz"] == dims["nz"]
+    f32 = lambda k, src=d: np.frombuffer(base64.b64decode(src[k]), "<f4")  # noqa: E731
+    assert np.allclose(f32("ground"), p.ground.ravel(), atol=1e-4)
+    assert f32("wse", d["init"]).size == p.nx * p.ny
+    assert len(d["sides"]["t_s"]) >= 2 and f32("south", d["sides"]).size == len(d["sides"]["t_s"]) * p.nx
+    assert len(d["vol2_m3"]) == int((d["t_window_s"][1] - d["t_window_s"][0]) // d["frame_dt_s"]) + 1
+    assert d["physics"]["sponge_cells"] == 4 and d["patch_id"] == dims["patch_id"]
+    assert storage.read_run_file(m.run_id, I.rel(I.request(m.run_id, (lon, lat), 60, 4)))  # cached in the run
+    # wider ranges than the batch job (cell 0.5 m), still bounded
+    assert I.request(m.run_id, (lon, lat), 400, 0.5).cell_m == 0.5
+    for bad in ({"size_m": 600}, {"cell_m": 0.25}, {"lon": w}, {"lon": "nan"}):
+        assert c.get(f"/api/runs/{m.run_id}/patch3d_inputs", params={**q, **bad}).status_code == 400, bad
+
+
 def test_moving_cell_passes_centre_at_rain_peak():
     import numpy as np
 

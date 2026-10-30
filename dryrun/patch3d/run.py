@@ -77,6 +77,28 @@ def load_manifest(run_id: str, pid: str) -> Patch3DManifest:
     return Patch3DManifest.model_validate_json(storage.read_run_file(run_id, rel(pid, run_id, "manifest.json")))
 
 
+def prepare(req: Patch3DRequest):
+    """(forcing, patch geometry, t0, t1): the 2D forcing, the box, and the time window (default: 10 min ending at
+    the 2D peak at the patch centre). Shared by the OpenFOAM run and the browser solver's inputs."""
+    forcing = C.Forcing(req.run_id)
+    lon, lat = req.center
+    if req.t_window_s:
+        t0, t1 = req.t_window_s
+    else:
+        t1 = forcing.peak_time(lon, lat)
+        t0 = max(0.0, t1 - DEFAULT_WINDOW_S)
+        if t1 - t0 < 120:
+            t1 = t0 + DEFAULT_WINDOW_S
+    # highest 2D water surface the patch will see (sets the domain top)
+    probe = geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.size_m / 8, 0.0)
+    g = (np.arange(9) + 0.5) * req.size_m / 9
+    X, Y = np.meshgrid(g, g)
+    plon, plat = probe.lonlat(X.ravel(), Y.ravel())
+    max_wse = max(float(np.nan_to_num(forcing.sample(plon, plat, t)[0], nan=-np.inf).max())
+                  for t in np.linspace(t0, t1, 7))
+    return forcing, geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.cell_m, max_wse), t0, t1
+
+
 def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
         post_only: bool = False) -> Patch3DManifest:
     """post_only: the case in workdir is already solved; redo only the frames, forces and manifest."""
@@ -86,23 +108,7 @@ def run(req: Patch3DRequest, workdir: Path | None = None, keep: bool = False,
     write_manifest(man)
     tmp = Path(workdir or tempfile.mkdtemp(prefix=f"{pid}_"))
     try:
-        forcing = C.Forcing(req.run_id)
-        lon, lat = req.center
-        if req.t_window_s:
-            t0, t1 = req.t_window_s
-        else:
-            t1 = forcing.peak_time(lon, lat)
-            t0 = max(0.0, t1 - DEFAULT_WINDOW_S)
-            if t1 - t0 < 120:
-                t1 = t0 + DEFAULT_WINDOW_S
-        # highest 2D water surface the patch will see (sets the domain top)
-        probe = geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.size_m / 8, 0.0)
-        g = (np.arange(9) + 0.5) * req.size_m / 9
-        X, Y = np.meshgrid(g, g)
-        plon, plat = probe.lonlat(X.ravel(), Y.ravel())
-        max_wse = max(float(np.nan_to_num(forcing.sample(plon, plat, t)[0], nan=-np.inf).max())
-                      for t in np.linspace(t0, t1, 7))
-        p = geometry.build(forcing.aoi.aoi_id, req.center, req.size_m, req.cell_m, max_wse)
+        forcing, p, t0, t1 = prepare(req)
         n_fluid = int((~p.solid()).sum())
         procs = C.procs_for(n_fluid)
         if post_only:

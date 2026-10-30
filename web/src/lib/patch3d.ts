@@ -173,10 +173,14 @@ export async function loadPatch(runsBase: string, runId: string, row: PatchRow, 
   const run = `${runsBase.replace(/\/$/, "")}/${runId}/`;
   const depthMax = manifest.encoding?.depth_max_m ?? 4;
   const s = (manifest.encoding?.vmax_m_s ?? 4) / 127;
-  const [frames, fp] = await Promise.all([
-    Promise.all(manifest.frames.map((fr) => decodeFrame(run + fr.surface, run + fr.velocity, manifest.nx, manifest.ny, depthMax, s))),
-    footprints(buildingsUrl, f.ids),
-  ]);
+  const frames = await Promise.all(manifest.frames.map((fr) => decodeFrame(run + fr.surface, run + fr.velocity, manifest.nx, manifest.ny, depthMax, s)));
+  return assemblePatch(row, manifest, f, frames, buildingsUrl);
+}
+
+/** PatchData from a manifest, forces and decoded frames: loadPatch above, or a patch solved in the browser
+ * (lib/patch3d-gpu solvePatchInBrowser returns these three in the same shapes). */
+export async function assemblePatch(row: PatchRow, manifest: PatchManifest, f: PatchForces, frames: Frame[], buildingsUrl?: string): Promise<PatchData> {
+  const fp = await footprints(buildingsUrl, f.ids);
   const buildings: PatchBuilding[] = [];
   f.ids.forEach((id, i) => {
     const p = fp.get(String(id));

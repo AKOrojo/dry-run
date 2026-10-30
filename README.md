@@ -375,6 +375,57 @@ one way in a finished 2D run:
   the `DRYRUN_PATCH3D_JOB` Cloud Run Job when one is configured) needs the team token or a judge key and is capped
   per day (`DRYRUN_PATCH3D_PER_DAY`, default 20).
 
+### In-browser 3D close-up (`web/src/lib/patch3d-gpu/`, WebGPU)
+The same close-up can be solved on the viewer's own GPU, for any box, with no server compute. `GET
+/api/runs/{run_id}/patch3d_inputs?lon=&lat=&size_m=&cell_m=` packs what the OpenFOAM case writer uses: the box
+geometry, the 2D side levels every 30 s, the initial state and the 2D volume series (`dryrun/patch3d/inputs.py`;
+`dims_only=1` returns just the grid). Boxes may be 60–500 m with cells of 0.5–4 m. The browser solves the same
+window and returns the OpenFOAM patch's outputs in the same encoding: frame PNGs every 30 s, the manifest, and
+buildings.json. The close-up viewer plays them unchanged.
+- **Method:** water only, on a uniform staggered grid with cells of `cell_m` × `cell_m` × `cell_m`/8, with air
+  as empty space.
+  - The water fraction is advected with the conservative, bounded split scheme of Weymouth & Yue (2010). Each
+    column is then restacked from its floor, so the free surface is single-valued (no overturning).
+  - Pressure is the hydrostatic part from the water above, plus a non-hydrostatic part from a projection. The
+    projection uses red-black vertical-line SOR, which handles the 8:1 cell shape exactly; 4 sweeps per step
+    give the same answer as 30.
+  - Momentum is advected semi-Lagrangian.
+  - Bed and wall friction use the rough-wall log law (the OpenFOAM patch's ks), with a parabolic eddy viscosity
+    in each column.
+  - The sides are the same as the OpenFOAM patch: the 2D level held on the outer ring, the 8 m damping band,
+    and the 5 m/s cap.
+- **Accuracy against the OpenFOAM patch** (same box, 100 m at 2 m, 10 min, columns outside the damping band):
+
+  | patch | depth error (mean abs.) | wet/dry agreement | surface speed median / p90 (OpenFOAM) | speed correlation | building peak force |
+  |---|---|---|---|---|---|
+  | Queens Elmhurst (still pond, 1.27 m deep) | 2–4 mm | 100 % | 0.03 / 0.04 m/s (0.02 / 0.03) | 0.5–0.67 | 44.1 kN (44.3) |
+  | Lagos hero (street sheet flow, 0.21 m) | 4 cm (+4 cm bias) | 100 % | 0.36 / 0.74 m/s (0.37 / 0.81) | 0.80 | 17.3 and 10.6 kN (17.4 and 9.6); a small one 2.8 kN (1.3) |
+
+  The browser solve keeps more water in the Lagos box than OpenFOAM does: −9 % of the 2D volume against −24 %.
+- **Speed and memory** (AMD RX 6800 through Dawn; 13 floats per cell):
+
+  | box / cell | cells | GPU memory | time per 30 s frame | 10-min window |
+  |---|---|---|---|---|
+  | 100 m / 2 m | 40 k | 3 MB | 0.15 s | 3 s |
+  | 200 m / 1 m | 1.6 M | 85 MB | 0.9 s | 18 s |
+  | 300 m / 1 m | 4.7 M | 240 MB | 2.5 s | 50 s |
+  | 300 m / 0.5 m | 37 M | 1.9 GB | 71 s | 24 min |
+  | 400 m / 0.5 m | 72 M | 3.6 GB | 140 s | 47 min |
+
+  Largest box (m) that fits, for a vertical span of 4 m (relief plus water; Lagos and Queens):
+
+  | cell | 512 MB | 1 GB | 2 GB | 4 GB |
+  |---|---|---|---|---|
+  | 0.5 m | 150 | 210 | 300 | 430 |
+  | 1 m | 430 | 500 | 500 | 500 |
+  | 2 m and up | 500 | 500 | 500 | 500 |
+
+  For an 8 m span (hilly ground) the 0.5 m sizes are 110, 160, 230 and 330 m, and 1 m reaches 330 m at 512 MB.
+  `memory.ts` (`fits`, `largestBox`) gives the same numbers for any grid.
+- **Limits:** the surface is single-valued in each column, so plunging jets and overturning are not modelled.
+  Each GPU submission is kept to about 0.25 s, because browsers reset a GPU that is busy for seconds. A laptop
+  GPU is several times slower than the RX 6800.
+
 ### The 3D map: model ground vs the terrain it is drawn on
 The solver's DEM uses EGM2008 heights; Cesium World Terrain uses ellipsoid heights. The geoid offset N is +22.0 to
 +22.6 m over Lagos and −23.3 to −22.9 m over Texas. `evals/validation/terrain_match.py` decodes the World Terrain mesh

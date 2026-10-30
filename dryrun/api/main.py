@@ -507,6 +507,50 @@ def patch3d_request(run_id: str, body: dict, request: Request):
     return JSONResponse(json.loads(man.model_dump_json()), status_code=202)
 
 
+@app.get("/api/runs/{run_id}/patch3d_inputs")
+def patch3d_inputs(run_id: str, lon: float, lat: float, request: Request, size_m: float = 200, cell_m: float = 2.0,
+                   t0: float | None = None, t1: float | None = None, dims_only: bool = False):
+    """Everything the in-browser (WebGPU) 3D patch solver needs for one box: geometry, the 2D side levels over
+    the window, the initial state and the 2D volume series (dryrun/patch3d/inputs.py). Built once per patch
+    (a few seconds), then served from the runs bucket. dims_only=1: just the grid (nx, ny, nz, cells), for the
+    browser's GPU-memory check before the download."""
+    from pydantic import ValidationError
+
+    from dryrun.patch3d import inputs as I
+
+    _check_run(run_id)
+    if not all(math.isfinite(x) for x in (lon, lat, size_m, cell_m)):
+        raise HTTPException(400, "lon, lat, size_m and cell_m must be finite")
+    try:
+        req = I.request(run_id, (lon, lat), size_m, cell_m,
+                        (t0, t1) if t0 is not None and t1 is not None else None)
+    except ValidationError as exc:
+        raise HTTPException(400, exc.errors()[0]["msg"]) from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    m = storage.load_run(run_id)
+    if m.status.value != "done":
+        raise HTTPException(409, f"run is {m.status.value}")
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if dims_only:
+        limit(request, "patch3d_dims", per_hour=120)
+        try:
+            return JSONResponse(I.dims(req), headers=headers)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+    try:
+        return Response(storage.read_run_file(run_id, I.rel(req)), media_type="application/json", headers=headers)
+    except Exception:  # noqa: BLE001 - not built yet
+        pass
+    limit(request, "patch3d_inputs", per_hour=30)
+    try:
+        body = json.dumps(I.build(req)).encode()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    storage.write_run_file(run_id, I.rel(req), body, "application/json")
+    return Response(body, media_type="application/json", headers=headers)
+
+
 @app.get("/api/runs/{run_id}/patch3d/{patch_id}/{name:path}")
 def patch3d_file(run_id: str, patch_id: str, name: str):
     """manifest.json, buildings.json or frames/NNNN_{surface,velocity}.png of a patch (302 to the bucket)."""
