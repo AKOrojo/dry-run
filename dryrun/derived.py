@@ -7,6 +7,9 @@ run_ids and the warmed runs stay valid. Nothing is added to RunManifest; the UI 
   arrival   minutes from storm start until a cell first reaches FLOODED_M (0.15 m)
   duration  minutes a cell spends at or above FLOODED_M
   velocity  depth-averaged flow (u east, v north, m/s) per frame on ~90 m blocks, PNG-encoded (.json manifest)
+  hazard    worst flood hazard class per cell over the run, H1-H6 (AIDR Guideline 7-3, depth x velocity)
+  building_loads  per-building peak flood load, drag plus unbalanced hydrostatic (ASCE 7-16 Table 6.10-1
+            drag coefficients), .json only
   events    key events with map points (first road cut, largest jump in cut roads, peak flooded area) and
             per named place: when 10 % of its land is wet, its first road cut, a label point (.json only)
 
@@ -34,7 +37,9 @@ from dryrun import storage
 from dryrun.sim import exposure
 
 MAPS = ("arrival", "duration")
-KINDS = MAPS + ("events", "velocity")  # every kind has a .json; MAPS also have a .png, velocity one per frame
+KINDS = MAPS + ("events", "velocity", "hazard", "building_loads")
+# every kind has a .json; MAPS and hazard also have a .png, velocity one per frame
+PNG_KINDS = MAPS + ("hazard",)
 HAZARD_RGB = (0xFF, 0x6B, 0x2C)
 LONG_RUN_MIN = 360  # runs longer than this (the Texas replay, 12 h) get wider bins
 
@@ -136,6 +141,7 @@ def legend(kind: str, edges: list[int], m) -> dict:
 
 EVENTS_REV = 2  # bump when events() changes: outputs are cached per run, so a new rev is a new object
 VELOCITY_REV = 1
+LOADS_REV = 1  # hazard and building_loads
 
 
 def rel(kind: str, ext: str) -> str:
@@ -145,6 +151,8 @@ def rel(kind: str, ext: str) -> str:
         return f"derived/events.v{EVENTS_REV}.json"
     if kind == "velocity":
         return f"derived/velocity.v{VELOCITY_REV}.json"
+    if kind in ("hazard", "building_loads"):
+        return f"derived/{kind}.v{LOADS_REV}.{ext}"
     return f"derived/{kind}.{ext}"
 
 
@@ -164,12 +172,15 @@ def derive(run_id: str) -> None:
                                "application/json")
     storage.write_run_file(run_id, rel("events", "json"), json.dumps(events(run_id)).encode(), "application/json")
     derive_velocity(run_id)
+    derive_loads(run_id)
 
 
 def derive_kind(run_id: str, kind: str) -> None:
-    """Write one missing kind (velocity alone is cheap to add to runs whose maps already exist)."""
+    """Write one missing kind (the later kinds are cheap to add to runs whose maps already exist)."""
     if kind == "velocity":
         derive_velocity(run_id)
+    elif kind in ("hazard", "building_loads"):
+        derive_loads(run_id)
     else:
         derive(run_id)
 
@@ -321,11 +332,51 @@ def series(run_id: str, lon: float, lat: float) -> dict:
         i = np.nonzero(d >= th)[0]
         return int(ts[i[0]]) if len(i) else None
 
+    u, v = _point_velocity(m, g, depth, row, col)
+    speed = np.hypot(u, v)
     return {"run_id": run_id, "lon": lon, "lat": lat, "cell": [row, col], "cell_center": _lonlat(g, row, col),
             "permanent_water": bool(_exclude(m)[row, col]),
             "t_s": ts.tolist(), "depth_m": np.round(d, 3).tolist(), "max_depth_m": round(float(d.max()), 3),
+            "u_m_s": np.round(u, 3).tolist(), "v_m_s": np.round(v, 3).tolist(),
+            "speed_m_s": np.round(speed, 3).tolist(), "max_speed_m_s": round(float(speed.max()), 3),
+            "hazard": [f"H{k}" if k else None for k in hazard_class(d, speed)],
+            "profile": velocity_profile(d, speed, ts, _inputs_for(m.run_id, m.scenario.model_dump_json()).manning[row, col]),
             "first_flooded_s": first(exposure.FLOODED_M), "first_impassable_s": first(exposure.PASSABLE_M),
             "threshold_m": {"flooded": exposure.FLOODED_M, "road_impassable": exposure.PASSABLE_M}}
+
+
+def _point_velocity(m, g, depth: np.ndarray, row: int, col: int) -> tuple[np.ndarray, np.ndarray]:
+    """u east, v north (m/s) at one cell for every frame, from a 3 x 3 patch (as velocity_frame, 1-cell blocks)."""
+    inp = _inputs_for(m.run_id, m.scenario.model_dump_json())
+    r0, r1, c0, c1 = max(row - 1, 0), min(row + 2, g.ny), max(col - 1, 0), min(col + 2, g.nx)
+    z = np.asarray(inp.dem, np.float64)[r0:r1, c0:c1]
+    n = np.asarray(inp.manning, np.float64)[r0:r1, c0:c1]
+    bnd = (np.zeros(z.shape, bool) if inp.boundary_mask is None
+           else np.asarray(inp.boundary_mask, bool)[r0:r1, c0:c1])
+    uv = [velocity_frame(f[r0:r1, c0:c1].astype(np.float64), z, n, bnd, g.dx_m, g.dy_m, 1) for f in depth]
+    return np.array([a[row - r0, col - c0] for a, _, _ in uv]), np.array([b[row - r0, col - c0] for _, b, _ in uv])
+
+
+KAPPA = 0.41  # von Karman
+
+
+def velocity_profile(d: np.ndarray, speed: np.ndarray, ts: np.ndarray, n: float, points: int = 11) -> dict | None:
+    """Log-law vertical profile u(z) = (u*/kappa) ln(z/z0) at the frame of peak speed, scaled so its depth average
+    equals the depth-averaged speed: U = (u*/kappa)(ln(h/z0) - 1). z0 = ks/30 with ks from Manning-Strickler
+    (n = ks^(1/6) / 26). A reconstruction for display, not a 3D result."""
+    if not len(speed) or speed.max() <= 0:
+        return None
+    i = int(np.argmax(speed))
+    h, U = float(d[i]), float(speed[i])
+    z0 = min((26 * float(n)) ** 6 / 30, h / 100)  # Manning n carries form losses too: cap z0 for shallow flow
+    if h < VEL_WET_M or z0 <= 0:
+        return None
+    ustar = U * KAPPA / (np.log(h / z0) - 1)
+    z = np.linspace(z0 * np.e, h, points)  # from where the log law reaches ~ustar/kappa up to the surface
+    return {"t_s": float(ts[i]), "depth_m": round(h, 3), "mean_speed_m_s": round(U, 3),
+            "z_m": np.round(z, 3).tolist(), "speed_m_s": np.round(ustar / KAPPA * np.log(z / z0), 3).tolist(),
+            "surface_speed_m_s": round(float(ustar / KAPPA * np.log(h / z0)), 3), "z0_m": round(z0, 5),
+            "method": "log-law reconstruction from the depth-averaged speed (z0 from Manning n); not a 3D result"}
 
 
 def _trace(mask: np.ndarray) -> list[list[tuple[int, int]]]:
@@ -498,6 +549,152 @@ def derive_velocity(run_id: str) -> None:
     list(_IO.map(lambda iv: storage.write_run_file(run_id, velocity_rel(iv[0]), velocity_png(*iv[1], vmax), "image/png"),
                  enumerate(frames)))
     storage.write_run_file(run_id, rel("velocity", "json"), json.dumps(manifest).encode(), "application/json")
+
+
+# ------------------------------------------------------------------ hazard and building loads
+RHO = 1000.0  # kg/m3, fresh water
+# AIDR (2017) Australian Disaster Resilience Guideline 7-3, Flood Hazard, Table 2: class = first row whose
+# D*V, depth and velocity limits all hold
+HAZARD_LIMITS = [(0.3, 0.3, 2.0), (0.6, 0.5, 2.0), (0.6, 1.2, 2.0), (1.0, 2.0, 2.0), (4.0, 4.0, 4.0)]
+HAZARD_DESC = ["Generally safe for vehicles, people and buildings.",
+               "Unsafe for small vehicles.",
+               "Unsafe for vehicles, children and the elderly.",
+               "Unsafe for vehicles and people.",
+               "Unsafe for vehicles and people. All building types vulnerable to structural damage. Some less "
+               "robust building types vulnerable to failure.",
+               "Unsafe for vehicles and people. All building types considered vulnerable to failure."]
+HAZARD_ALPHAS = [0.0, 0.2, 0.36, 0.52, 0.76, 1.0]  # H1 transparent; same hazard hue as arrival/duration
+# ASCE 7-16 Table 6.10-1, drag coefficient for rectilinear structures vs width / inundation depth (interpolated)
+CD_TABLE = ([12, 16, 26, 36, 60, 100, 120], [1.25, 1.3, 1.4, 1.5, 1.75, 1.8, 2.0])
+_ANGLES = np.deg2rad(np.arange(0, 180, 15))  # flow directions for footprint widths
+
+
+def hazard_class(d: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """1..6 per cell (0 where dry, d < VEL_WET_M)."""
+    out = np.full(d.shape, 6, np.int8)
+    for k in range(len(HAZARD_LIMITS) - 1, -1, -1):
+        dv, dl, vl = HAZARD_LIMITS[k]
+        out = np.where((d * v <= dv) & (d <= dl) & (v <= vl), k + 1, out)
+    return np.where(d >= VEL_WET_M, out, 0).astype(np.int8)
+
+
+def drag_coefficient(b: np.ndarray, h: np.ndarray) -> np.ndarray:
+    return np.interp(b / np.maximum(h, 1e-6), *CD_TABLE)
+
+
+@lru_cache(maxsize=2)
+def footprint_widths(aoi_id: str) -> tuple[tuple[str, ...], np.ndarray]:
+    """(ids, widths[n, len(_ANGLES)]): each footprint's width across a flow heading along each angle (metres,
+    from the buildings_geojson polygons, local equirectangular)."""
+    gj = json.loads(storage.load_aoi_file(aoi_id, "buildings_geojson"))
+    ids, out = [], []
+    nrm = np.stack([-np.sin(_ANGLES), np.cos(_ANGLES)])  # unit normal to each flow heading (east, north)
+    for f in gj["features"]:
+        g = f["geometry"]
+        ring = np.asarray(g["coordinates"][0] if g["type"] == "Polygon" else g["coordinates"][0][0], float)
+        lat0 = np.deg2rad(ring[:, 1].mean())
+        xy = np.stack([ring[:, 0] * 111320 * np.cos(lat0), ring[:, 1] * 110540], 1)
+        p = xy @ nrm
+        ids.append(str(f["properties"]["id"]))
+        out.append(p.max(0) - p.min(0))
+    w = np.array(out)
+    w.setflags(write=False)
+    return tuple(ids), w
+
+
+def cell_velocity(run_id: str):
+    """(t_s, u[frames, ny, nx], v, depth float64) at model cells, as velocity_frame with 1-cell blocks."""
+    m = storage.load_run(run_id)
+    inp = _inputs_for(m.run_id, m.scenario.model_dump_json())
+    grid = storage.load_aoi(m.scenario.aoi_id).grid
+    ts, depth = stack(run_id)
+    z = np.asarray(inp.dem, np.float64)
+    n = np.asarray(inp.manning, np.float64)
+    bnd = (np.zeros(z.shape, bool) if inp.boundary_mask is None else np.asarray(inp.boundary_mask, bool))
+    uv = [velocity_frame(d.astype(np.float64), z, n, bnd, grid.dx_m, grid.dy_m, 1)[:2] for d in depth]
+    return ts, np.array([a for a, _ in uv], np.float32), np.array([b for _, b in uv], np.float32), depth
+
+
+def loads(run_id: str) -> tuple[np.ndarray, dict, dict]:
+    """(hazard class raster, hazard legend, building_loads) for a done run."""
+    m = storage.load_run(run_id)
+    aoi_id = m.scenario.aoi_id
+    excl = _exclude(m)
+    ts, u, v, depth = cell_velocity(run_id)
+    speed = np.hypot(u, v)
+    d = depth.astype(np.float32)
+    hz = np.where(excl, 0, hazard_class(d, speed).max(axis=0)).astype(np.int8)
+    land = ~excl
+    counts = {f"H{k}": int((hz[land] == k).sum()) for k in range(1, 7)}
+    legend = {"kind": "hazard", "rev": LOADS_REV, "classes": [
+        {"class": f"H{k + 1}", "description": HAZARD_DESC[k], "alpha": HAZARD_ALPHAS[k],
+         "limits": {"dv_m2_s": HAZARD_LIMITS[k][0], "depth_m": HAZARD_LIMITS[k][1], "velocity_m_s": HAZARD_LIMITS[k][2]}
+         if k < 5 else {"dv_m2_s_above": 4.0}} for k in range(6)],
+        "rgb": "#{:02X}{:02X}{:02X}".format(*HAZARD_RGB), "cells": counts,
+        "cell_area_km2": None, "wet_threshold_m": VEL_WET_M,
+        "source": "Australian Disaster Resilience Guideline 7-3 (AIDR 2017), Flood Hazard, Table 2",
+        "note": "worst class over the run; velocity estimated from the simulated water surface (see velocity.json); "
+                "permanent water is transparent"}
+    grid = storage.load_aoi(aoi_id).grid
+    legend["cell_area_km2"] = round(grid.dx_m * grid.dy_m / 1e6, 6)
+
+    # buildings: depth as the engine defines it (3 x 3 neighbourhood max), speed at the building's own cell
+    ids, rc = exposure.building_cells(aoi_id)
+    fids, widths = footprint_widths(aoi_id)
+    pos = {i: k for k, i in enumerate(fids)}
+    wi = np.array([pos.get(i, -1) for i in ids])
+    r, c = rc[:, 0], rc[:, 1]
+    hb = np.stack([exposure.neighbourhood_max(f)[r, c] for f in d])  # frames x buildings
+    ub, vb = u[:, r, c], v[:, r, c]
+    sb = np.hypot(ub, vb)
+    # width across the flow heading of each frame; median width where the footprint is missing
+    head = np.mod(np.arctan2(vb, ub), np.pi)
+    ai = np.rint(head / (np.pi / len(_ANGLES))).astype(int) % len(_ANGLES)
+    fallback = float(np.median(widths)) if len(widths) else 10.0
+    b = np.where(wi[None, :] >= 0, widths[np.maximum(wi, 0)[None, :], ai], fallback)
+    cd = drag_coefficient(b, hb)
+    drag = 0.5 * RHO * cd * b * hb * sb ** 2 / 1000  # kN, ASCE 7-16 6.10.2 / FEMA P-646 form
+    hydro = 0.5 * RHO * 9.81 * hb ** 2 * b / 1000  # kN, unbalanced: water outside only
+    total = drag + hydro
+    k = np.argmax(total, axis=0)
+    j = np.arange(len(ids))
+    pick = (total[k, j] > 0) & (hb[k, j] >= exposure.FLOODED_M)
+    sel = np.nonzero(pick)[0]
+    bl = {"kind": "building_loads", "rev": LOADS_REV, "n_buildings": len(ids), "n_loaded": int(len(sel)),
+          "ids": [ids[i] for i in sel],
+          "t_s": [float(ts[k[i]]) for i in sel],
+          "depth_m": np.round(hb[k[sel], sel], 2).tolist(),
+          "speed_m_s": np.round(sb[k[sel], sel], 2).tolist(),
+          "width_m": np.round(b[k[sel], sel], 1).tolist(),
+          "cd": np.round(cd[k[sel], sel], 2).tolist(),
+          "drag_kN": np.round(drag[k[sel], sel], 2).tolist(),
+          "hydrostatic_kN": np.round(hydro[k[sel], sel], 1).tolist(),
+          "max_drag_kN": round(float(drag.max()), 1) if drag.size else 0.0,
+          "max_hydrostatic_kN": round(float(hydro.max()), 1) if hydro.size else 0.0,
+          "method": "at the frame with the largest total load per building (depth >= 0.15 m): drag "
+                    "0.5*rho*Cd*B*h*U^2 with Cd from ASCE 7-16 Table 6.10-1 (B/h), plus the lateral hydrostatic "
+                    "force 0.5*rho*g*h^2*B, which applies only while water stands on one side (it cancels once "
+                    "the building floods inside). h = the building's flood depth (max over its 3 x 3 cells), "
+                    "U = flow estimated from the simulated water surface at its cell, B = footprint width across "
+                    "the flow. Indicative screening values from 30 m model cells, not design loads."}
+    return hz, legend, bl
+
+
+def hazard_png(hz: np.ndarray) -> bytes:
+    rgba = np.zeros(hz.shape + (4,), np.uint8)
+    rgba[..., :3] = HAZARD_RGB
+    a = np.array([0.0] + HAZARD_ALPHAS)[hz]
+    rgba[..., 3] = np.round(a * 255).astype(np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(rgba, "RGBA").save(buf, "PNG", compress_level=6)
+    return buf.getvalue()
+
+
+def derive_loads(run_id: str) -> None:
+    hz, legend, bl = loads(run_id)
+    storage.write_run_file(run_id, rel("hazard", "png"), hazard_png(hz), "image/png")
+    storage.write_run_file(run_id, rel("building_loads", "json"), json.dumps(bl).encode(), "application/json")
+    storage.write_run_file(run_id, rel("hazard", "json"), json.dumps(legend).encode(), "application/json")
 
 
 def exists(run_id: str, kind: str) -> bool:

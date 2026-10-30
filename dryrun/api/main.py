@@ -332,14 +332,14 @@ def _inflows_geojson(m, raw: dict) -> dict:
 
 @app.get("/api/runs/{run_id}/derived/{name}")
 def derived_map(run_id: str, name: str, request: Request):
-    """arrival|duration .png|.json, events.json and velocity.json (the manifest), computed once from the stored
-    depth frames, then served from the runs bucket."""
+    """arrival|duration|hazard .png|.json, events.json, velocity.json (the manifest) and building_loads.json,
+    computed once from the stored depth frames, then served from the runs bucket."""
     from fastapi.responses import RedirectResponse
 
     from dryrun import derived
 
     kind, _, ext = name.partition(".")
-    if kind not in derived.KINDS or ext not in (("png", "json") if kind in derived.MAPS else ("json",)):
+    if kind not in derived.KINDS or ext not in (("png", "json") if kind in derived.PNG_KINDS else ("json",)):
         raise HTTPException(404, "unknown derived product")
     _check_run(run_id)
     if not derived.exists(run_id, kind):

@@ -373,6 +373,50 @@ def test_velocity_flows_downhill_and_route():
     assert c.get(f"/api/runs/{m.run_id}/derived/velocity/{len(m.frames)}").status_code == 404
 
 
+def test_hazard_loads_profile():
+    import json
+
+    import numpy as np
+    from fastapi.testclient import TestClient
+
+    from dryrun import derived
+    from dryrun.api.main import app
+
+    # AIDR 7-3 Table 2 rows
+    d = np.array([0.0, 0.2, 0.4, 1.0, 1.5, 3.0, 5.0, 0.3])
+    v = np.array([0.0, 1.0, 1.0, 0.5, 0.5, 1.0, 1.0, 2.5])
+    assert derived.hazard_class(d, v).tolist() == [0, 1, 2, 3, 4, 5, 6, 5]
+    assert derived.drag_coefficient(np.array([10.0, 16.0, 200.0]), np.ones(3)).tolist() == [1.25, 1.3, 2.0]
+    prof = derived.velocity_profile(np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([0, 600]), 0.03)
+    u = np.array(prof["speed_m_s"])
+    assert len(prof["z_m"]) == len(u) and prof["z_m"][-1] == 1.0
+    assert (np.diff(u) > 0).all() and prof["surface_speed_m_s"] > 1.0 > u[0]
+    # depth average of the log law (integrated from z0 to h) equals the depth-averaged speed, up to the z0/h term
+    zz = np.linspace(prof["z0_m"], 1.0, 200001)
+    ustar = 1.0 * derived.KAPPA / (np.log(1.0 / prof["z0_m"]) - 1)
+    assert abs(np.trapezoid(ustar / derived.KAPPA * np.log(zz / prof["z0_m"]), zz) - 1.0) < 5e-3
+
+    m = run_scenario(spec())
+    hz, legend, bl = derived.loads(m.run_id)
+    assert set(np.unique(hz)) <= set(range(7)) and len(legend["classes"]) == 6
+    n = bl["n_loaded"]
+    assert all(len(bl[k]) == n for k in ("ids", "t_s", "depth_m", "drag_kN", "hydrostatic_kN", "cd"))
+    assert all(x >= derived.exposure.FLOODED_M - 0.01 for x in bl["depth_m"])
+    # hydrostatic matches its formula for each loaded building
+    for h, b, f in zip(bl["depth_m"], bl["width_m"], bl["hydrostatic_kN"]):
+        assert abs(0.5 * 1000 * 9.81 * h * h * b / 1000 - f) <= 0.05 * f + 0.2
+    c = TestClient(app)
+    for name in ("hazard.png", "hazard.json", "building_loads.json"):
+        r = c.get(f"/api/runs/{m.run_id}/derived/{name}", follow_redirects=False)
+        assert r.status_code == 302 and r.headers["location"].endswith(derived.rel(*name.split(".")))
+    assert c.get(f"/api/runs/{m.run_id}/derived/building_loads.png").status_code == 404
+    assert json.loads(storage.read_run_file(m.run_id, derived.rel("hazard", "json")))["classes"][0]["class"] == "H1"
+    g = storage.load_aoi(m.scenario.aoi_id).grid
+    w, s_, e, n_ = g.bounds_wgs84
+    se = derived.series(m.run_id, (w + e) / 2, (s_ + n_) / 2)
+    assert len(se["speed_m_s"]) == len(se["hazard"]) == len(se["t_s"])
+
+
 def test_events_series_boundary():
     import numpy as np
 
