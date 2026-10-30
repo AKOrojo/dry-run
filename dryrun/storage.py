@@ -125,7 +125,8 @@ def write_aoi_file(aoi_id: str, rel: str, data: bytes, content_type="application
 
 # -------------------------------------------------------------------- runs
 def run_exists(run_id: str) -> bool:
-    return _exists("runs", f"{run_id}/manifest.json")
+    # A cached finished run exists by definition: skips a GCS object check on every hover request.
+    return run_id in _DONE_RUNS or _exists("runs", f"{run_id}/manifest.json")
 
 
 _DONE_RUNS: dict[str, RunManifest] = {}  # finished runs never change (content-addressed), so cache them

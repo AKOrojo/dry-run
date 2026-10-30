@@ -112,4 +112,5 @@ def test_done_runs_are_cached_and_running_ones_are_not(tmp_path, monkeypatch):
     assert "r_00000000000000aa" in storage._DONE_RUNS
     (tmp_path / "r_00000000000000aa" / "manifest.json").unlink()  # served from memory now
     assert storage.load_run("r_00000000000000aa").status.value == "done"
+    assert storage.run_exists("r_00000000000000aa")
     storage._DONE_RUNS.clear()
