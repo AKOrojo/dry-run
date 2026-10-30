@@ -1,7 +1,7 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Clock, CloudRain, Crosshair, Play, Ruler, TrendUp, Waves, X } from "@phosphor-icons/react";
+import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
@@ -15,7 +15,7 @@ import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
-import { Card, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, Segmented, TextAction } from "./rev5";
+import { Card, CardLock, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 import { Notice } from "./Notice";
 import { Button } from "./ds";
@@ -303,7 +303,19 @@ export type ScenarioProps = {
   /** null = Normal (no tide intervention), otherwise the boundary level in metres. */
   level: number | null; onLevel: (v: number | null) => void;
   coastal: boolean; busy: boolean; canRun: boolean; onSimulate: () => void; err: Failure | null;
+  sim: SimBar; onStop: () => void; onClear: () => void;
+  /** A run is on the map (Simulate, a link, a replay or the agent) and nothing is running: Clear simulation shows. */
+  canClear: boolean;
 };
+
+/** What the Simulate bar shows (board 8): before (cached or live), running, or done. */
+export type SimBar =
+  | { state: "checking" }
+  | { state: "cached" }
+  | { state: "live"; estS: number | null }
+  | { state: "running"; elapsedS: number; estS: number | null; fraction: number; simT: number; tEnd: number; measured: boolean;
+      frames: [number, number] | null; queued: boolean }
+  | { state: "done"; tookS: number | null };
 
 function StormCard(p: ScenarioProps) {
   const r = useRain();
@@ -389,16 +401,85 @@ function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onL
   );
 }
 
-function SimulateBar({ busy, canRun, onSimulate }: Pick<ScenarioProps, "busy" | "canRun" | "onSimulate">) {
+/** "2 min 40 s", "40 s". */
+export const minSec = (s: number) => {
+  const t = Math.max(0, Math.round(s)), m = Math.floor(t / 60);
+  return m ? `${m} min${t % 60 ? ` ${t % 60} s` : ""}` : `${t} s`;
+};
+/** "1:14". */
+const clock = (s: number) => { const t = Math.max(0, Math.round(s)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+
+const simCard: CSSProperties = { display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", background: "var(--surface)",
+  border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", flex: "none" };
+const btn: CSSProperties = { height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "0 12px",
+  borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13, whiteSpace: "nowrap" };
+const icon15 = { size: 15, weight: "bold" as const, "aria-hidden": true, style: { flex: "none" } };
+
+function SimulateButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
-    <div data-tour="simulate" style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", flex: "none" }}>
-      <span style={{ color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>2D solver · about 40 s, or instant if cached</span>
-      <button type="button" disabled={busy || !canRun} onClick={onSimulate}
-        style={{ marginLeft: "auto", height: 34, padding: "0 16px", display: "flex", alignItems: "center", gap: 8, opacity: busy || !canRun ? 0.6 : 1,
-          background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)",
-          borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)", font: "inherit", fontWeight: 600 }}>
-        <Play size={14} weight="bold" />{busy ? "Simulating" : "Simulate"}
-      </button>
+    <button type="button" disabled={disabled} onClick={onClick}
+      style={{ ...btn, opacity: disabled ? 0.6 : 1, fontWeight: 600, color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)",
+        background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)" }}>
+      <Play size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Simulate
+    </button>
+  );
+}
+
+function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear }: Pick<ScenarioProps, "sim" | "busy" | "canRun" | "canClear" | "onSimulate" | "onStop" | "onClear">) {
+  const box = useRef<HTMLDivElement>(null);
+  const running = sim.state === "running";
+  // The running card is taller than the bar; keep Stop and the progress in view.
+  const grown = running && sim.fraction > 0;
+  useEffect(() => { if (running) box.current?.scrollIntoView({ block: "nearest" }); }, [running, grown]);
+  if (sim.state === "running") {
+    const est = sim.estS != null && sim.estS > 0 ? ` of about ${clock(sim.estS)}` : "";
+    const model = `Model time ${sim.measured ? "" : "≈"}${fmtT(sim.simT)} of ${fmtT(sim.tEnd)}${sim.frames ? ` · frame ${sim.frames[0]} of ${sim.frames[1]}` : ""}`;
+    return (
+      <div ref={box} data-tour="simulate" role="status" aria-live="polite" style={simCard}>
+        <div data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Spinner {...icon15} color="var(--depth-3)" />
+          <span style={{ fontWeight: 600 }}>{sim.queued ? "Waiting for the same run" : "Simulating live"}</span>
+          <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{clock(sim.elapsedS)}{est}</span>
+        </div>
+        <span role="progressbar" aria-label="Simulation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sim.fraction * 100)}
+          style={{ position: "relative", display: "block", height: 8, borderRadius: "var(--radius-pill)", background: "var(--ground)", boxShadow: "var(--inset-shadow)", overflow: "hidden" }}>
+          <span style={{ position: "absolute", inset: `0 ${(100 - Math.min(1, Math.max(0, sim.fraction)) * 100).toFixed(1)}% 0 0`, background: "var(--depth-3)",
+            borderRadius: "var(--radius-pill)", transition: "inset 0.8s linear" }} />
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)", fontSize: 12, ...FIG }}>
+          <span>{model}</span>
+          <span style={{ marginLeft: "auto" }}>
+            <button type="button" onClick={onStop} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Stop</button>
+          </span>
+        </div>
+        <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>
+          Not cached: this storm runs on the 30 m solver now. Changing the area stops it.
+        </p>
+      </div>
+    );
+  }
+  const off = busy || !canRun;
+  return (
+    <div ref={box} data-tour="simulate" style={simCard}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, rowGap: 8 }}>
+        {sim.state === "done" ? (
+          <span data-tour="sim-status" style={{ fontSize: 12, color: "var(--ink-muted)", whiteSpace: "nowrap" }}>{sim.tookS == null ? "Opened from cache" : `Simulated · ${minSec(sim.tookS)}`}</span>
+        ) : (
+          <span data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, lineHeight: "16px" }}>
+            {sim.state === "cached" ? <CheckCircle {...icon15} color="var(--depth-3)" /> : <Clock {...icon15} color="var(--ink-muted)" />}
+            {sim.state === "cached" && <span><b>Cached.</b> Opens instantly.</span>}
+            {sim.state === "live" && <span><b>Runs live,</b>{sim.estS != null ? ` about ${minSec(sim.estS)}.` : " time unknown."} Cached runs open instantly.</span>}
+            {sim.state === "checking" && <span style={{ color: "var(--ink-muted)" }}>Checking the cache…</span>}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          {(sim.state === "done" || canClear) && (
+            <button type="button" onClick={onClear} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Broom size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Clear simulation</button>
+          )}
+          <SimulateButton disabled={off} onClick={onSimulate} />
+        </span>
+      </div>
     </div>
   );
 }
@@ -450,6 +531,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     wasCloseup.current = closeup;
   }, [closeup]);
   const { t_s } = useClock();
+  const locked = scenario.busy || scenario.sim.state === "running";
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
@@ -460,11 +542,15 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
-            <StormCard {...scenario} />
-            <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard /></div>
+            <CardLock.Provider value={locked ? "Locked while simulating" : null}><StormCard {...scenario} /></CardLock.Provider>
+            <CardLock.Provider value={locked ? "Locked" : null}>
+              <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard /></div>
+            </CardLock.Provider>
             <RainPreviewCard />
-            {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} aoiId={aoi?.aoi_id} />}
-            <SimulateBar busy={scenario.busy} canRun={scenario.canRun} onSimulate={scenario.onSimulate} />
+            <CardLock.Provider value={locked ? "Locked" : null}>
+              {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} aoiId={aoi?.aoi_id} />}
+            </CardLock.Provider>
+            <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
             {scenario.err && (
               <Notice message={scenario.err.message}>
                 {scenario.err.retryable && <Button disabled={scenario.busy} onClick={scenario.onSimulate}>Retry</Button>}

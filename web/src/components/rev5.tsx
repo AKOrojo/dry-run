@@ -1,6 +1,6 @@
 // Rev 5 building blocks (ported from docs/design/rev5-ref/parts.py; same inline style values).
-import type { CSSProperties, ReactNode } from "react";
-import { Barricade, Drop, CloudSlash, TrafficCone, Waves } from "@phosphor-icons/react";
+import { createContext, useContext, type CSSProperties, type ReactNode } from "react";
+import { Barricade, Drop, CloudSlash, Lock, TrafficCone, Waves } from "@phosphor-icons/react";
 
 export const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 export const mono = "var(--font-mono)";
@@ -47,11 +47,20 @@ export function Band({ title, right, extra }: { title: string; right?: ReactNode
   );
 }
 
+/** A band label ("Locked while simulating") that locks every Card under it: inputs dimmed and not focusable. */
+export const CardLock = createContext<string | null>(null);
+
 export function Card({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
+  const lock = useContext(CardLock);
   return (
-    <section style={{ display: "flex", flexDirection: "column", flex: "none", background: "var(--surface)", border: "1px solid var(--hairline)",
-      borderRadius: 6, boxShadow: "var(--card-shadow)", overflow: "hidden" }}>
-      <Band title={title} right={right} />{children}
+    <section {...(lock ? { inert: "" } : {})} style={{ position: "relative", display: "flex", flexDirection: "column", flex: "none", background: "var(--surface)",
+      border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", overflow: "hidden" }}>
+      <Band title={title} right={lock ? (
+        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12 }}>
+          <Lock size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />{lock}
+        </span>
+      ) : right} />{children}
+      {lock && <div aria-hidden="true" style={{ position: "absolute", inset: "37px 0 0 0", background: "color-mix(in srgb, var(--surface) 45%, transparent)" }} />}
     </section>
   );
 }

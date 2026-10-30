@@ -8,6 +8,7 @@ import type { Anchors } from "./Anchored";
 import { compassOf, effectiveCentre, isCell, metresBetween, offsetLL, rain, setRain, trackEnds, useRain } from "../lib/rain";
 import type { LonLat } from "../lib/rain";
 import type { Storm } from "../lib/api";
+import { sim } from "../lib/simstate";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const card: CSSProperties = {
@@ -160,7 +161,7 @@ export function RainMap({ viewer, scene, anchors, basemap, opacity, hasRun, stor
       const { x, y } = local(e);
       const moved = Math.hypot(x - down.x, y - down.y) > 4;
       down = null;
-      if (moved) return;
+      if (moved || sim.get().running) return;  // the rain area is locked while a run is going
       const st = rain.get();
       const click = st.picking === "centre" || (st.picking === null && st.mode === "cell" && st.visible && !hasRun);
       if (st.picking !== "polygon" && !click) return;
@@ -170,7 +171,7 @@ export function RainMap({ viewer, scene, anchors, basemap, opacity, hasRun, stor
       else setRain({ center: clampTo(p, st.bounds), picking: null });
     };
     const onDbl = () => {
-      if (rain.get().picking !== "polygon") return;
+      if (rain.get().picking !== "polygon" || sim.get().running) return;
       const cur = draftRef.current;
       finish(cur.length >= 4 ? cur.slice(0, -1) : cur);  // the second click of the double-click added a duplicate vertex
     };
@@ -184,7 +185,7 @@ export function RainMap({ viewer, scene, anchors, basemap, opacity, hasRun, stor
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       const picking = rain.get().picking;
-      if (!picking) return;
+      if (!picking || sim.get().running) return;
       if (e.key === "Escape") setRain({ picking: null });
       else if (picking === "polygon" && e.key === "Enter") { e.preventDefault(); finish(draftRef.current); }
       else if (picking === "polygon" && e.key === "Backspace") { e.preventDefault(); setDraft((p) => p.slice(0, -1)); }
@@ -204,6 +205,7 @@ export function RainMap({ viewer, scene, anchors, basemap, opacity, hasRun, stor
   };
   const drag = (e: RPointerEvent<HTMLElement>, onMove: (p: LonLat) => void) => {
     e.stopPropagation(); e.preventDefault();
+    if (sim.get().running) return;  // locked while simulating, like the Rain area card
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => { const p = pickAt(ev.clientX, ev.clientY); if (p) onMove(p); };

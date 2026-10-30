@@ -1,7 +1,8 @@
 // Twin UI shell (rev 5 frame). Top bar, map + dock on the left, sidebar on the right.
 // Flow: load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
+import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate, estimateSim, simulateStream, cancelSim } from "./lib/api";
+import type { ScenarioSpec, SimEstimate, SimProgress } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
@@ -18,6 +19,7 @@ import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
+import type { SimBar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
 import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
 import type { RainState } from "./lib/rain";
@@ -66,6 +68,13 @@ export default function App() {
   const [level, setLevel] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [simErr, setSimErr] = useState<Failure | null>(null);
+  // Simulate flow (board 8): the estimate for the scenario as set, the live run, and the last run Simulate made.
+  const [est, setEst] = useState<SimEstimate | "failed" | null>(null);
+  const [live, setLive] = useState<{ startedAt: number; estS: number | null; tEnd: number; intervalS: number; framesTotal: number; prog: SimProgress | null } | null>(null);
+  const [lastSim, setLastSim] = useState<{ run_id: string; tookS: number | null } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const simAbort = useRef<AbortController>();
+  const simJob = useRef<{ id: string; token: string }>();
   const [replayed, setReplayed] = useState(false);
   const [mode, setMode] = useState<Mode>("Scenario");
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
@@ -154,7 +163,7 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => { stop(); setEst(null); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {
     const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
@@ -173,22 +182,102 @@ export default function App() {
     return "Image saved";
   };
 
-  const go = async () => {
+  const interventionsNow: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
+  const specNow: ScenarioSpec | null = aoi && rainReady
+    ? { aoi_id: aoi.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions: interventionsNow } : null;
+  const specKey = specNow ? JSON.stringify(specNow) : "";
+  // Cached or live, and how long, for the scenario as it stands (debounced; free on the server).
+  useEffect(() => {
+    setEst(null);
+    if (!specNow) return;
+    const ac = new AbortController();
+    const t = setTimeout(() => estimateSim(specNow, ac.signal).then(setEst, () => { if (!ac.signal.aborted) setEst("failed"); }), 400);
+    return () => { clearTimeout(t); ac.abort(); };
+  }, [specKey]);
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [!!live]);
+
+  const go = async (retry = false) => {
+    if (!specNow) return;
+    simAbort.current?.abort();
+    const ac = new AbortController();
+    simAbort.current = ac;
     setBusy(true); setSimErr(null);
-    setSim({ running: true, startedAt: Date.now(), estS: 40, progress: null, modelT: null, storm: buildStorm(rain, durationH, pattern, spatial) });
-    const interventions: Intervention[] = level == null ? [] : [{ type: "tide", boundary_level_m: level }];
+    const t0 = Date.now();
+    let cached = false, again = false;
+    // The map's clouds and the dock's Rain now panel follow this store (Eng B, lib/simstate.ts).
+    patchRain({ picking: null });  // a half-drawn area or centre pick ends: the rain area locks now
+    setSim({ running: true, startedAt: t0, estS: est && est !== "failed" ? est.est_s : null, progress: null, modelT: null, storm: specNow.storm });
     try {
-      const m = await simulate({ aoi_id: aoi!.aoi_id, storm: buildStorm(rain, durationH, pattern, spatial), interventions });
-      justSimulated.current = m.run_id;
-      patchRain({ lastSimKey: stormNow });
-      setRun(m);
-      addRun(m);
-      startClock(m);
+      for await (const e of simulateStream(specNow, ac.signal)) {
+        if (e.kind === "started") {
+          cached = e.data.cached;
+          simJob.current = { id: e.data.job_id, token: e.data.cancel_token };
+          setSim({ estS: e.data.est_s });
+          // A cached run opens at once: no progress card, no flash.
+          if (!cached) { setNow(Date.now()); setLive({ startedAt: t0, estS: e.data.est_s, tEnd: e.data.t_end_s, intervalS: e.data.output_interval_s, framesTotal: e.data.frames_total, prog: null }); }
+        } else if (e.kind === "progress") {
+          setLive((l) => l && { ...l, prog: e.data });
+          setSim({ progress: e.data.fraction, modelT: e.data.sim_t_s });
+        } else if (e.kind === "done") {
+          const m = e.data.manifest;
+          justSimulated.current = m.run_id;
+          patchRain({ lastSimKey: stormNow });
+          setRun(m);
+          addRun(m);
+          startClock(m);
+          setLastSim({ run_id: m.run_id, tookS: cached ? null : (Date.now() - t0) / 1000 });
+          setEst((x) => (x && x !== "failed" && x.run_id === m.run_id ? { ...x, cached: true, status: "done", est_s: 0 } : x));
+        } else if (e.kind === "cancelled") {
+          // Not our Stop (that aborts first): another viewer's cancel, or a press that joined a job being stopped. Once more.
+          if (retry) setSimErr({ message: "This run was stopped on the server. Try again.", retryable: true });
+          else again = true;
+        } else if (e.kind === "error") {
+          setSimErr({ message: e.data.message, retryable: e.data.retryable });
+        }
+      }
     } catch (e) {
-      setSimErr(e instanceof ApiError ? { message: e.message, retryable: e.retryable }
-        : { message: "The server is busy. Try again.", retryable: true });
-    } finally { setBusy(false); resetSim(); }
+      if (!ac.signal.aborted) {
+        setSimErr(e instanceof ApiError ? { message: e.message, retryable: e.retryable }
+          : { message: "The server is busy. Try again.", retryable: true });
+      }
+    } finally {
+      if (simAbort.current === ac) { simAbort.current = undefined; simJob.current = undefined; setBusy(false); setLive(null); resetSim(); }
+    }
+    if (again && !ac.signal.aborted) go(true);
   };
+  /** Stop: cancel the job by id (Cloud Run's front end keeps the stream open upstream, so an abort alone does not reach
+   *  the server), then close the stream; the inputs unlock at once. */
+  const stop = () => {
+    if (simJob.current) cancelSim(simJob.current.id, simJob.current.token);
+    simJob.current = undefined;
+    simAbort.current?.abort();
+  };
+  /** Clear simulation: back to the scenario before any run (map, timeline and charts empty). */
+  const clearSim = () => {
+    setRun(undefined); setLastSim(null); setSimErr(null);
+    patchRain({ lastSimKey: null });
+    clock.set({ t_s: 0, max_s: 0, playing: false });
+    // A shared or copied link puts the run in the address bar; drop it so a reload does not bring the run back.
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("run") || u.searchParams.has("t")) {
+      u.searchParams.delete("run"); u.searchParams.delete("t");
+      window.history.replaceState(null, "", u.toString());
+    }
+  };
+  const simBar: SimBar = live ? (() => {
+    const p = live.prog, simT = p?.sim_t_s ?? 0, tEnd = p?.t_end_s ?? live.tEnd;
+    return { state: "running" as const, elapsedS: (now - live.startedAt) / 1000,
+      estS: p?.eta_s != null ? p.elapsed_s + p.eta_s : live.estS, fraction: p?.fraction ?? 0, simT, tEnd,
+      measured: p?.measured ?? false, queued: p?.phase === "queued",
+      frames: [Math.min(live.framesTotal, Math.floor(simT / live.intervalS) + 1), live.framesTotal] as [number, number] };
+  })()
+    : lastSim && run?.run_id === lastSim.run_id && est && est !== "failed" && est.run_id === lastSim.run_id ? { state: "done", tookS: lastSim.tookS }
+    : est === "failed" ? { state: "live", estS: null }
+    : !est ? { state: "checking" } : est.cached ? { state: "cached" } : { state: "live", estS: est.est_s };
 
   // ---- Agent mode: the session's runs in the order the planner made them.
   const session = useMemo(() => deriveSession(agentEvents), [agentEvents]);
@@ -329,7 +418,7 @@ export default function App() {
           </>
         ) : undefined} scenario={{
           rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
-          coastal, busy, canRun: !!aoi && rainReady, onSimulate: go, err: simErr,
+          coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
         }} />
       </div>
       {tour && <Tour onClose={() => setTour(false)} />}

@@ -109,6 +109,56 @@ export const simulate = async (s: ScenarioSpec) => {
   }
   return j<RunManifest>(r);
 };
+/** POST /api/simulate/estimate (Eng D): cached or not, and the expected compute time before pressing Simulate. */
+export type SimEstimate = {
+  run_id: string; cached: boolean; status: "done" | "running" | "failed" | "none";
+  est_s: number | null; est_basis: "cached" | "speed_model" | "history" | null; t_end_s: number;
+  output_interval_s: number; frames_total: number;
+};
+export const estimateSim = (s: ScenarioSpec, signal?: AbortSignal) =>
+  fetch(`${API}/api/simulate/estimate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s), signal }).then(j<SimEstimate>);
+
+/** DELETE /api/simulate/jobs/{job_id}: Stop. keepalive so it still goes out when the page is changing area or closing.
+ *  404 (already ended, or on another instance) and 403 are ignored: there is nothing left to stop. */
+export const cancelSim = (jobId: string, token: string) =>
+  fetch(`${API}/api/simulate/jobs/${jobId}`, { method: "DELETE", headers: { "X-Cancel-Token": token }, keepalive: true }).catch(() => { /* best effort */ });
+
+export type SimProgress = {
+  phase: "queued" | "solving" | "saving" | "cancelling"; sim_t_s: number; t_end_s: number; fraction: number;
+  elapsed_s: number; eta_s: number | null; measured: boolean;
+};
+export type SimEvent =
+  | { kind: "started"; data: { job_id: string; cancel_token: string; run_id: string; cached: boolean; est_s: number | null; t_end_s: number;
+      output_interval_s: number; frames_total: number } }
+  | { kind: "progress"; data: SimProgress }
+  | { kind: "done"; data: { manifest: RunManifest } }
+  | { kind: "cancelled"; data: { reason: string } }
+  | { kind: "error"; data: { code: string; message: string; retryable: boolean } };
+
+/** POST /api/simulate/stream: a run with live progress. Stop is cancelSim() then aborting `signal`. A stream that ends without done, cancelled or error throws a retryable ApiError. */
+export async function* simulateStream(s: ScenarioSpec, signal: AbortSignal): AsyncGenerator<SimEvent> {
+  const r = await fetch(`${API}/api/simulate/stream`, { method: "POST", headers: JSONH(), body: JSON.stringify(s), signal });
+  if (!r.ok) throw await apiError(r);
+  if (!r.body) throw new ApiError("The server is busy. Try again.", 0, "stream_closed", true);
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", ended = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, i).replace(/^data: /, "");
+      buf = buf.slice(i + 2);
+      if (!chunk.trim()) continue;
+      const e = JSON.parse(chunk) as SimEvent;
+      if (e.kind === "done" || e.kind === "cancelled" || e.kind === "error") ended = true;
+      yield e;
+    }
+  }
+  if (!ended) throw new ApiError("The connection to the simulation dropped. Try again.", 0, "stream_closed", true);
+}
 export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
   fetch(`${API}/api/aoi/${aoiId}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
 export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
