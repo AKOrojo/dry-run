@@ -405,3 +405,31 @@ def test_replay_needs_no_judge_key_and_only_serves_recordings(monkeypatch):
     assert ok.status_code == 200 and '"replay":true' in ok.text and '"kind":"done"' in ok.text
     assert missing.status_code == 404
     assert listed == [{k: REC[k] for k in ("question", "aoi_id", "provider", "model", "recorded_at")}]
+
+
+def test_tool_results_carry_budget(monkeypatch):
+    monkeypatch.setattr(loop.tools, "_cached", lambda spec: False)  # earlier tests may have cached these storms
+    prov = ScriptedProvider(tool="run_simulation", stop_after=2)
+    events = run_provider(monkeypatch, prov)
+    budgets = [e.data["budget"] for e in events if e.kind == "tool_result"]
+    assert [b["runs_used"] for b in budgets] == [1, 2]
+    assert all(b["runs_max"] == loop.tools.MAX_RUNS_PER_SESSION and b["deadline_s"] == loop.SESSION_DEADLINE_S
+               and 0 <= b["elapsed_s"] <= b["deadline_s"] for b in budgets)
+
+
+def test_aoi_info_tide_only_for_coastal(monkeypatch):
+    from dryrun.agent import tools
+
+    tide = tools.aoi_info(fixtures.AOI_ID)["tide"]  # the fixture has a lagoon boundary_mask
+    assert tide["default_level_m"] == tools.DEFAULT_TIDE_M and tide["preset_levels_m"] == list(tools.TIDE_PRESETS_M)
+    m = storage.load_aoi(fixtures.AOI_ID)
+    inland = m.model_copy(update={"layers": {k: v for k, v in m.layers.items() if k != "boundary_mask"}})
+    monkeypatch.setattr(tools.storage, "load_aoi", lambda aoi_id: inland)
+    assert "tide" not in tools.aoi_info(fixtures.AOI_ID)
+    river = m.model_copy(update={"layers": {**m.layers, "inflows": "inflows.json"}})
+    monkeypatch.setattr(tools.storage, "load_aoi", lambda aoi_id: river)
+    assert "tide" not in tools.aoi_info(fixtures.AOI_ID)
+
+
+def test_system_prompt_rules_out_wind_and_storm_centre():
+    assert "no wind, storm centre" in loop.SYSTEM and not any(ch.isdigit() for ch in loop.SYSTEM)

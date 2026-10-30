@@ -39,7 +39,10 @@ city-wide new drainage, never as a local fix.
 Leave storm pattern, sim_hours and output_interval_min at their defaults unless the user asks for them.
 Study area: {aoi_id}. Call get_aoi_info first and reuse its place polygons; never invent coordinates.
 If get_aoi_info has has_river_inflows, gauged river inflows are built into every run and cannot be changed;
-tide is for coastal areas only. Its "presets" are scenarios already run: when one answers part of the question,
+tide is for coastal areas only: there get_aoi_info has a "tide" entry, whose levels are assumptions, not forecasts;
+say so when you use one. Rain falls evenly over the whole study area: there is no wind, storm centre or rain
+footprint. If asked for one, say the simulator cannot do it; never imitate it with other inputs.
+get_aoi_info's "presets" are scenarios already run: when one answers part of the question,
 pass it to run_simulation verbatim and it returns instantly. Presets are a speed path, not a menu: if the user
 asks for a different storm, place or intervention, run exactly what they asked, never the nearest preset.
 If a tool result has a "warning", fix the scenario rather than reporting its numbers.
@@ -106,7 +109,8 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
         return
     session = tools.Session()
     aoi_id = aoi_id or os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")
-    deadline = time.time() + SESSION_DEADLINE_S
+    start = time.time()
+    deadline = start + SESSION_DEADLINE_S
     dispatched = 0
     msgs: list[dict] = [{"role": "system", "content": SYSTEM.format(aoi_id=aoi_id)},
                         {"role": "user", "content": question}]
@@ -147,7 +151,9 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
                     result = tools.dispatch(c.name, c.arguments, session)
                 except Exception as exc:  # noqa: BLE001 - feed errors back so the model can recover
                     result = {"error": repr(exc)}
-            yield AgentEvent(kind="tool_result", data={"name": c.name, "result": result})
+            budget = {"runs_used": session.runs, "runs_max": tools.MAX_RUNS_PER_SESSION,
+                      "elapsed_s": round(time.time() - start, 1), "deadline_s": SESSION_DEADLINE_S}
+            yield AgentEvent(kind="tool_result", data={"name": c.name, "result": result, "budget": budget})
             if c.name == "run_simulation" and result.get("status") == "done":
                 yield AgentEvent(kind="run_ready", data={"run_id": result["run_id"]})
             msgs.append({"role": "tool", "tool_call_id": c.id, "content": json.dumps(result)})

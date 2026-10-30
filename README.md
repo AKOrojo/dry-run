@@ -239,3 +239,6 @@ is the team's scaffold (data contracts, placeholder backends, deploy scripts), w
 own feasibility plan on Oct 27 2026 with AI assistance, reviewed by the team, and committed the
 next morning. Everything after it is day-by-day work by the four of us, with AI assistance noted
 in the commit body where it did the bulk of the writing.
+
+The map interaction and layout borrow ideas from FireTrace (interaction and layout ideas only; no code,
+assets or data from it are used).

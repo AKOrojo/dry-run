@@ -286,26 +286,46 @@ def aoi_vector_layer(aoi_id: str, layer: str):
     _check_aoi(aoi_id)
     """Vector layers for the globe. Large footprint sets may instead be served gzipped from the
     public bucket or Cesium ion (see doc 04)."""
-    if layer not in {"buildings_geojson", "shelters", "places"}:
+    if layer not in {"buildings_geojson", "shelters", "places", "inflows"}:
         raise HTTPException(404, "not a public vector layer")
     m = storage.load_aoi(aoi_id)
     rel = m.layers.get(layer)
+    if layer == "inflows" and rel:
+        return Response(json.dumps(_inflows_geojson(m, json.loads(storage.load_aoi_file(aoi_id, layer)))),
+                        media_type="application/geo+json", headers={"Cache-Control": "public, max-age=3600"})
     if not rel or not rel.endswith(".geojson"):
         raise HTTPException(404, f"{layer} has no GeoJSON form for this AOI")
     return Response(storage.load_aoi_file(aoi_id, layer), media_type="application/geo+json",
                     headers={"Cache-Control": "public, max-age=3600"})
 
 
+def _inflows_geojson(m, raw: dict) -> dict:
+    """River sources as points: the mean centre of each source's entry cells, plus its gauge hydrograph
+    ([t_s, m3/s] from t0_utc) for the UI's sparkline. Cell (r, c) spans [r, r+1) x [c, c+1) from the NW corner."""
+    w, s_, e, n = m.grid.bounds_wgs84
+    feats = []
+    for src in raw.get("sources", []):
+        rows, cols = zip(*src["cells"])
+        lon = w + (sum(cols) / len(cols) + 0.5) / m.grid.nx * (e - w)
+        lat = n - (sum(rows) / len(rows) + 0.5) / m.grid.ny * (n - s_)
+        feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(lon, 6), round(lat, 6)]},
+                      "properties": {"name": src["name"], "gauges": sorted(src.get("gauges", {})),
+                                     "hydrograph": src["hydrograph"], "units": "m3/s"}})
+    return {"type": "FeatureCollection", "features": feats,
+            "properties": {"t0_utc": raw.get("t0_utc"), "note": raw.get("note", "")}}
+
+
 @app.get("/api/runs/{run_id}/derived/{name}")
 def derived_map(run_id: str, name: str, request: Request):
-    """arrival|duration .png|.json, computed once from the stored depth frames, then served from the runs bucket."""
+    """arrival|duration .png|.json and events.json, computed once from the stored depth frames, then served from
+    the runs bucket."""
     from fastapi.responses import RedirectResponse
 
     from dryrun import derived
 
     kind, _, ext = name.partition(".")
-    if kind not in derived.KINDS or ext not in ("png", "json"):
-        raise HTTPException(404, "unknown derived map")
+    if kind not in derived.KINDS or ext not in (("png", "json") if kind in derived.MAPS else ("json",)):
+        raise HTTPException(404, "unknown derived product")
     _check_run(run_id)
     if not derived.exists(run_id, kind):
         m = storage.load_run(run_id)
@@ -314,6 +334,35 @@ def derived_map(run_id: str, name: str, request: Request):
         limit(request, "derive", per_hour=120)
         derived.derive(run_id)
     return RedirectResponse(storage.public_run_url(run_id, derived.rel(kind, ext)), status_code=302)
+
+
+@app.get("/api/runs/{run_id}/series")
+def depth_series(run_id: str, lon: float, lat: float, request: Request):
+    """Depth at one cell for every frame (hover, click-to-pin): the run's frame stack is cached per instance."""
+    from dryrun import derived
+
+    if not (math.isfinite(lon) and math.isfinite(lat)):
+        raise HTTPException(400, "lon/lat must be finite")
+    _check_run(run_id)
+    m = storage.load_run(run_id)
+    if m.status.value != "done" or not m.frames:
+        raise HTTPException(409, f"run is {m.status.value}")
+    limit(request, "series", per_hour=3600)
+    try:
+        body = derived.series(run_id, lon, lat)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return JSONResponse(body, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/api/aoi/{aoi_id}/boundary.geojson")
+def boundary_layer(aoi_id: str):
+    """Lagoon/sea outline from boundary_mask (empty for inland AOIs)."""
+    from dryrun import derived
+
+    _check_aoi(aoi_id)
+    return Response(derived.boundary_geojson(aoi_id), media_type="application/geo+json",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/api/compare", response_model=CompareResult)

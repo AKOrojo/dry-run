@@ -18,6 +18,7 @@ from dryrun import presets, storage
 from dryrun.contracts import COMPARE_FIELDS, CompareResult, RouteRequest, RunStats, ScenarioSpec
 from dryrun.routing.evac import route
 from dryrun.sim.engine import area_stats, run_scenario, validate
+from dryrun.sim.solver import DEFAULT_TIDE_M
 
 _LONLAT = {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2,
            "description": "[lon, lat] in degrees"}
@@ -56,6 +57,8 @@ _SCENARIO = {
     "required": ["aoi_id", "storm"],
 }
 
+# The UI's lagoon/sea level presets (rev 5 catalogue); unset tide means DEFAULT_TIDE_M.
+TIDE_PRESETS_M = (0.5, 1.0, 1.5)
 MAX_RUNS_PER_SESSION = 4  # warm prod solver runs take ~35 s; 4 + model turns fit SESSION_DEADLINE_S
 
 TOOL_SPECS = [
@@ -132,6 +135,10 @@ def aoi_info(aoi_id: str) -> dict:
     out = {"aoi_id": aoi_id, "name": m.name, "bounds_wgs84": m.grid.bounds_wgs84,
            "is_synthetic": m.is_synthetic, "has_river_inflows": "inflows" in m.layers, "places": [], "shelters": []}
     out["presets"] = presets.scenarios(aoi_id)
+    # Coastal = held open water and no river inflows (Texas's few boundary cells are river/lake, not a sea).
+    if "boundary_mask" in m.layers and not out["has_river_inflows"]:
+        out["tide"] = {"default_level_m": DEFAULT_TIDE_M, "preset_levels_m": list(TIDE_PRESETS_M),
+                       "note": "assumed lagoon/sea level, not a forecast"}
     if "places" in m.layers:
         for f in json.loads(storage.load_aoi_file(aoi_id, "places"))["features"]:
             if f["geometry"]["type"] != "Polygon":
