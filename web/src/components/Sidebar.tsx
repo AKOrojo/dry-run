@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Clock, CloudRain, Play, Ruler, TrendUp, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
-import { LayerKey, layerStore, useLayers } from "../lib/layers";
+import { LayerKey, setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
 import { useClock } from "../lib/clock";
 import { Card, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, Segmented, srOnly, TextAction } from "./rev5";
@@ -63,22 +63,23 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
 ];
 
 function LayersCard() {
-  const { layers, imageryMode } = useLayers();
+  const lay = useLayers();
+  const imageryMode = lay.imageryMode;
   return (
     <section style={{ display: "flex", flexDirection: "column", flex: "none", padding: "4px 0", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
       {ROWS.map((r) => {
-        const { on, opacity } = layers[r.key];
+        const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
           <label key={r.key} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
-            <input type="checkbox" checked={on} onChange={(e) => layerStore.setOn(r.key, e.target.checked)} style={srOnly} />
+            <input type="checkbox" checked={on} onChange={(e) => setLayer(r.key, { on: e.target.checked })} style={srOnly} />
             <Checkbox on={on} />
             <span style={{ display: "flex", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {r.slider ? (
                 <>
-                  <MiniSlider pct={pct} label={`${r.name} opacity`} onChange={(p) => layerStore.setOpacity(r.key, p / 100)} />
+                  <MiniSlider pct={pct} label={`${r.name} opacity`} onChange={(p) => setLayer(r.key, { opacity: p / 100 })} />
                   <span style={{ width: 34, textAlign: "right", fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{pct}%</span>
                 </>
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
@@ -91,7 +92,7 @@ function LayersCard() {
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["colour", "greyscale"] as const).map((m) => {
             const on = imageryMode === m;
-            return <button key={m} type="button" aria-pressed={on} onClick={() => layerStore.setImageryMode(m)}
+            return <button key={m} type="button" aria-pressed={on} onClick={() => setImageryMode(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
               {m === "colour" ? "Colour" : "Greyscale"}</button>;
           })}
@@ -119,11 +120,11 @@ const coord = (lat: number, lon: number) => `${Math.abs(lat).toFixed(5)}° ${lat
 
 function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   const i = useInspect();
-  const empty = i.lon == null || i.lat == null;
+  const empty = i == null;
   const vd = { borderLeft: "1px solid var(--hairline)" };
   return (
     <Card title="At the cursor" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>Hover · <span style={FIG}>{fmtT(tS)}</span></span>}>
-      {empty ? (
+      {i == null ? (
         <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>Hover the map</p>
       ) : (
         <>
@@ -134,7 +135,7 @@ function CursorCard({ tS, passM }: { tS: number; passM: number }) {
             <div style={vd}><Metric Ic={Clock} label="Impassable" value={i.impassable_t != null ? fmtT(i.impassable_t) : "Never"} sub={`≥ ${passM.toFixed(2)} m`} /></div>
           </div>
           <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
-            Street cell at <span style={{ fontFamily: mono, fontSize: 11 }}>{coord(i.lat!, i.lon!)}</span>.
+            Street cell at <span style={{ fontFamily: mono, fontSize: 11 }}>{coord(i.lat, i.lon)}</span>.
           </p>
         </>
       )}

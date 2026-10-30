@@ -1,18 +1,20 @@
-// Values under the map cursor. The map (MapStage) fills this; the Inspect tab reads it.
+// The map point under the cursor (or pinned). Written by the map stage, read by the sidebar.
 import { useSyncExternalStore } from "react";
 
 export type Inspect = {
-  lon: number | null; lat: number | null; depth_m: number | null; max_m: number | null;
+  lon: number; lat: number; depth_m: number; max_m: number;
   wet_t: number | null; impassable_t: number | null;
-};
-const EMPTY: Inspect = { lon: null, lat: null, depth_m: null, max_m: null, wet_t: null, impassable_t: null };
-let state: Inspect = EMPTY;
+} | null;
+
+let state: Inspect = null;
 const subs = new Set<() => void>();
 
 export const inspect = {
   get: () => state,
-  set: (p: Partial<Inspect>) => { state = { ...state, ...p }; subs.forEach((f) => f()); },
-  clear: () => { state = EMPTY; subs.forEach((f) => f()); },
-  subscribe: (f: () => void) => { subs.add(f); return () => subs.delete(f); },
+  subscribe: (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; },
 };
 export const useInspect = () => useSyncExternalStore(inspect.subscribe, inspect.get);
+export function setInspect(next: Inspect) {
+  state = next;
+  subs.forEach((f) => f());
+}
