@@ -57,11 +57,9 @@ export default function App() {
     } finally { setBusy(false); }
   };
 
-  const frameUrl = useMemo(() => {
-    if (!run?.frames.length) return undefined;
-    const f = run.frames.reduce((a, b) => (Math.abs(b.t_s - t_s) < Math.abs(a.t_s - t_s) ? b : a));
-    return runFileUrl(runsBase, run.run_id, f.png);
-  }, [run, t_s, runsBase]);
+  // Every frame of the run, preloaded by the Globe; the clock only picks which one shows.
+  const frames = useMemo(() => run?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, run.run_id, f.png) })),
+    [run, runsBase]);
 
   // Timeline markers: where the cut-edge count rises, and the frame with the largest flooded area.
   const markers = useMemo(() => {
@@ -89,11 +87,11 @@ export default function App() {
   return (
     <div className="dr-app body">
       <div className="dr-map">
-        {aoi && <Globe aoi={aoi} frameUrl={frameUrl} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl}
+        {aoi && <Globe aoi={aoi} frames={frames} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl}
           buildingDepthsUrl={run?.building_depths ? runFileUrl(runsBase, run.run_id, run.building_depths) : undefined}
           onBuildingsStatus={setBuildingsStatus} />}
         <div className="dr-badges">
-          {frameUrl && <ProvenanceBadge kind={run?.backend === "fake" ? "placeholder" : "simulated"} />}
+          {!!frames?.length && <ProvenanceBadge kind={run?.backend === "fake" ? "placeholder" : "simulated"} />}
           {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
           {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
         </div>

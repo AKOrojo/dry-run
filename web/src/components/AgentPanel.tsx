@@ -7,8 +7,9 @@ import { Button, ClaimItem, ProvenanceBadge } from "./ds";
 
 // Friendly tool-trace labels; unknown names fall back to the raw name (kept in the title for audit).
 const TOOL_LABEL: Record<string, string> = {
-  simulate: "Ran a simulation", get_stats: "Read stats", area_stats: "Read stats",
-  compare: "Compared two runs", route: "Checked a route",
+  get_aoi_info: "Read the study area", run_simulation: "Ran a simulation", get_run_stats: "Read run stats",
+  get_area_stats: "Read stats for a place", compare_runs: "Compared two runs", compute_route: "Checked a route",
+  surrogate_sweep: "Swept scenarios (surrogate)",
 };
 
 // Server error codes (dryrun/api/errors.py) that the fake agent sidesteps.
