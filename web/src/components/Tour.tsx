@@ -18,7 +18,7 @@ const STEPS = [
   { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
   { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
-  { id: "agent", title: "Ask the planning agent", body: "Give it a goal and it runs scenarios and writes a brief you can check." },
+  { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
 ] as const;
 
 export function tourDone(): boolean {

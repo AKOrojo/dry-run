@@ -20,7 +20,8 @@ export type Pattern = "uniform" | "front_loaded" | "center_peaked";
 export type Failure = { message: string; retryable: boolean };
 const TABS = ["Layers", "Inspect", "Scenario", "Sources"] as const;
 const COMPARE_TABS = ["Compare", "Inspect", "Sources"] as const;
-type Tab = (typeof TABS)[number] | "Compare";
+const AGENT_TABS = ["Layers", "Inspect", "Agent", "Sources"] as const;
+type Tab = (typeof TABS)[number] | "Compare" | "Agent";
 
 function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTab: (t: Tab) => void }) {
   return (
@@ -344,22 +345,24 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources, compare, onScenario }: {
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false }: {
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
   /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
   compare?: ReactNode; onScenario?: () => void;
+  /** Agent mode: the Agent tab's content. It stays mounted on other tabs so a running session keeps streaming. */
+  agent?: ReactNode; agentMode?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Scenario");
   const comparing = compare != null;
-  useEffect(() => setTab(comparing ? "Compare" : "Scenario"), [comparing]);
+  useEffect(() => setTab(comparing ? "Compare" : agentMode ? "Agent" : "Scenario"), [comparing, agentMode]);
   const { t_s } = useClock();
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
-      <Tabs tabs={comparing ? COMPARE_TABS : TABS} active={tab} onTab={setTab} />
+      <Tabs tabs={comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS} active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
         {tab === "Layers" && <LayersCard />}
-        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={comparing && onScenario ? onScenario : () => setTab("Scenario")} /></>}
+        {tab === "Inspect" && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} /></>}
         {tab === "Scenario" && (
           <>
             <StormCard {...scenario} />
@@ -373,6 +376,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario }: {
           </>
         )}
         {tab === "Compare" && compare}
+        {agent && <div style={{ display: agentMode && tab === "Agent" ? "flex" : "none", flexDirection: "column", gap: 10, flexGrow: 1 }}>{agent}</div>}
         {tab === "Sources" && <SourcesCard sources={sources} />}
       </div>
     </aside>

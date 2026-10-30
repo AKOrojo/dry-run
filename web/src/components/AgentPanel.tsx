@@ -1,6 +1,7 @@
 // Agent panel (rev5 restyle: docs/design/rev5-ref/Agent.dc.html). Four states: Ask, Working, Brief, Replay and failure.
 // Unverified claims render greyed with a warning: the fail-closed rule is visible to judges.
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ClockCounterClockwise, Copy, Key, PaperPlaneTilt, Columns, Flask, ArrowClockwise, Sparkle, Stop } from "@phosphor-icons/react";
 import { ApiError, askAgent, AgentEvent, getJudgeKey, getReplays, Replay, setJudgeKey } from "../lib/api";
 import { Notice } from "./Notice";
@@ -23,8 +24,12 @@ const CSS = `@keyframes dr-spin{to{transform:rotate(360deg)}}@keyframes dr-indet
 const inputBox = { background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
   boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit" } as const;
 
-export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, judgeKeyRequired = false }:
+export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defaultProvider, aoiId, judgeKeyRequired = false }:
   { onRun: (runId: string) => void; onAoi?: (aoiId: string) => void; onReplay?: (replayed: boolean) => void;
+    /** The session's events so far (Agent mode's runs card, dock charts and log read them). */
+    onEvents?: (events: AgentEvent[]) => void;
+    /** Shown under the brief (the per-run bars for the studied place). */
+    briefExtra?: ReactNode;
     defaultProvider: string; aoiId?: string; judgeKeyRequired?: boolean }) {
   const [q, setQ] = useState("");
   const [provider, setProvider] = useState(defaultProvider);
@@ -32,6 +37,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
   const liveProv = provider === "fake" || provider === "replay" ? (defaultProvider === "fake" || defaultProvider === "replay" ? "meta" : defaultProvider) : provider;
   const mode: Mode = provider === "replay" ? "replay" : provider === "fake" ? "fake" : "live";
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  useEffect(() => { onEvents?.(events); }, [events]);
   const [ts, setTs] = useState<number[]>([]);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
@@ -167,7 +173,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, defaultProvider, aoiId, jud
           </Card>
         </>
       )}
-      {brief && <><BriefCard brief={brief} /><ClaimsCard brief={brief} /></>}
+      {brief && <><BriefCard brief={brief} />{briefExtra}<ClaimsCard brief={brief} /></>}
       {err && (
         <Card title="Live model" right={<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--hazard)" }}>
           <Dot color="var(--hazard)" />{wait > 0 ? "Rate-limited" : "Unavailable"}</span>}>

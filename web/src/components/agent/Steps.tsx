@@ -4,7 +4,7 @@ import type { AgentEvent } from "../../lib/api";
 import { FIG, mono } from "../rev5";
 import { Badge } from "./bits";
 
-const TOOLS: Record<string, { Icon: typeof Info; label: string }> = {
+export const TOOLS: Record<string, { Icon: typeof Info; label: string }> = {
   get_aoi_info: { Icon: Info, label: "Read the study area" },
   run_simulation: { Icon: Play, label: "Ran a simulation" },
   get_run_stats: { Icon: ChartBar, label: "Read run stats" },

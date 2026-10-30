@@ -1,7 +1,7 @@
 // Twin UI shell (rev 5 frame). Top bar, map + dock on the left, sidebar on the right.
 // Flow: load AOI -> POST /api/simulate -> show frame for current clock time -> scrub timeline.
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
+import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
@@ -9,6 +9,7 @@ import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
 import type * as Cesium from "cesium";
+import { AgentDock, AgentMapOverlay, BriefPlaceBars, deriveSession, RunsCard, usePlaceStat } from "./components/AgentMode";
 import { ByPlace, CompareCard, CompareMapOverlay, CompareView, DeltaCard, SideGlobe, WaterBudgetCard, WhatChanges } from "./components/Compare";
 import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
@@ -44,7 +45,8 @@ export default function App() {
   const [simErr, setSimErr] = useState<Failure | null>(null);
   const [replayed, setReplayed] = useState(false);
   const [mode, setMode] = useState<Mode>("Scenario");
-  const [agentRuns, setAgentRuns] = useState(0);
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [agentShown, setAgentShown] = useState<{ id: string; picked: boolean }>();
   const [tour, setTour] = useState(false);
   // Finished runs this session (Scenario and Agent), newest first: the Compare choices.
   const [runs, setRuns] = useState<RunManifest[]>([]);
@@ -137,6 +139,13 @@ export default function App() {
     } finally { setBusy(false); }
   };
 
+  // ---- Agent mode: the session's runs in the order the planner made them.
+  const session = useMemo(() => deriveSession(agentEvents), [agentEvents]);
+  const agentList = useMemo(() => session.runIds.map((id) => runs.find((r) => r.run_id === id)).filter((m): m is RunManifest => !!m), [session, runs]);
+  const placeVals = usePlaceStat(session.place, session.runIds);
+  const showAgentRun = (m: RunManifest) => { setRun(m); startClock(m); setAgentShown({ id: m.run_id, picked: true }); };
+  const agentView = mode === "Agent" && agentList.length > 0;
+
   // ---- Compare: A defaults to the baseline of B's storm, B to the newest run that is not a baseline.
   const here = useMemo(() => runs.filter((r) => r.scenario.aoi_id === aoiId), [runs, aoiId]);
   const comparing = mode === "Compare";
@@ -196,7 +205,7 @@ export default function App() {
   return (
     <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
       <TopBar aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
-        mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={agentRuns} onTour={() => setTour(true)}
+        mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
         onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
@@ -209,27 +218,27 @@ export default function App() {
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
             </div>
           )}
+          {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
           {pair && <CompareMapOverlay a={pair.a} b={pair.b} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+        {view.timeline && (agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
           third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
-          note={pair ? "One clock drives A and B" : undefined} />}
+          note={pair ? "One clock drives A and B" : undefined} />)}
       </div>
-      {!view.sidebar ? null : mode === "Agent" ? (
-        <aside className="dr-panel">
-          <section className="dr-section">
-            <h2 className="label dr-section-title">Agent</h2>
-            <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired}
-              onReplay={setReplayed}
-              onRun={(id) => { setAgentRuns((n) => n + 1); setAgentIds((p) => new Set(p).add(id)); getRun(id).then((m) => { setRun(m); addRun(m); startClock(m); }); }} />
-          </section>
-        </aside>
-      ) : (
-        <Sidebar aoi={aoi} run={mapRun} sources={sources} onScenario={() => setMode("Scenario")} compare={comparing ? (
+      {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
+      <div style={{ display: view.sidebar ? "contents" : "none" }}>
+      <Sidebar aoi={aoi} run={mapRun} sources={sources} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
+          <>
+            {agentList.length > 0 && <RunsCard runs={agentList} shown={run?.run_id} recommended={session.recommended} onShow={showAgentRun} />}
+            <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onReplay={setReplayed} onEvents={setAgentEvents}
+              briefExtra={session.place && agentList.length > 1 ? <BriefPlaceBars place={session.place} runs={agentList} vals={placeVals} session={session} shown={run?.run_id} onShow={showAgentRun} /> : undefined}
+              onRun={(id) => { setAgentIds((p) => new Set(p).add(id)); getRun(id).then((m) => { setRun(m); addRun(m); startClock(m); setAgentShown((s) => (s?.id === id ? s : { id, picked: false })); }); }} />
+          </>
+        } compare={comparing ? (
           <>
             <CompareCard runs={here} a={cmp.a} b={cmp.b} busy={baseBusy} onScenario={() => setMode("Scenario")}
               onA={(a) => setCmp((c) => ({ ...c, a }))} onB={(b) => setCmp((c) => ({ ...c, b }))} onSwap={() => setCmp((c) => ({ a: c.b, b: c.a }))} />
@@ -239,7 +248,7 @@ export default function App() {
           rain, onRain: setRain, durationH, onDuration: setDurationH, pattern, onPattern: setPattern, level, onLevel: setLevel,
           coastal, busy, canRun: !!aoi, onSimulate: go, err: simErr,
         }} />
-      )}
+      </div>
       {tour && <Tour onClose={() => setTour(false)} />}
     </div>
   );

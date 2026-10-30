@@ -170,7 +170,7 @@ export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }
   const left = view === "Swipe" || view === "Side by side";
   return (
     <div ref={box} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} origin={origin(a)} style={{ top: 64, left: 64 }} />}
+      {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} origin={origin(a)} style={{ top: 84, left: 64 }} />}
       {(left || view === "B" || view === "Difference") && <RunTag l="B" m={b} origin={origin(b)} style={{ top: 64, right: 16 }} />}
       {view === "Swipe" && (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${100 * split}%`, width: 0, zIndex: 1 }}>
