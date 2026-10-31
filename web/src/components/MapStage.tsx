@@ -1184,7 +1184,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
-        {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} />}
+        {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} bounds={aoi?.grid.bounds_wgs84} />}
         {/* One bottom-left slot for every map legend, stacked so they never overlap. */}
         <div data-declutter-block style={{ position: "absolute", left: 16, bottom: viewState.coords ? 84 : 44, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
           {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}

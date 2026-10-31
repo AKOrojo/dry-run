@@ -110,13 +110,13 @@ export const getGoogleTilesKey = () =>
   fetch(`${API}/api/tiles/google-key`, { headers: { ...team(), ...judge() }, cache: "no-store" }).then(j<{ key: string }>).then((r) => r.key);
 /** Precomputed lagoon/sea level sensitivity for an AOI (404 where there is none). */
 export type LevelSensitivity = { storm: string; datum: string; note: string; rows: { level_m: number; run_id: string; flooded_km2: number; buildings: number }[] };
-export const getLevelSensitivity = (aoiId: string) => fetch(`${API}/api/aoi/${aoiId}/level_sensitivity`).then(j<LevelSensitivity>);
+export const getLevelSensitivity = (aoiId: string) => fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/level_sensitivity`).then(j<LevelSensitivity>);
 export const getConfig = () => fetch(`${API}/api/config`).then(j<{ runs_base: string; sim_backend: string; default_aoi: string; agent_provider: string; cesium_ion_token: string; sovereign_provider_available: boolean; buildings_url: string; judge_key_required?: boolean; google_tiles_available?: boolean;
   /** Old area id -> the published id that supersedes it (empty until a successor exists). */ aoi_successors?: Record<string, string> }>);
 export type Replay = { question: string; aoi_id: string; provider: string; model: string; recorded_at: string };
 export const getReplays = () => fetch(`${API}/api/replays`).then(j<Replay[]>);
 export const getAOIs = () => fetch(`${API}/api/aois`).then(j<{ aoi_id: string; name: string }[]>);
-export const getAOI = (id: string) => fetch(`${API}/api/aoi/${id}`).then(j<AOIManifest>);
+export const getAOI = (id: string) => fetch(`${API}/api/aoi/${encodeURIComponent(id)}`).then(j<AOIManifest>);
 export const simulate = async (s: ScenarioSpec) => {
   const post = () => fetch(`${API}/api/simulate`, { method: "POST", headers: JSONH(), body: JSON.stringify(s) });
   let r = await post();
@@ -183,10 +183,10 @@ export async function* simulateStream(s: ScenarioSpec, signal: AbortSignal): Asy
 }
 /** GET /api/aoi/{id}/presets: the area's warmed scenarios, verbatim (null where the server has none). */
 export const getPresets = (aoiId: string) =>
-  fetch(`${API}/api/aoi/${aoiId}/presets`).then((r) => (r.ok ? (r.json() as Promise<ScenarioSpec[]>) : null)).catch(() => null);
+  fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/presets`).then((r) => (r.ok ? (r.json() as Promise<ScenarioSpec[]>) : null)).catch(() => null);
 export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
-  fetch(`${API}/api/aoi/${aoiId}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
-export const getRun = (id: string) => fetch(`${API}/api/runs/${id}`).then(j<RunManifest>);
+  fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
+export const getRun = (id: string) => fetch(`${API}/api/runs/${encodeURIComponent(id)}`).then(j<RunManifest>);
 
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
 export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
@@ -251,9 +251,9 @@ async function optional<T>(url: string): Promise<T | null> {
   } catch { return null; }
 }
 
-export const getRunEvents = (runId: string) => optional<RunEvents>(`${API}/api/runs/${runId}/derived/events.json`);
-export const getBoundary = (aoiId: string) => optional<BoundaryCollection>(`${API}/api/aoi/${aoiId}/boundary.geojson`);
-export const getInflows = (aoiId: string) => optional<InflowCollection>(`${API}/api/aoi/${aoiId}/layer/inflows`);
+export const getRunEvents = (runId: string) => optional<RunEvents>(`${API}/api/runs/${encodeURIComponent(runId)}/derived/events.json`);
+export const getBoundary = (aoiId: string) => optional<BoundaryCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/boundary.geojson`);
+export const getInflows = (aoiId: string) => optional<InflowCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/layer/inflows`);
 
 /** Callers debounce hover by this much before asking for a series. */
 export const SERIES_DEBOUNCE_MS = 200;
@@ -263,7 +263,7 @@ export function getPointSeries(runId: string, lon: number, lat: number): Promise
   const lo = lon.toFixed(4), la = lat.toFixed(4), key = `${runId}|${lo}|${la}`;
   let p = seriesCache.get(key);
   if (!p) {
-    p = optional<PointSeries>(`${API}/api/runs/${runId}/series?lon=${lo}&lat=${la}`).then((s) => {
+    p = optional<PointSeries>(`${API}/api/runs/${encodeURIComponent(runId)}/series?lon=${lo}&lat=${la}`).then((s) => {
       if (!s) seriesCache.delete(key);
       return s;
     });
@@ -282,7 +282,7 @@ export type PointInfo = {
   is_synthetic: boolean;
 };
 export const getPointInfo = (aoiId: string, lon: number, lat: number) =>
-  optional<PointInfo>(`${API}/api/aoi/${aoiId}/point?lon=${lon.toFixed(5)}&lat=${lat.toFixed(5)}`);
+  optional<PointInfo>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/point?lon=${lon.toFixed(5)}&lat=${lat.toFixed(5)}`);
 /** A run's building_depths.json (max depth per building id) as a map. */
 export const getBuildingDepths = (url: string) => optional<{ ids: string[]; max_depth_m: number[] }>(url)
   .then((b) => (b ? new Map(b.ids.map((id, i) => [String(id), b.max_depth_m[i]])) : null));

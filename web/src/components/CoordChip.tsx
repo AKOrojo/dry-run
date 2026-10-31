@@ -59,7 +59,7 @@ export function parseLatLon(text: string): { lat: number; lon: number } | { erro
 
 const tray = { background: "var(--ground)", borderRadius: "var(--radius-md)", boxShadow: "var(--inset-shadow)" } as const;
 
-export function CoordChip({ viewer, scene, anchors, aoiId }: { viewer?: Cesium.Viewer; scene?: Cesium.Scene; anchors: React.MutableRefObject<Anchors>; aoiId?: string }) {
+export function CoordChip({ viewer, scene, anchors, aoiId, bounds }: { viewer?: Cesium.Viewer; scene?: Cesium.Scene; anchors: React.MutableRefObject<Anchors>; aoiId?: string; bounds?: number[] }) {
   const [fmt, setFmt] = useState<Fmt>(readFmt);
   const [at, setAt] = useState<{ lat: number; lon: number } | null>(null);
   const [ground, setGround] = useState<number | null>(null);
@@ -76,13 +76,15 @@ export function CoordChip({ viewer, scene, anchors, aoiId }: { viewer?: Cesium.V
   useEffect(() => { setAt(null); setMark(null); }, [aoiId]);
   // The 3D map's heights are ellipsoidal (tens of metres off sea level), so ground comes from the model's DEM once the pointer rests.
   useEffect(() => {
-    if (!at || !aoiId) { setGround(null); return; }
+    // Outside the model grid there is no DEM (the API answers 400), so ground is "–" without asking.
+    const out = bounds && (at ? at.lon < bounds[0] || at.lat < bounds[1] || at.lon > bounds[2] || at.lat > bounds[3] : false);
+    if (!at || !aoiId || out) { setGround(null); return; }
     let live = true;
     const id = window.setTimeout(() => {
       getPointInfo(aoiId, at.lon, at.lat).then((p) => { if (live) setGround(p ? p.ground_m : null); }).catch(() => { if (live) setGround(null); });
     }, 250);
     return () => { live = false; window.clearTimeout(id); };
-  }, [at?.lat, at?.lon, aoiId]);
+  }, [at?.lat, at?.lon, aoiId, bounds]);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;

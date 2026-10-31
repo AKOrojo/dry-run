@@ -7,6 +7,7 @@ import { getPresets } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
+import { resolveLink } from "./lib/link";
 import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib/view";
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
@@ -191,29 +192,24 @@ export default function App() {
   }, [runId]);
 
   const [linkNote, setLinkNote] = useState<string | null>(null);
+  // Set when the user picks an area: the link's (slower) answer must not override that choice.
+  const picked = useRef(false);
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
     getConfig().then(async (h) => {
       setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); setGoogleAvailable(!!h.google_tiles_available);
-      const m = shared.run ? await getRun(shared.run).catch(() => undefined) : undefined;
-      // An old area id with no run opens its successor (a new version of the same area); a run keeps the area it ran on.
-      const linked = shared.aoi && !m ? (h.aoi_successors?.[shared.aoi] ?? shared.aoi) : shared.aoi;
-      const want = m?.scenario.aoi_id ?? linked ?? h.default_aoi;
-      const a = await getAOI(want).catch(() => getAOI(h.default_aoi));
-      setAoi(a);
-      // A link whose run or area no longer exists: say so, and drop the dead ids so a reload or a copied link does not repeat it.
-      const runGone = !!shared.run && !m, aoiGone = !runGone && !!shared.aoi && a.aoi_id !== want;
-      if (runGone || aoiGone) {
-        setLinkNote(runGone ? "The shared run was not found" : "The shared area is not available");
-        const u = new URL(window.location.href);
-        ["run", "t", "aoi"].forEach((k) => u.searchParams.delete(k));
-        if (a.aoi_id !== h.default_aoi) u.searchParams.set("aoi", a.aoi_id);
-        window.history.replaceState(null, "", u.toString());
-      }
-      if (m?.status === "done" && m.scenario.aoi_id === a.aoi_id) {
-        const max_s = m.frames.at(-1)?.t_s ?? 0;
-        setRun(m);
-        clock.set({ t_s: Math.min(shared.t ?? 0, max_s), max_s, playing: false });
+      const r = await resolveLink(shared, { getRun, getAOI, defaultAoi: h.default_aoi, successors: h.aoi_successors, picked: () => picked.current });
+      if (!r) return;
+      setAoi(r.aoi);
+      // A dead run or area says so; the address bar keeps only what is shown (no dead ids, no stale area, a clamped time).
+      if (r.note) setLinkNote(r.note);
+      const u = new URL(window.location.href);
+      ["aoi", "run", "t"].forEach((k) => u.searchParams.delete(k));
+      Object.entries(r.query).forEach(([k, v]) => { if (v != null) u.searchParams.set(k, String(v)); });
+      if (u.toString() !== window.location.href) window.history.replaceState(null, "", u.toString());
+      if (r.run) {
+        setRun(r.run);
+        clock.set({ t_s: r.t ?? 0, max_s: r.run.frames.at(-1)?.t_s ?? 0, playing: false });
       }
     });
   }, []);
@@ -221,7 +217,14 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { stop(); setLinkNote(null); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => {
+    picked.current = true;
+    // The address bar follows the pick, so a reload does not reopen the link's run or area.
+    const u = new URL(window.location.href);
+    ["run", "t", "aoi"].forEach((k) => u.searchParams.delete(k));
+    u.searchParams.set("aoi", id);
+    window.history.replaceState(null, "", u.toString());
+    stop(); setLinkNote(null); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {
     const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
@@ -458,7 +461,7 @@ export default function App() {
 
   return (
     <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
-      <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
+      <TopBar rainText={rainSummary(rainState)} aois={aoi && aois.length && !aois.some((x) => x.aoi_id === aoi.aoi_id) ? [...aois, { aoi_id: aoi.aoi_id, name: `${aoi.name} (earlier version)` }] : aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
         mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
         onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">
