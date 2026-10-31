@@ -8,7 +8,8 @@ from dryrun.contracts import schemas as s
 OUT = Path("contracts/jsonschema")
 OUT.mkdir(parents=True, exist_ok=True)
 MODELS = [s.Patch3DRequest, s.Patch3DManifest, s.AOIManifest, s.ScenarioSpec, s.RunManifest, s.RunStats, s.CompareResult,
-          s.RouteRequest, s.RouteResult, s.AreaStats, s.Timeseries, s.DrainFill, s.Observation, s.Brief, s.AgentEvent]
+          s.RouteRequest, s.RouteResult, s.AreaStats, s.Timeseries, s.DrainFill, s.Observation, s.Brief, s.AgentEvent,
+          s.RenderRequest, s.RenderResult]
 
 
 def tuples_draft7(node):

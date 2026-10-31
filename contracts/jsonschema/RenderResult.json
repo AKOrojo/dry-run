@@ -1,0 +1,252 @@
+{
+  "$defs": {
+    "RenderImage": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "description": "WebP, labelled in the image itself with RENDER_LABEL and the depth",
+          "title": "Url",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "depth_m": {
+          "description": "the run's peak water depth in this grid cell (cell average)",
+          "title": "Depth M",
+          "type": "number"
+        },
+        "depth_text": {
+          "description": "the depth cue the image model was given, e.g. 'over the kerb'",
+          "title": "Depth Text",
+          "type": "string"
+        },
+        "picture_depth_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Muse Spark vision's estimate of the depth the picture actually shows (the image model tends to draw less water than asked)",
+          "title": "Picture Depth M"
+        },
+        "picture_matches": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "picture_depth_m within max(0.1 m, 35 %) of depth_m",
+          "title": "Picture Matches"
+        }
+      },
+      "required": [
+        "url",
+        "run_id",
+        "depth_m",
+        "depth_text"
+      ],
+      "title": "RenderImage",
+      "type": "object"
+    },
+    "RenderRequest": {
+      "additionalProperties": false,
+      "description": "POST /api/render: a ground-level picture of one street spot in two runs of the same storm (Muse Image).\nEach picture is asked for the run's peak depth in the grid cell holding `center`; the change is the difference\nbetween the two runs' scenarios. The deeper picture is generated from text and the other is an edit of it, so\nthe camera and buildings match. Additive in 0.8.0: run_ids and patch_ids are unchanged.",
+      "properties": {
+        "base_run_id": {
+          "description": "'before': the run without the change",
+          "pattern": "^r_[0-9a-f]{16}$",
+          "title": "Base Run Id",
+          "type": "string"
+        },
+        "alt_run_id": {
+          "description": "'after': the run with the change; same AOI and storm as base_run_id",
+          "pattern": "^r_[0-9a-f]{16}$",
+          "title": "Alt Run Id",
+          "type": "string"
+        },
+        "center": {
+          "description": "(lon, lat) of the street spot",
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Center",
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        "view": {
+          "default": "street",
+          "description": "street: eye level from the road; window: looking down from a first-floor window",
+          "enum": [
+            "street",
+            "window"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "provider": {
+          "default": "meta",
+          "description": "fake: offline placeholder pictures, no cost",
+          "enum": [
+            "meta",
+            "fake"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_run_id",
+        "alt_run_id",
+        "center"
+      ],
+      "title": "RenderRequest",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "render_id": {
+      "description": "cache key: same runs, grid cell, view, photo and provider = same pictures",
+      "title": "Render Id",
+      "type": "string"
+    },
+    "request": {
+      "$ref": "#/$defs/RenderRequest"
+    },
+    "aoi_id": {
+      "title": "Aoi Id",
+      "type": "string"
+    },
+    "cell": {
+      "description": "[row, col] of the grid cell the depths come from",
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Cell",
+      "type": "array",
+      "items": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "integer"
+        }
+      ],
+      "additionalItems": false
+    },
+    "place": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "named place holding or nearest to the spot",
+      "title": "Place"
+    },
+    "photo": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "URL of the uploaded street photo (EXIF stripped), when one was sent",
+      "title": "Photo"
+    },
+    "before": {
+      "$ref": "#/$defs/RenderImage"
+    },
+    "after": {
+      "$ref": "#/$defs/RenderImage"
+    },
+    "changes_here": {
+      "description": "changes drawn at this spot",
+      "items": {
+        "type": "string"
+      },
+      "title": "Changes Here",
+      "type": "array"
+    },
+    "changes_elsewhere": {
+      "description": "changes in the alt run that are not at this spot (they still change the water here)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Changes Elsewhere",
+      "type": "array"
+    },
+    "source_photo": {
+      "enum": [
+        "generated",
+        "uploaded"
+      ],
+      "title": "Source Photo",
+      "type": "string"
+    },
+    "label": {
+      "default": "AI illustration, not a measurement",
+      "title": "Label",
+      "type": "string"
+    },
+    "model": {
+      "description": "muse-image-1.0, or fake",
+      "title": "Model",
+      "type": "string"
+    },
+    "prompts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "before / after instructions sent",
+      "title": "Prompts",
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "cached": {
+      "default": false,
+      "title": "Cached",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "render_id",
+    "request",
+    "aoi_id",
+    "cell",
+    "before",
+    "after",
+    "source_photo",
+    "model"
+  ],
+  "title": "RenderResult",
+  "type": "object"
+}

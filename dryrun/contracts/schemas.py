@@ -563,6 +563,56 @@ class Observation(_Base):
     sim_depth_m: float | None = Field(None, description="filled by backend for a given run_id")
 
 
+# ------------------------------------------------------------------------ Muse Image before/after
+
+RENDER_LABEL = "AI illustration, not a measurement"
+
+
+class RenderRequest(_Base):
+    """POST /api/render: a ground-level picture of one street spot in two runs of the same storm (Muse Image).
+    Each picture is asked for the run's peak depth in the grid cell holding `center`; the change is the difference
+    between the two runs' scenarios. The deeper picture is generated from text and the other is an edit of it, so
+    the camera and buildings match. Additive in 0.8.0: run_ids and patch_ids are unchanged."""
+
+    base_run_id: str = Field(pattern=r"^r_[0-9a-f]{16}$", description="'before': the run without the change")
+    alt_run_id: str = Field(pattern=r"^r_[0-9a-f]{16}$", description="'after': the run with the change; same AOI "
+                            "and storm as base_run_id")
+    center: tuple[float, float] = Field(description="(lon, lat) of the street spot")
+    view: Literal["street", "window"] = Field("street", description="street: eye level from the road; window: "
+                                              "looking down from a first-floor window")
+    provider: Literal["meta", "fake"] = Field("meta", description="fake: offline placeholder pictures, no cost")
+
+
+class RenderImage(_Base):
+    url: str = Field(description="WebP, labelled in the image itself with RENDER_LABEL and the depth")
+    run_id: str
+    depth_m: float = Field(description="the run's peak water depth in this grid cell (cell average)")
+    depth_text: str = Field(description="the depth cue the image model was given, e.g. 'over the kerb'")
+    picture_depth_m: float | None = Field(None, description="Muse Spark vision's estimate of the depth the picture "
+                                          "actually shows (the image model tends to draw less water than asked)")
+    picture_matches: bool | None = Field(None, description="picture_depth_m within max(0.1 m, 35 %) of depth_m")
+
+
+class RenderResult(_Base):
+    render_id: str = Field(description="cache key: same runs, grid cell, view, photo and provider = same pictures")
+    request: RenderRequest
+    aoi_id: str
+    cell: tuple[int, int] = Field(description="[row, col] of the grid cell the depths come from")
+    place: str | None = Field(None, description="named place holding or nearest to the spot")
+    photo: str | None = Field(None, description="URL of the uploaded street photo (EXIF stripped), when one was sent")
+    before: RenderImage
+    after: RenderImage
+    changes_here: list[str] = Field(default_factory=list, description="changes drawn at this spot")
+    changes_elsewhere: list[str] = Field(default_factory=list, description="changes in the alt run that are not "
+                                         "at this spot (they still change the water here)")
+    source_photo: Literal["generated", "uploaded"]
+    label: str = RENDER_LABEL
+    model: str = Field(description="muse-image-1.0, or fake")
+    prompts: dict[str, str] = Field(default_factory=dict, description="before / after instructions sent")
+    notes: list[str] = Field(default_factory=list)
+    cached: bool = False
+
+
 # ------------------------------------------------------------------------ Agent
 class Claim(_Base):
     """The model supplies text, unit, source_run_id and field. The VERIFIER looks the number up

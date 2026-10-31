@@ -14,6 +14,7 @@ Image (Muse Image edits; owner Eng B, Eng C reviews): street photo + "add bioswa
 
 import asyncio
 import json
+import logging
 import os
 from types import SimpleNamespace
 
@@ -172,5 +173,70 @@ async def relay_voice(client_ws) -> None:
             pass
 
 
-def render_intervention(photo: bytes, instruction: str) -> bytes:  # TODO Day 5 (owner: B; C reviews)
-    raise NotImplementedError
+IMAGE_SIZE = "1536x1024"  # sets the aspect ratio (3:2); Muse Image answers 1920 x 1280 WebP
+IMAGE_TIMEOUT_S = 180
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+
+class ImageRefused(Exception):
+    """Meta's content filter refused the instruction twice."""
+
+
+def _image_call(path: str, **kwargs) -> bytes:
+    """POST /v1/images/<path> with the Meta key; returns the first image's bytes. One retry on a content-filter
+    refusal: the filter is not deterministic (errors.content_filtered)."""
+    import base64
+
+    import httpx
+
+    from dryrun.api.errors import content_filtered
+    from dryrun.meta.providers import OpenAICompatProvider
+
+    provider = OpenAICompatProvider("meta")  # raises RuntimeError when META_API_KEY is unset
+    url = f"{provider.base_url.rstrip('/')}/images/{path}"
+    for _ in range(2):
+        r = httpx.post(url, timeout=IMAGE_TIMEOUT_S, headers={"Authorization": f"Bearer {provider.key}"}, **kwargs)
+        if not content_filtered(r):
+            break
+    else:
+        raise ImageRefused("the image model's content filter refused this instruction")
+    r.raise_for_status()
+    data = r.json()
+    # Proof-of-use log, one line per call, as for the chat providers.
+    logging.getLogger("dryrun.llm").info("image_call model=%s path=%s usage=%s", IMAGE_MODEL, path,
+                                         json.dumps(data.get("usage")))
+    item = data["data"][0]
+    if item.get("b64_json"):
+        return base64.b64decode(item["b64_json"])
+    url = str(item.get("url", ""))
+    if not url.startswith("https://"):
+        raise httpx.HTTPError("image model returned no image")
+    with httpx.stream("GET", url, timeout=60) as resp:  # Muse Image answers b64_json; a URL is the OpenAI fallback
+        resp.raise_for_status()
+        out = bytearray()
+        for chunk in resp.iter_bytes():
+            out += chunk
+            if len(out) > MAX_IMAGE_BYTES:
+                raise httpx.HTTPError("image model returned an oversized image")
+    return bytes(out)
+
+
+def generate_image(prompt: str) -> bytes:
+    """Muse Image text-to-image (POST /v1/images/generations)."""
+    return _image_call("generations", json={"model": IMAGE_MODEL, "prompt": prompt, "size": IMAGE_SIZE, "n": 1})
+
+
+def _mime(image: bytes) -> str:
+    """The edits endpoint rejects a part whose declared type does not match its bytes."""
+    if image[:4] == b"RIFF" and image[8:12] == b"WEBP":
+        return "image/webp"
+    if image[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return "image/jpeg"
+
+
+def render_intervention(photo: bytes, instruction: str) -> bytes:
+    """Muse Image edit (POST /v1/images/edits): the photo with only what the instruction names changed."""
+    mime = _mime(photo)
+    return _image_call("edits", data={"model": IMAGE_MODEL, "prompt": instruction, "size": IMAGE_SIZE, "n": "1"},
+                       files={"image": (f"photo.{mime.split('/')[1]}", photo, mime)})

@@ -546,6 +546,30 @@ predicted 23,488 for the baseline and 5,041 for the top candidate: absolute erro
 impacts are small. The pond polygon covers 4 building cells, so pond candidates report a small `buildings_in_ponds`.
 Only solver numbers are citable.
 
+### Before/after pictures (`dryrun/meta/render.py`, Muse Image)
+
+`POST /api/render` takes two runs of the same storm (`base_run_id`, `alt_run_id`) and a street spot, and returns a
+ground-level picture of that spot in each run, labelled in the image as "AI illustration, not a measurement" with
+the run's depth. Each picture is asked for that run's peak water depth in the spot's grid cell (a cell average:
+31 m in Lagos, 15 m in Queens). The changes between the two runs that cover the spot are drawn, such as a rain
+garden, a rebuilt drain or catch basins welling up. Changes elsewhere are listed but not drawn. With no photo, the
+street is generated from the map layers (place, road, building density, nearby drains), so it is a typical street
+there, not a photo of the spot. An uploaded photo is used instead when given. Uploads go through the paid path only:
+the photo is decoded, capped, stripped of EXIF and GPS, and every person SAM 3.1 finds is blurred before it is stored
+(private) or sent to the image model. If the check fails, the photo is not used.
+
+How the pictures are made, and why:
+- Meta's content filter refuses most edits that add deep water to a picture. It passes text-to-image at the same
+  depth, and edits that take water away. So the deeper picture is generated from text, and the other picture is an
+  edit of it with less water. Starting both from one picture keeps the camera and buildings the same.
+- Muse Image draws less water than asked: at 57-80 cm it draws about 25-35 cm. Muse Spark vision (the citizen-photo
+  depth estimator) reads each finished picture. The result reports `picture_depth_m` beside the run's `depth_m`, and
+  a note says when they disagree. The run's number is always written on the picture.
+- Pictures are cached by `render_id` (the runs, the grid cell, the view, the photo and the provider). A replay, or a
+  second click in the same cell, costs nothing and needs no key. Identical requests in flight share one render. A new render makes two image calls and two vision
+  calls, so it needs the judge or team key, counts against the per-IP cap (20/h) and the daily cap
+  (`DRYRUN_RENDER_PER_DAY`, 100), and takes about 50-75 s. `provider: "fake"` draws offline placeholders for UI work.
+
 ## Provenance
 
 Everything in this repository was built for the hackathon and the git history is the record —
