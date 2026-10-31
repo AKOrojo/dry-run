@@ -12,8 +12,12 @@ import { depthByPlace, hyetograph, isCell, useRain } from "../lib/rain";
 import { RainNow } from "./RainNow";
 import { useWeatherSource } from "../lib/weather";
 import { useLayers } from "../lib/layers";
-import { LoadsPanel, ProfileDock } from "./FlowHazard";
-import { drainNote, drainSeries, SideSwitch, WaterWent } from "./Drainage";
+import { lazyNamed } from "../lib/lazy";
+const LoadsPanel = lazyNamed(() => import("./FlowHazard"), "LoadsPanel");
+const ProfileDock = lazyNamed(() => import("./FlowHazard"), "ProfileDock");
+import { drainNote, drainSeries } from "../lib/drainage";
+const SideSwitch = lazyNamed(() => import("./Drainage"), "SideSwitch");
+const WaterWent = lazyNamed(() => import("./Drainage"), "WaterWent");
 import { drainStats, FULL_PCT } from "../lib/drainage";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 

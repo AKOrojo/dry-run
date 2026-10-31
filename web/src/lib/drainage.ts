@@ -3,6 +3,7 @@
 // instant); any change sends the whole block.
 import { useSyncExternalStore } from "react";
 import { API, runFileUrl } from "./api";
+import { fmtT } from "../components/ds";
 import type { RunManifest } from "./api";
 import type { DrainageDefault } from "../contracts/gen/AOIManifest";
 import type { Drainage } from "../contracts/gen/ScenarioSpec";
@@ -136,4 +137,19 @@ export function drainStats(run?: RunManifest | null) {
     peakPct: s.drain_peak_full_pct ?? null, fullT: s.drain_full_t_s ?? null, overflowFrom: s.drain_surcharge_start_t_s ?? null, overflowTo: s.drain_surcharge_end_t_s ?? null,
     /** Rain applied to land: what the drains could take in. */ rainM3: (s.rain_volume_m3 as number | null | undefined) ?? null,
   };
+}
+
+// The dock's drain chart and timeline note (Dock.tsx), outside Drainage.tsx so they do not pull in its chunk.
+type TS = NonNullable<RunManifest["timeseries"]>;
+/** The drain series of a run, or null on a legacy run. */
+export const drainSeries = (ts?: TS | null) => (ts?.drain_full_pct && ts.drain_full_pct.length > 1 ? ts.drain_full_pct : null);
+
+/** The timeline band's note: "Drains full at T+01:30 · overflowing T+01:50–T+03:40", or undefined. */
+export function drainNote(run?: RunManifest | null): string | undefined {
+  const s = drainStats(run);
+  if (!s) return undefined;
+  const parts: string[] = [];
+  if (s.fullT != null) parts.push(`Drains full at ${fmtT(s.fullT)}`);
+  if (s.overflowFrom != null) parts.push(s.overflowTo != null ? `overflowing ${fmtT(s.overflowFrom)}–${fmtT(s.overflowTo)}` : `overflowing from ${fmtT(s.overflowFrom)}`);
+  return parts.length ? parts.join(" · ") : undefined;
 }

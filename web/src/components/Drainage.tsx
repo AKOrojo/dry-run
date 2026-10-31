@@ -531,20 +531,6 @@ export function DrainsLegend({ aoi, run, runsBase }: { aoi?: AOIManifest; run?: 
 }
 
 // ============================================================ dock
-type TS = NonNullable<RunManifest["timeseries"]>;
-/** The drain series of a run, or null on a legacy run. */
-export const drainSeries = (ts?: TS | null) => (ts?.drain_full_pct && ts.drain_full_pct.length > 1 ? ts.drain_full_pct : null);
-
-/** The timeline band's note: "Drains full at T+01:30 · overflowing T+01:50–T+03:40", or undefined. */
-export function drainNote(run?: RunManifest | null): string | undefined {
-  const s = drainStats(run);
-  if (!s) return undefined;
-  const parts: string[] = [];
-  if (s.fullT != null) parts.push(`Drains full at ${fmtT(s.fullT)}`);
-  if (s.overflowFrom != null) parts.push(s.overflowTo != null ? `overflowing ${fmtT(s.overflowFrom)}–${fmtT(s.overflowTo)}` : `overflowing from ${fmtT(s.overflowFrom)}`);
-  return parts.length ? parts.join(" · ") : undefined;
-}
-
 /** Cubic metres to two or three significant figures: "412,000 m³". */
 const m3 = (v: number) => { const r = v >= 10000 ? 1000 : v >= 100 ? 10 : 1; return `${(Math.round(v / r) * r).toLocaleString("en-US")} m³`; };
 

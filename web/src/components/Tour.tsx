@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "@phosphor-icons/react";
 import { Band } from "./rev5";
+import { markTourDone as markDone } from "../lib/tour";
 
-const DONE_KEY = "dr_tour_done";
 const CARD_W = 300;
 const GAP = 14;
 const PAD = 6;
@@ -37,15 +37,6 @@ const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d", "dr
 const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers" };
 const stepsOnPage = (): readonly Step[] => ALL_STEPS.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.id}"]`) || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)));
 
-export function tourDone(): boolean {
-  try { return localStorage.getItem(DONE_KEY) === "1"; } catch { return false; }
-}
-function markDone() {
-  try { localStorage.setItem(DONE_KEY, "1"); } catch { /* storage unavailable */ }
-}
-export function tourDisabled(): boolean {
-  try { return new URLSearchParams(window.location.search).get("notour") === "1"; } catch { return false; }
-}
 
 type Box = { left: number; top: number; width: number; height: number };
 const findTarget = (id: string): Box | null => {
