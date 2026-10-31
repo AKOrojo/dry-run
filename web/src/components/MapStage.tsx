@@ -598,18 +598,31 @@ function declutter(root: HTMLElement, phone = false) {
   const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);  // and the credits (an attribution requirement)
   const PAD = 3;
+  const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
+  const obstacles = kept.slice();
   for (const b of boxes) {
     const isPlace = "place" in b.el.dataset;
     const capped = phone && isPlace && places >= PHONE_PLACES;
     // A label the map's edge would cut (under the header, the player or the tab bar) is hidden, not clipped.
     const outside = b.r.right > edge.right + 1 || b.r.left < edge.left - 1 || b.r.top < edge.top - 1 || b.r.bottom > edge.bottom + 1;
-    const hit = capped || outside || !!b.el.dataset.off || kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
+    const hit = capped || outside || !!b.el.dataset.off || under(b.r, kept);
     b.el.style.visibility = hit ? "hidden" : "";
     // On a phone a hidden place goes with its dot: a dot left under another label is the clutter we are removing.
     // So does a place whose point is off the map, on any layout.
     if ((phone || b.el.dataset.off) && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
     if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
+  // On a desktop the close-up and GPU-box chips keep their places among the labels but still give way to the controls,
+  // the legends and the credits.
+  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && under(r, obstacles)) el.style.visibility = "hidden";
+  });
+  // A place's dot under a control or the credits goes, with its chip.
+  root.querySelectorAll<HTMLElement>("[data-place]").forEach((chip) => {
+    const btn = chip.parentElement!, dot = btn.firstElementChild!.getBoundingClientRect();
+    if (dot.width > 0 && under(dot, obstacles)) btn.style.visibility = "hidden";
+  });
 }
 
 // ---------- the stage ----------
