@@ -28,7 +28,7 @@ credit strings are also in the AOI manifest's `sources`.
 | ESA WorldCover 10 m | v200 (2021), tile N06E003 | land cover → roughness / infiltration | CC BY 4.0 | "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium" |
 | JRC Global Surface Water | occurrence v1.5 (1984–2024), tile 0E_10N | permanent water masks | free, no restriction | "Source: EC JRC/Google" (Pekel et al. 2016) |
 | WorldPop | R2025A v1, NGA 2025, 100 m constrained (labelled alpha) | people per cell | CC BY 4.0 | "WorldPop (www.worldpop.org), University of Southampton. R2025A v1, DOI:10.5258/SOTON/WP00839" |
-| OpenStreetMap contributors | Geofabrik Nigeria extract 2026-10-28 | roads, drains, shelters, places | ODbL 1.0 | "© OpenStreetMap contributors" linked to openstreetmap.org/copyright; our derived roads/drains/places DB is share-alike (ODbL) |
+| OpenStreetMap contributors | Geofabrik Nigeria extract 2026-10-28 | roads, drains (incl. covered/culvert sections for the open-drain model, `lagos-lekki-v3`), shelters, places | ODbL 1.0 | "© OpenStreetMap contributors" linked to openstreetmap.org/copyright; our derived roads/drains/places DB is share-alike (ODbL) |
 | Google Open Buildings v3 | polygons, S2 cell 103b | building footprints | CC BY 4.0 (or ODbL) | "Google Open Buildings v3 (CC BY 4.0)"; cite Sirko et al. 2021 |
 | Google Open Buildings 2.5D Temporal | 2023 tiles 103bc / 103c4 (public bucket) | building heights for the 3D view (median of 2.5D heights per footprint; 98.5 % of buildings, the rest 6 m assumed); served via BUILDINGS_URL, not part of the AOI | CC BY 4.0 (or ODbL) | "Google Open Buildings 2.5D Temporal (CC BY 4.0)"; cite Sirko et al. 2023 (arXiv:2310.11622) |
 | NASA GPM IMERG Late V07 | half-hourly, Jun–Jul 2026 (via Earthdata) | rainfall for validation storms (Eng A) | NASA open data | "GPM IMERG Late Precipitation L3 Half Hourly V07, NASA GES DISC" |
@@ -46,6 +46,9 @@ cover tiles N39W075 / 80W_50N here too.
 | OpenStreetMap contributors | Geofabrik New York extract 2026-10-28 | roads, shelters, places | ODbL 1.0 | "© OpenStreetMap contributors" linked to openstreetmap.org/copyright |
 | NOAA / NWS ASOS (LaGuardia, Central Park) | hourly precipitation, 1 Sep 2021 (Eng A) | Ida rainfall for the presets | US public domain | "NOAA NCEI / NWS ASOS" |
 | NYC 311 Service Requests | `erm2-nwe9`, flood complaints 1–3 Sep 2021 (Eng A, #104) | validation (hit rate) | NYC Open Data terms of use | "City of New York, NYC 311 via NYC Open Data" |
+| NYC DEP Citywide Catch Basins | `2w2g-fk3i`, fetched 2026-10-30 (7,672 in the box) | inlets of the closed-sewer model (`nyc-queens-v1`) | NYC Open Data terms of use | "NYC Department of Environmental Protection (DEP), NYC Open Data" |
+| NYC DEP Citywide Outfalls | `8rjn-kpsh`, fetched 2026-10-30 (363 near the box, 21 CSO) | sewer outfalls of the closed-sewer model | NYC Open Data terms of use | "NYC DEP, NYC Open Data" |
+| NYC Stormwater Flood Maps | `9i7c-xyvv` (2024 release; 3 of 4 scenarios readable) | validation of the closed-sewer model only, not shown as a layer | NYC Open Data terms of use | "NYC DEP, NYC Stormwater Resiliency Plan" |
 
 ## Planned — not yet wired up
 
