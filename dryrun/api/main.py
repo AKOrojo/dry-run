@@ -141,6 +141,12 @@ def _check_run(run_id: str) -> None:
         raise HTTPException(404, "run not found")
 
 
+def _check_lonlat(lon: float, lat: float) -> None:
+    """Before any grid maths: math.floor on 1e308 overflows (a raw 500) and NaN cannot become a cell index."""
+    if not (math.isfinite(lon) and math.isfinite(lat) and -180 <= lon <= 180 and -90 <= lat <= 90):
+        raise HTTPException(400, "lon must be in [-180, 180] and lat in [-90, 90]")
+
+
 def _check_aoi(aoi_id: str) -> None:
     if not AOI_ID.match(aoi_id):
         raise HTTPException(400, "bad aoi_id")
@@ -323,8 +329,10 @@ def get_run(run_id: str):
 
 
 @app.get("/api/runs/{run_id}/depth")
-def depth_at(run_id: str, lon: float, lat: float, t_s: int):
+def depth_at(run_id: str, lon: float, lat: float, t_s: int, request: Request):
+    _check_lonlat(lon, lat)
     _check_run(run_id)
+    limit(request, "depth", per_hour=3600)
     m = storage.load_run(run_id)
     if not m.frames:
         raise HTTPException(409, f"run is {m.status.value}")
@@ -427,8 +435,7 @@ def depth_series(run_id: str, lon: float, lat: float, request: Request):
     """Depth at one cell for every frame (hover, click-to-pin): the run's frame stack is cached per instance."""
     from dryrun import derived
 
-    if not (math.isfinite(lon) and math.isfinite(lat)):
-        raise HTTPException(400, "lon/lat must be finite")
+    _check_lonlat(lon, lat)
     _check_run(run_id)
     m = storage.load_run(run_id)
     if m.status.value != "done" or not m.frames:
@@ -446,8 +453,7 @@ def aoi_point(aoi_id: str, lon: float, lat: float, request: Request):
     """What is at a map point before any run: place, model ground height, water flags, nearest building."""
     from dryrun.api import point
 
-    if not (math.isfinite(lon) and math.isfinite(lat)):
-        raise HTTPException(400, "lon/lat must be finite")
+    _check_lonlat(lon, lat)
     _check_aoi(aoi_id)
     limit(request, "point", per_hour=3600)
     try:
@@ -587,6 +593,7 @@ def patch3d_inputs(run_id: str, lon: float, lat: float, request: Request, size_m
     from dryrun.patch3d import inputs as I
 
     _check_run(run_id)
+    _check_lonlat(lon, lat)
     if not all(math.isfinite(x) for x in (lon, lat, size_m, cell_m)):
         raise HTTPException(400, "lon, lat, size_m and cell_m must be finite")
     try:
