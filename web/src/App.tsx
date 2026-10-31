@@ -19,6 +19,7 @@ import { ByPlace, CompareCard, CompareMapOverlay, CompareView, DeltaCard, SideGl
 import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import type { SimBar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
@@ -453,13 +454,17 @@ export default function App() {
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
+            <ErrorBoundary name="map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
             {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase}
               rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} />}
+            </ErrorBoundary>
           </div>
           {side && aoi && pair && (
             <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", right: 0 }}>
+              <ErrorBoundary name="second map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
+              </ErrorBoundary>
             </div>
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
@@ -476,6 +481,7 @@ export default function App() {
       </div>
       {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
       <div style={{ display: view.sidebar ? "contents" : "none" }}>
+      <ErrorBoundary name="side panel" resetKey={aoi?.aoi_id} style={{ borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
       <Sidebar aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
@@ -497,6 +503,7 @@ export default function App() {
           pattern, onPattern: (v) => { touched.current = true; setPattern(v); }, level, onLevel: setLevel,
           coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, linkNote: linkNote ? { message: linkNote, detail: `Opened ${aoi?.name ?? "the default area"} instead.`, onDismiss: () => setLinkNote(null) } : null, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
         }} />
+      </ErrorBoundary>
       </div>
       {tour && <Tour onClose={() => setTour(false)} />}
     </div>
