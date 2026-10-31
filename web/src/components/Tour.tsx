@@ -3,11 +3,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { X } from "@phosphor-icons/react";
 import { Band } from "./rev5";
 import { markTourDone as markDone } from "../lib/tour";
+import type { Breakpoint } from "../lib/breakpoint";
 
 const CARD_W = 300;
 const GAP = 14;
 const PAD = 6;
 const MARGIN = 12;
+/** Phone and tablet: how long a step looks for its target in a sheet or drawer (lazy cards) before it is skipped. */
+const SEARCH_MS = 1500;
 
 const ALL_STEPS = [
   { id: "area", title: "Pick the area", body: "Switch areas here. Each one says what its drains are and whether its demo run is cached, so it opens at once." },
@@ -31,12 +34,50 @@ const ALL_STEPS = [
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
 ] as const;
-type Step = (typeof ALL_STEPS)[number];
+type Step = { id: string; title: string; body: string; /** The element to ring, when it is not [data-tour=id]. */ anchor?: string };
+
+// Board 13. A phone has no sidebar tabs, mode switch or coordinate chip: steps point at the tab bar (the tour opens the
+// sheet a step is in), the ⋮ menu and the right-edge map buttons, and talk about fingers, not a mouse.
+const TOUCH_TEXT: Record<string, Partial<Step>> = {
+  map: { body: "Tap anywhere for the depth there and how it changes over time." },
+  marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
+  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along." },
+};
+const PHONE_STEPS: Step[] = [
+  ALL_STEPS[0],
+  { id: "tabbar", title: "Panels live down here", body: "Scenario, Layers, Inspect, Timeline and Agent each open a sheet over the map. Drag its handle up for full height or down to close; tap the active tab to close it." },
+  { ...ALL_STEPS.find((x) => x.id === "scenario")!, anchor: "tab-scenario" },
+  ...ALL_STEPS.filter((x) => ["rain", "rain-domain", "drainage"].includes(x.id)),
+  { ...ALL_STEPS.find((x) => x.id === "simulate")!, body: "Simulate stays at the bottom of the Scenario sheet. It runs the storm on the model and fills the map and the timeline." },
+  ALL_STEPS.find((x) => x.id === "sim-status")!,
+  { id: "player", title: "Play the run", body: "With a run open, the player above the tabs plays and scrubs it. The number is the flooded area at that moment." },
+  { ...ALL_STEPS.find((x) => x.id === "map")!, ...TOUCH_TEXT.map },
+  { ...ALL_STEPS.find((x) => x.id === "camera")!, ...TOUCH_TEXT.camera },
+  { id: "plan", title: "Inspect a building", body: "Tap 3D to switch to the 2D plan view, then tap a building for its depths and the street beside it." },
+  { id: "legend", title: "What the colours mean", body: "The legend button opens the legends of the layers that are on." },
+  { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint." },
+  { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Sources and credits are linked at the end." },
+  ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
+  { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
+  { ...ALL_STEPS.find((x) => x.id === "agent")!, anchor: "tab-agent" },
+];
+const TABLET_TEXT: Record<string, Partial<Step>> = {
+  viewshare: { title: "The side panel and the menu", body: "This button opens Layers, Inspect, Scenario, Sources and Timeline as a panel over the map; tap outside it to close. The ⋮ menu shares a link, saves the map image and changes the view or theme." },
+  timeline: { body: "Play or drag the timeline. The key events and the third chart are in the side panel's Timeline tab." },
+};
+function stepsFor(layout: Breakpoint, touch: boolean): Step[] {
+  if (layout === "phone") return PHONE_STEPS;
+  const steps: Step[] = ALL_STEPS.map((x) => ({ ...x }));
+  return steps.map((x) => ({ ...x, ...(layout === "tablet" ? TABLET_TEXT[x.id] : {}), ...(touch ? TOUCH_TEXT[x.id] : {}) }));
+}
 /** Steps whose anchor is only on the page sometimes (a run with a 3D close-up) are left out when it is not there. */
-const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d", "drainage"]);
+const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d", "drainage", "player"]);
 /** Steps whose card sits on another sidebar tab: the tour opens that tab (a click on this anchor) when it gets there. */
 const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers" };
-const stepsOnPage = (): readonly Step[] => ALL_STEPS.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.id}"]`) || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)));
+/** Phone and tablet: these steps are in a sheet or drawer the tour opens first, so they are checked when reached. */
+const IN_PANEL = new Set<string>(["flow", "rain-domain", "gpu3d", "drainage"]);
+const stepsOnPage = (all: readonly Step[], narrow: boolean): readonly Step[] => all.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.anchor ?? st.id}"]`)
+  || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)) || (narrow && IN_PANEL.has(st.id)));
 
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -61,20 +102,55 @@ function place(t: Box | null, cardH: number): { left: number; top: number } {
   return { left: clampX(cx), top: clampY(cy) };
 }
 
-export function Tour({ onClose }: { onClose: () => void }) {
+export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: () => void; layout?: Breakpoint;
+  /** Phone and tablet: open the sheet or drawer step `id` points into (an empty id closes it). */ onStep?: (id: string) => void }) {
   const [i, setI] = useState(0);
+  const dir = useRef(1);
+  const narrow = shell !== "desktop";
+  // While a step's sheet or drawer opens, the card waits out of sight (no flash of a card with nothing ringed).
+  const [searching, setSearching] = useState(false);
+  const stepTo = useRef(onStep);
+  stepTo.current = onStep;
   const [target, setTarget] = useState<Box | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: MARGIN, top: MARGIN });
   const cardRef = useRef<HTMLElement>(null);
-  const [STEPS] = useState(stepsOnPage);
+  const [STEPS] = useState(() => stepsOnPage(stepsFor(shell, !!window.matchMedia?.("(pointer: coarse)").matches), narrow));
   const last = i === STEPS.length - 1;
   const step = STEPS[i];
 
-  const finish = useCallback(() => { markDone(); onClose(); }, [onClose]);
-  const next = useCallback(() => { if (last) finish(); else setI((n) => n + 1); }, [last, finish]);
-  const back = useCallback(() => setI((n) => Math.max(0, n - 1)), []);
+  const finish = useCallback(() => { markDone(); stepTo.current?.(""); onClose(); }, [onClose]);
+  const next = useCallback(() => { dir.current = 1; if (last) finish(); else setI((n) => n + 1); }, [last, finish]);
+  const back = useCallback(() => { dir.current = -1; setI((n) => Math.max(0, n - 1)); }, []);
 
+  const measure = useCallback(() => {
+    const t = findTarget(step.anchor ?? step.id);
+    setTarget(t);
+    setPos(place(t, cardRef.current?.offsetHeight ?? 190));
+    return t;
+  }, [step]);
+  const layoutNarrow = useCallback(() => {
+    stepTo.current?.(step.id);
+    // The sheet or drawer renders on the next frames, and its cards may still be loading: look for up to SEARCH_MS.
+    const t0 = performance.now();
+    let raf = 0;
+    setSearching(true);
+    const look = () => {
+      document.querySelector<HTMLElement>(`[data-tour="${step.anchor ?? step.id}"]`)?.scrollIntoView({ block: "nearest" });
+      if (measure() || performance.now() - t0 > SEARCH_MS) {
+        if (!findTarget(step.anchor ?? step.id) && OPTIONAL.has(step.id)) {  // not on this page after all (no drains, no rain area)
+          if (dir.current > 0 && i < STEPS.length - 1) { setI(i + 1); return; }
+          if (dir.current < 0 && i > 0) { setI(i - 1); return; }
+        }
+        setSearching(false);
+        return;
+      }
+      raf = requestAnimationFrame(look);
+    };
+    raf = requestAnimationFrame(look);
+    return () => cancelAnimationFrame(raf);
+  }, [step, measure, i, STEPS.length]);
   const layout = useCallback(() => {
+    if (narrow) return layoutNarrow();
     const via = VIA[step.id];
     if (via && !document.querySelector(`[data-tour="${step.id}"]`)) {
       document.querySelector<HTMLElement>(`[data-tour="${via}"]`)?.click();
@@ -87,11 +163,12 @@ export function Tour({ onClose }: { onClose: () => void }) {
     setPos(place(t, cardRef.current?.offsetHeight ?? 190));
   }, [step.id]);
 
-  useLayoutEffect(() => { layout(); }, [layout]);
+  useLayoutEffect(() => layout(), [layout]);
   useEffect(() => {
-    window.addEventListener("resize", layout);
-    return () => window.removeEventListener("resize", layout);
-  }, [layout]);
+    const again = () => { if (narrow) measure(); else layout(); };
+    window.addEventListener("resize", again);
+    return () => window.removeEventListener("resize", again);
+  }, [measure, layout, narrow]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -104,8 +181,10 @@ export function Tour({ onClose }: { onClose: () => void }) {
   }, [finish, next, back]);
 
   const scrim = "color-mix(in srgb, var(--ground) 72%, transparent)";
-  const textBtn = { padding: "3px 6px", background: "transparent", border: 0, borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500 } as const;
-  const raisedBtn = { height: 30, padding: "0 12px", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500 } as const;
+  // Phone and tablet: 40 px buttons (fingers).
+  const bh = narrow ? 40 : 30;
+  const textBtn = { padding: "3px 6px", ...(narrow ? { minHeight: 40 } : {}), background: "transparent", border: 0, borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500 } as const;
+  const raisedBtn = { height: bh, padding: "0 12px", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500 } as const;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000 }}>
@@ -116,11 +195,11 @@ export function Tour({ onClose }: { onClose: () => void }) {
         <div aria-hidden="true" style={{ position: "fixed", inset: 0, background: scrim }} />
       )}
       <section ref={cardRef} role="dialog" aria-label={`Quick tour, step ${i + 1} of ${STEPS.length}`}
-        style={{ position: "fixed", left: pos.left, top: pos.top, width: CARD_W, display: "flex", flexDirection: "column", background: "var(--surface)",
+        style={{ position: "fixed", left: pos.left, top: pos.top, width: CARD_W, display: "flex", flexDirection: "column", background: "var(--surface)", visibility: searching ? "hidden" : undefined,
           border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--shadow-float)", overflow: "hidden" }}>
         <Band title={`Step ${i + 1} of ${STEPS.length}`} right={
           <button type="button" aria-label="Close tour" onClick={finish}
-            style={{ marginLeft: "auto", width: 24, height: 24, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)" }}>
+            style={{ marginLeft: "auto", width: narrow ? 40 : 24, height: narrow ? 40 : 24, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)" }}>
             <X size={14} weight="bold" />
           </button>} />
         <div style={{ padding: "12px 14px 4px" }}>
@@ -132,7 +211,7 @@ export function Tour({ onClose }: { onClose: () => void }) {
           <span style={{ marginLeft: "auto" }} />
           {i > 0 && <button type="button" onClick={back} style={raisedBtn}>Back</button>}
           <button type="button" autoFocus onClick={next}
-            style={{ height: 30, padding: "0 16px", background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)",
+            style={{ height: bh, padding: "0 16px", background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)",
               border: "1px solid var(--danfo-edge)", borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)", font: "inherit", fontWeight: 600 }}>
             {last ? "Done" : "Next"}
           </button>

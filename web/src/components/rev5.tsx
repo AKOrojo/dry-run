@@ -92,7 +92,7 @@ export function MiniSlider({ pct, label, onChange }: { pct: number; label: strin
       <span style={{ position: "absolute", left: 0, width: `${pct}%`, top: 5, height: 2, background: "var(--ink-muted)", borderRadius: "var(--radius-pill)" }} />
       <span style={{ position: "absolute", left: `${pct}%`, top: 1, width: 10, height: 10, marginLeft: -5, background: "var(--ink)", borderRadius: "50%",
         boxShadow: "0 1px 3px var(--elev-drop), 0 0 0 1px color-mix(in srgb, var(--ground) 40%, transparent)" }} />
-      <input type="range" min={0} max={100} value={Math.round(pct)} aria-label={label} onChange={(e) => onChange(+e.target.value)}
+      <input type="range" className="dr-hit" min={0} max={100} value={Math.round(pct)} aria-label={label} onChange={(e) => onChange(+e.target.value)}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, opacity: 0, cursor: "pointer" }} />
     </span>
   );

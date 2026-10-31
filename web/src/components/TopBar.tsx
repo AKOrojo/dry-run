@@ -1,7 +1,7 @@
 // Top bar (rev 5 header()): wordmark, area, storm summary, mode tabs, View/Share, theme toggle.
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
-import { CaretDown, ChatTeardropText, Check, CloudRain, Columns, DownloadSimple, Layout, Link, MapTrifold, Moon, Question, ShareNetwork, Sun } from "@phosphor-icons/react";
+import { CaretDown, ChatTeardropText, Check, CloudRain, Columns, Crosshair, DotsThreeVertical, DownloadSimple, Info, Layout, Link, MapTrifold, Moon, Question, ShareNetwork, Sun } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { Checkbox, FIG } from "./rev5";
 import { Select } from "./controls/Select";
@@ -11,18 +11,19 @@ import type { AreaFacts } from "../lib/areas";
 import { applyTheme, getTheme, Theme } from "../lib/theme";
 import { setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { setView, useView } from "../lib/view";
+import type { Breakpoint } from "../lib/breakpoint";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
 const PATTERN_TEXT = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" } as const;
 const vr = <span style={{ width: 1, height: 20, background: "var(--hairline)", flex: "none" }} />;
 
-function ModeTab({ name, Ic, active, badge, onClick }: { name: Mode; Ic: Icon; active: boolean; badge?: number; onClick: () => void }) {
+function ModeTab({ name, Ic, active, badge, onClick, h = 28 }: { name: Mode; Ic: Icon; active: boolean; badge?: number; onClick: () => void; /** 40 on a tablet (touch). */ h?: number }) {
   const st = active
     ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", border: "1px solid var(--hairline)", fontWeight: 600 }
     : { background: "transparent", color: "var(--ink-muted)", border: "1px solid transparent" };
   return (
     <button type="button" data-tour={name === "Agent" ? "agent" : name === "Compare" ? "compare" : undefined} aria-current={active ? "page" : undefined} onClick={onClick}
-      style={{ height: 28, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", borderRadius: 3, font: "inherit", ...st }}>
+      style={{ height: h, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", borderRadius: 3, font: "inherit", ...st }}>
       <Ic size={15} weight="bold" style={{ flex: "none" }} />{name}
       {!!badge && (
         <span style={{ minWidth: 18, height: 18, padding: "0 5px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--hazard)",
@@ -39,9 +40,15 @@ const menuItem: CSSProperties = {
 };
 const menuLabel: CSSProperties = { padding: "6px 9px 2px", color: "var(--ink-muted)", fontSize: 11 };
 const menuRule = <div role="separator" style={{ height: 1, margin: "3px 0", background: "var(--hairline)" }} />;
+const iconBtn: CSSProperties = { width: 40, height: 40, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent",
+  border: 0, borderRadius: "var(--radius-md)", cursor: "pointer" };
+/** Menu rows on a phone or tablet: 40 px touch targets. */
+const touchItem: CSSProperties = { ...menuItem, height: 40, fontSize: 13 };
 const tick = (on: boolean) => <span style={{ width: 16, display: "flex", justifyContent: "center", flex: "none" }}>{on && <Check size={13} weight="bold" />}</span>;
 
-function Menu({ name, Ic, children }: { name: string; Ic: Icon; children: (close: () => void) => ReactNode }) {
+function Menu({ name, Ic, iconOnly = false, tour, children }: { name: string; Ic: Icon;
+  /** Phone and tablet: a 40 px icon button (the ⋮ overflow menu), the menu kept on screen at the right edge. */ iconOnly?: boolean; tour?: string;
+  children: (close: () => void) => ReactNode }) {
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -57,7 +64,8 @@ function Menu({ name, Ic, children }: { name: string; Ic: Icon; children: (close
   }, [at]);
   const open = () => {
     const r = btn.current!.getBoundingClientRect();
-    setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 228)), top: r.bottom + 6 });
+    const w = iconOnly ? Math.min(300, window.innerWidth - 16) : 228;
+    setAt({ left: Math.max(8, Math.min(iconOnly ? r.right - w : r.left, window.innerWidth - w)), top: r.bottom + 6 });
   };
   const onKey = (e: KeyboardEvent) => {
     const items = [...(box.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
@@ -71,13 +79,20 @@ function Menu({ name, Ic, children }: { name: string; Ic: Icon; children: (close
   };
   return (
     <>
-      <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
-        style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0, color: at ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
-        <Ic size={15} weight="bold" />{name}<CaretDown size={12} weight="bold" />
-      </button>
+      {iconOnly ? (
+        <button ref={btn} type="button" data-tour={tour} aria-label={name} title={name} aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
+          style={{ ...iconBtn, color: at ? "var(--ink)" : "var(--ink-muted)" }}>
+          <Ic size={18} weight="bold" />
+        </button>
+      ) : (
+        <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
+          style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0, color: at ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
+          <Ic size={15} weight="bold" />{name}<CaretDown size={12} weight="bold" />
+        </button>
+      )}
       {at && (
         <div ref={box} role="menu" aria-label={name} onKeyDown={onKey}
-          style={{ position: "fixed", left: at.left, top: at.top, zIndex: 20, minWidth: 220, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+          style={{ position: "fixed", left: at.left, top: at.top, zIndex: 20, minWidth: 220, ...(iconOnly ? { width: Math.min(300, window.innerWidth - 16), boxSizing: "border-box", maxHeight: `calc(100dvh - ${at.top + 8}px)`, overflowY: "auto" } : {}), padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
             borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", color: "var(--ink)", fontWeight: 400 }}>
           {children(() => close())}
         </div>
@@ -144,6 +159,65 @@ function ShareMenu({ onCopyLink, onSaveImage }: { onCopyLink: () => Promise<stri
   );
 }
 
+/** The ⋮ menu on a phone or tablet: the header items that do not fit (board 13). A phone also gets the mode here; a
+ *  tablet keeps the mode switch in the header and the View options (the side panel is the drawer button). */
+function OverflowMenu({ layout, mode, onMode, agentRuns, storm, theme, onTheme, onTour, onCopyLink, onSaveImage }: {
+  layout: "phone" | "tablet"; mode: Mode; onMode: (m: Mode) => void; agentRuns: number; storm: string;
+  theme: Theme; onTheme: (t: Theme) => void; onTour: () => void; onCopyLink: () => Promise<string>; onSaveImage: () => string | null;
+}) {
+  const v = useView();
+  const lay = useLayers();
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => {
+    if (!status) return;
+    const id = window.setTimeout(() => setStatus(null), 2500);
+    return () => window.clearTimeout(id);
+  }, [status]);
+  const ic = (I: Icon) => <span style={{ width: 16, display: "flex", justifyContent: "center", flex: "none" }}><I size={15} weight="bold" /></span>;
+  const check = (label: string, on: boolean, flip: () => void, I?: Icon) => (
+    <button type="button" role="menuitemcheckbox" aria-checked={on} onClick={flip} style={touchItem}>
+      {I ? ic(I) : <Checkbox on={on} />}{label}{I && <span style={{ marginLeft: "auto", color: "var(--ink-muted)" }}>{on ? "on" : "off"}</span>}</button>
+  );
+  const radio = (label: string, on: boolean, pick: () => void, badge?: number) => (
+    <button type="button" role="menuitemradio" aria-checked={on} onClick={pick} style={touchItem}>{tick(on)}{label}
+      {!!badge && <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{badge} {badge === 1 ? "run" : "runs"}</span>}</button>
+  );
+  return (
+    <>
+      <Menu name="More" Ic={DotsThreeVertical} iconOnly tour="menu">
+        {(close) => (
+          <>
+            {layout === "phone" && <>
+              <div style={menuLabel} className="label">Mode</div>
+              {radio("Scenario", mode === "Scenario", () => { close(); onMode("Scenario"); })}
+              {radio("Compare", mode === "Compare", () => { close(); onMode("Compare"); })}
+              {radio("Agent", mode === "Agent", () => { close(); onMode("Agent"); }, agentRuns)}
+              {menuRule}
+            </>}
+            <div style={{ ...touchItem, boxSizing: "border-box", cursor: "default", whiteSpace: "normal", height: "auto", minHeight: 40, padding: "6px 9px", lineHeight: "17px" }}>{ic(CloudRain)}<span>Storm: {storm}</span></div>
+            <button type="button" role="menuitem" style={touchItem} onClick={async () => { close(); setStatus(await onCopyLink()); }}>{ic(ShareNetwork)}Share link</button>
+            <button type="button" role="menuitem" style={touchItem} onClick={() => { close(); setStatus(onSaveImage()); }}>{ic(DownloadSimple)}Save map image</button>
+            {menuRule}
+            {layout === "tablet" && <>
+              {check("Show timeline", v.timeline, () => setView({ timeline: !v.timeline }))}
+              {check("Clouds and rain", lay.weather.on, () => setLayer("weather", { on: !lay.weather.on }))}
+              <div style={menuLabel}>Imagery</div>
+              {radio("Colour", lay.imageryMode === "colour", () => setImageryMode("colour"))}
+              {radio("Greyscale", lay.imageryMode === "greyscale", () => setImageryMode("greyscale"))}
+              {menuRule}
+            </>}
+            {check("Show coordinates", v.coords, () => setView({ coords: !v.coords }), Crosshair)}
+            <button type="button" role="menuitem" style={touchItem} onClick={() => { close(); onTour(); }}>{ic(Info)}Quick tour</button>
+            {check("Dark theme", theme === "dark", () => onTheme(theme === "dark" ? "light" : "dark"), Moon)}
+          </>
+        )}
+      </Menu>
+      {status && <span role="status" aria-live="polite" style={{ position: "fixed", top: 54, right: 12, zIndex: 20, maxWidth: "calc(100vw - 24px)", padding: "6px 10px", whiteSpace: "normal",
+        background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", color: "var(--ink)", fontSize: 12 }}>{status}</span>}
+    </>
+  );
+}
+
 /** The area picker (board 11): areas with what each models, and the open area under "Earlier versions" when a shared
  *  link opened one that has since been replaced. */
 function AreaSelect({ aois, aoiId, aoiName, defaultAoi, onAoi }: { aois: { aoi_id: string; name: string }[]; aoiId?: string; aoiName?: string;
@@ -156,7 +230,9 @@ function AreaSelect({ aois, aoiId, aoiName, defaultAoi, onAoi }: { aois: { aoi_i
   return <Select variant="header" label="Area" tour="area" value={aoiId} onChange={onAoi} groups={groups} onOpen={load} />;
 }
 
-export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage }: {
+export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage, layout = "desktop", drawerOpen = false, onDrawer }: {
+  /** Board 13: a phone keeps the name, the area and a ⋮ menu; a tablet adds the mode switch and the side-panel drawer button. */
+  layout?: Breakpoint; drawerOpen?: boolean; onDrawer?: () => void;
   aois: { aoi_id: string; name: string }[]; aoiId?: string; onAoi: (id: string) => void;
   /** The open area's name (it may be an earlier version that is not in `aois`, opened from a shared link). */ aoiName?: string; defaultAoi?: string;
   rainMm: number; durationH: number; pattern: keyof typeof PATTERN_TEXT; /** Where the rain falls, or null for "pattern over the area". */ rainText?: string | null;
@@ -168,6 +244,30 @@ export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rain
   const pickTheme = (t: Theme) => { applyTheme(t); setTheme(t); };
   const toggle = () => pickTheme(theme === "dark" ? "light" : "dark");
   const Toggle = theme === "dark" ? Sun : Moon;
+  if (layout !== "desktop") {
+    const storm = `${rainMm} mm / ${durationH} h, ${rainText ?? PATTERN_TEXT[pattern]}`;
+    return (
+      <header style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", gap: layout === "phone" ? 8 : 12, padding: "0 4px 0 12px", background: "var(--surface)",
+        borderBottom: "1px solid var(--hairline)", boxShadow: "0 2px 8px var(--elev-drop-soft)", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>
+        <span style={{ flex: "none", fontSize: 16, lineHeight: "20px", fontWeight: 700, letterSpacing: "-0.01em" }}>Dry Run</span>
+        {aois.length > 0 && <span style={{ display: "flex", minWidth: 0, flex: "0 1 auto" }}><AreaSelect aois={aois} aoiId={aoiId} aoiName={aoiName} defaultAoi={defaultAoi} onAoi={onAoi} /></span>}
+        <span style={{ marginLeft: "auto" }} />
+        {layout === "tablet" && <>
+          <nav aria-label="Mode" style={{ display: "flex", alignItems: "center", gap: 2, flex: "none", padding: 2, background: "var(--ground)", boxShadow: "var(--inset-shadow)", borderRadius: "var(--radius-md)" }}>
+            <ModeTab name="Scenario" Ic={MapTrifold} active={mode === "Scenario"} onClick={() => onMode("Scenario")} h={40} />
+            <ModeTab name="Compare" Ic={Columns} active={mode === "Compare"} onClick={() => onMode("Compare")} h={40} />
+            <ModeTab name="Agent" Ic={ChatTeardropText} active={mode === "Agent"} badge={agentRuns} onClick={() => onMode("Agent")} h={40} />
+          </nav>
+          <button type="button" data-tour="viewshare" aria-label={drawerOpen ? "Hide the side panel" : "Show the side panel"} title="Side panel" aria-expanded={drawerOpen} onClick={onDrawer}
+            style={{ ...iconBtn, ...(drawerOpen ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)" } : { color: "var(--ink-muted)" }) }}>
+            <Layout size={18} weight="bold" />
+          </button>
+        </>}
+        <OverflowMenu layout={layout} mode={mode} onMode={onMode} agentRuns={agentRuns} storm={storm} theme={theme} onTheme={pickTheme} onTour={onTour}
+          onCopyLink={onCopyLink} onSaveImage={onSaveImage} />
+      </header>
+    );
+  }
   return (
     <header style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 14, padding: "0 12px 0 16px", background: "var(--surface)",
       borderBottom: "1px solid var(--hairline)", boxShadow: "0 2px 8px var(--elev-drop-soft)", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>

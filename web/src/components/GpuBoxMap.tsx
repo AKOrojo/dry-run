@@ -92,7 +92,7 @@ export function GpuBoxMap({ viewer, scene, anchors, hidden, runKey }: {
     <>
       {b.shown && !hidden && bb && (
         <Anchored anchors={anchors} scene={scene} lon={bb[2]} lat={bb[3]} dx={10} dy={-14}>
-          <div style={{ ...pill, fontWeight: 600 }}>GPU 3D box · {b.size_m} m</div>
+          <div style={{ ...pill, fontWeight: 600 }} data-declutter-phone={2}>GPU 3D box · {b.size_m} m</div>
         </Anchored>
       )}
       {b.picking && (

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import * as Cesium from "cesium";
 import { Copy, House, MapPin, RoadHorizon, Users } from "@phosphor-icons/react";
+import { useTouch } from "../lib/breakpoint";
 import { API, getPointSeries } from "../lib/api";
 import type { AOIManifest, PointSeries, RunManifest } from "../lib/api";
 import { clock, useClock } from "../lib/clock";
@@ -169,10 +170,12 @@ export function PlaceCard({ place, runId }: { place: string; runId?: string }) {
 }
 
 export function HowToInspectCard() {
+  const touch = useTouch();
   return (
     <Card title="How to inspect">
       <p style={{ margin: 0, padding: "10px 14px 12px", color: "var(--ink-muted)", fontSize: 13, lineHeight: "19px" }}>
-        Hover the map for depth at the cursor. Click a point to pin it, or in Plan view click a building to select it here. Shift-click a second building to compare.
+        {touch ? "Tap the map to pin the depth at that point, or in Plan view tap a building to select it here."
+          : "Hover the map for depth at the cursor. Click a point to pin it, or in Plan view click a building to select it here. Shift-click a second building to compare."}
       </p>
     </Card>
   );

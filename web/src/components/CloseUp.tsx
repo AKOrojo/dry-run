@@ -274,10 +274,10 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
           <Anchored key={p.patch_id} anchors={anchors} scene={scene} lon={e} lat={active ? n : (n + p.bounds_wgs84[1]) / 2} dx={10} dy={-14}
             clamp={active ? undefined : CHIP_CLAMP}>
             {active ? (
-              <div style={pill}><span style={{ fontWeight: 600 }}>{p.label ?? "3D close-up"}</span>
+              <div style={pill} data-declutter-phone={3}><span style={{ fontWeight: 600 }}>{p.label ?? "3D close-up"}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>{p.size_m} m box · {p.cell_m} m cells</span></div>
             ) : (
-              <button type="button" data-tour="closeup" title="Open the 3D close-up" onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
+              <button type="button" data-tour="closeup" data-declutter-phone={2} title="Open the 3D close-up" onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
                 style={{ ...pill, flexDirection: "row", alignItems: "center", gap: 6, pointerEvents: "auto", cursor: "pointer", ...raisedButton, borderRadius: "var(--radius-md)", height: 26, padding: "0 9px 0 7px", fontSize: 12, fontWeight: 600 }}>
                 <Cube size={14} weight="bold" />3D close-up · {p.size_m} m box
               </button>

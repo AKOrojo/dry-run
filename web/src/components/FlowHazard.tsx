@@ -572,7 +572,7 @@ export function ProfileDock() {
     const yt = [lo, lo + span / 2, hi];
     svg = (
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Water and ground along the line from A to B, ${fmtLen(prof.lenM)}; deepest ${deepest.toFixed(1)} metres`}
-        style={{ display: "block", overflow: "visible", fontFamily: "var(--font-sans)", fontSize: 10.5, ...FIG }}>
+        style={{ display: "block", overflow: "visible", fontFamily: "var(--font-sans)", fontSize: "var(--chart-tick, 10.5px)", ...FIG }}>
         {yt.map((v, k) => (
           <g key={k}>
             {k > 0 && <line x1={L} y1={Y(v)} x2={W - Rm} y2={Y(v)} stroke="var(--hairline)" strokeWidth="1" />}

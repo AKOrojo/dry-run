@@ -16,6 +16,7 @@ import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
+import { useTouch } from "../lib/breakpoint";
 import { Card, CardLock, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 import { Notice } from "./Notice";
@@ -35,18 +36,21 @@ export type Failure = { message: string; retryable: boolean };
 const TABS = ["Layers", "Inspect", "Scenario", "Sources"] as const;
 const COMPARE_TABS = ["Compare", "Layers", "Inspect", "Sources"] as const;
 const AGENT_TABS = ["Layers", "Inspect", "Agent", "Sources"] as const;
-type Tab = (typeof TABS)[number] | "Compare" | "Agent";
+export type Tab = (typeof TABS)[number] | "Compare" | "Agent" | "Timeline";
 
 function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTab: (t: Tab) => void }) {
+  // Five tabs (the tablet drawer's Timeline) only fit 360 px with tighter padding.
+  const tight = tabs.length > 4;
+  const pad = tight ? "0 7px" : "0 12px";
   return (
-    <nav aria-label="Sidebar" style={{ display: "flex", alignItems: "flex-end", padding: "0 16px", background: "var(--surface)", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
+    <nav aria-label="Sidebar" style={{ display: "flex", alignItems: "flex-end", padding: tight ? "0 6px" : "0 16px", background: "var(--surface)", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
       {tabs.map((n) => {
         const on = n === active;
         const st: CSSProperties = on
-          ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: "0 12px" }
-          : { color: "var(--ink-muted)", fontWeight: 400, padding: "0 12px" };
+          ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: pad }
+          : { color: "var(--ink-muted)", fontWeight: 400, padding: pad };
         return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : n === "Layers" ? "layers" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
-          style={{ height: 38, marginRight: 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", ...st }}>{n}</button>;
+          style={{ height: 38, marginRight: tight ? 0 : 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", whiteSpace: "nowrap", ...st }}>{n}</button>;
       })}
     </nav>
   );
@@ -205,6 +209,7 @@ function LayersCard() {
 
 // ---- inspect ----
 function WaypointsCard() {
+  const touch = useTouch();
   const wps = useWaypoints();
   const info = useWaypointInfo();
   const ib = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0,
@@ -212,7 +217,7 @@ function WaypointsCard() {
   return (
     <Card title="Waypoints" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{wps.length || ""}</span>}>
       {wps.length === 0 ? (
-        <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>Right-click the map or press W to drop a waypoint.</p>
+        <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>{touch ? "Long-press the map to drop a waypoint." : "Right-click the map or press W to drop a waypoint."}</p>
       ) : (
         <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
           {wps.map((w, k) => (
@@ -250,13 +255,14 @@ function Metric({ Ic, label, value, sub, color = "var(--ink)" }: { Ic: Icon; lab
 const m2 = (v: number | null) => (v == null ? "n/a" : `${v.toFixed(2)} m`);
 
 function CursorCard({ tS, passM }: { tS: number; passM: number }) {
+  const touch = useTouch();
   const i = useInspect();
   const empty = i == null;
   const vd = { borderLeft: "1px solid var(--hairline)" };
   return (
-    <Card title="At the cursor" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>Hover · <span style={FIG}>{fmtT(tS)}</span></span>}>
+    <Card title="At the cursor" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>{touch ? "Tap" : "Hover"} · <span style={FIG}>{fmtT(tS)}</span></span>}>
       {i == null ? (
-        <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>Hover the map</p>
+        <p style={{ margin: 0, padding: "14px", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>{touch ? "Tap the map" : "Hover the map"}</p>
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
@@ -539,7 +545,14 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus, closeup = false, buildingsUrl, onDemo }: {
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus, closeup = false, buildingsUrl, onDemo,
+  tab: tabProp, onTab, phone = false, timeline }: {
+  /** Phone and tablet: the shell owns the tab (the tab bar or the tour opens one); without it the sidebar keeps its own. */
+  tab?: Tab; onTab?: (t: Tab) => void;
+  /** In a phone sheet: no tab strip (the tab bar replaces it), Sources linked at the end of Layers, Simulate sticky at the bottom. */
+  phone?: boolean;
+  /** Tablet drawer: a Timeline tab with what the narrow dock leaves out (the third chart, key events). */
+  timeline?: ReactNode;
   buildingsUrl?: string; onDemo?: () => Promise<void>;
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
   /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
@@ -551,9 +564,20 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   /** In a 3D close-up: Inspect opens (with `inspect` showing its cards) and the tab it left is restored afterwards. */
   closeup?: boolean;
 }) {
-  const [tab, setTab] = useState<Tab>("Scenario");
+  const [ownTab, setOwnTab] = useState<Tab>("Scenario");
+  const tab = tabProp ?? ownTab;
+  const setTab = onTab ?? setOwnTab;
   const comparing = compare != null;
-  useEffect(() => setTab(comparing ? "Compare" : agentMode ? "Agent" : "Scenario"), [comparing, agentMode]);
+  // A mode change opens its tab. A shell that owns the tab is told only about a change, not the first render (no
+  // sheet opens by itself; StrictMode runs effects twice, so this compares with the last mode seen).
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    const now = comparing ? "Compare" : agentMode ? "Agent" : "Scenario";
+    const before = seen.current;
+    seen.current = now;
+    if (onTab && (before === null || before === now)) return;
+    setTab(now);
+  }, [comparing, agentMode]);
   useEffect(() => { if (inspectFocus) setTab("Inspect"); }, [inspectFocus]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
@@ -570,10 +594,15 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   const lockLabel = sim.state === "running" ? `Locked while simulating${left != null && left > 0 ? ` · ${minSec(left)} left` : ""}` : "Locked";
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
-    <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
-      <Tabs tabs={comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS} active={tab} onTab={setTab} />
+    <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
+      {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
         {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
+        {tab === "Layers" && phone && (
+          <button type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
+            color: "var(--ink-muted)", font: "inherit", fontSize: 13, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>Sources and credits</button>
+        )}
+        {tab === "Timeline" && timeline}
         {tab === "Inspect" && inspect}
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
@@ -594,7 +623,12 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
             <CardLock.Provider value={locked ? lockLabel : null}>
               {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
-            <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
+            {phone ? (
+              <div style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
+                borderTop: "1px solid var(--hairline)", display: "flex", flexDirection: "column", order: 1 }}>
+                <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
+              </div>
+            ) : <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />}
             {scenario.err && (
               <Notice message={scenario.err.message}>
                 {scenario.err.retryable && <Button disabled={scenario.busy} onClick={scenario.onSimulate}>Retry</Button>}
@@ -603,7 +637,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
           </>
         )}
         {tab === "Compare" && compare}
-        {agent && <div style={{ display: agentMode && tab === "Agent" ? "flex" : "none", flexDirection: "column", gap: 10, flexGrow: 1 }}>{agent}</div>}
+        {agent && <div style={{ display: (agentMode || phone) && tab === "Agent" ? "flex" : "none", flexDirection: "column", gap: 10, flexGrow: 1 }}>{agent}</div>}
         {tab === "Sources" && <SourcesCard sources={sources} />}
       </div>
     </aside>

@@ -1,10 +1,12 @@
 // Rev 5 map stage: the globe plus every overlay (compass, view switch, map controls, hover tooltip,
 // waypoints, place labels, time-to-flood layer and legend). All styling follows the rev 5 design
 // (docs/design/rev5-ref/parts.py): tokens only, no hand-rolled colours.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
-import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Pause, Path, Play, RoadHorizon, X } from "@phosphor-icons/react";
+import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
+import { useTouch } from "../lib/breakpoint";
+import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
 import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
@@ -61,9 +63,12 @@ export type MapStageProps = {
   onView?: (view: "Orbit" | "Plan") => void;
   /** Drawn on the map under every label, card and popup (Plan view's graticule). */
   underlay?: ReactNode;
+  /** Board 13: a phone gets the icon-only toolbar, the right-edge column and the scale bar bottom-left. */
+  layout?: Breakpoint;
 };
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
+const LONG_PRESS_MS = 550;
 const MIN_PITCH = Cesium.Math.toRadians(-90);
 const WET_M = 0.15;
 const IMPASSABLE_M = 0.3;
@@ -78,6 +83,8 @@ type ArrivalLegend = { edges_min: number[]; alphas: number[]; rgb: string; note:
 
 // ---------- style fragments from parts.py ----------
 const elevHi = "var(--elev-hi, transparent)";
+/** Phone right-edge column: 40 px square buttons. */
+const colBtn: CSSProperties = { width: 40, height: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink)", font: "inherit", cursor: "pointer" };
 const groupStyle: CSSProperties = {
   display: "flex", alignItems: "center", height: 32, padding: "0 3px",
   background: "color-mix(in srgb, var(--surface-raised) 92%, transparent)", backdropFilter: "blur(6px)",
@@ -161,7 +168,7 @@ function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => v
     <button type="button" onClick={onReset} title="Reset to north" aria-label={`North, rotated ${Math.round(rot)} degrees. Click to reset.`}
       style={{ position: "absolute", top: 16, left: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 0,
         background: "transparent", border: 0, font: "inherit", cursor: "pointer", pointerEvents: "auto" }}>
-      <span style={{ fontSize: 10, lineHeight: "12px", fontWeight: 600, color: "var(--ink)", textShadow: "0 0 3px var(--ground)" }}>N</span>
+      <span className="dr-compass-n" style={{ fontSize: 10, lineHeight: "12px", fontWeight: 600, color: "var(--ink)", textShadow: "0 0 3px var(--ground)" }}>N</span>
       <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" style={{ filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.45))" }}>
         <circle cx="18" cy="18" r="17" fill="var(--surface-raised)" stroke="var(--hairline)" />
         <g transform={`rotate(${rot} 18 18)`}>
@@ -175,29 +182,34 @@ function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => v
   );
 }
 
-function ViewSwitch({ active, onPick, canFly }: { active: ViewName; onPick: (v: ViewName) => void; canFly: boolean }) {
+function ViewSwitch({ active, onPick, canFly, compact = false, extra }: { active: ViewName; onPick: (v: ViewName) => void; canFly: boolean;
+  /** Phone: icons only, 40 px targets, Fly along only once a route exists, and `extra` (the route button) in the same group. */
+  compact?: boolean; extra?: ReactNode }) {
+  const sz = compact ? 18 : 14;
   const items = [
-    { name: "Orbit" as const, icon: <GlobeHemisphereWest size={14} weight="bold" /> },
-    { name: "Free" as const, icon: <ArrowsOutCardinal size={14} weight="bold" /> },
-    { name: "Plan" as const, icon: <Crosshair size={14} weight="bold" /> },
-    { name: "Fly along" as const, icon: <Drone size={14} weight="bold" /> },
+    { name: "Orbit" as const, icon: <GlobeHemisphereWest size={sz} weight="bold" /> },
+    { name: "Free" as const, icon: <ArrowsOutCardinal size={sz} weight="bold" /> },
+    { name: "Plan" as const, icon: <Crosshair size={sz} weight="bold" /> },
+    { name: "Fly along" as const, icon: <Drone size={sz} weight="bold" /> },
   ];
   return (
     <div data-tour="camera" style={{ display: "flex", gap: 2, padding: 3, background: "var(--surface-raised)",
       border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: `inset 0 1px 0 ${elevHi}, var(--shadow-float)`, pointerEvents: "auto" }}>
       {items.map((it) => {
         const disabled = it.name === "Fly along" && !canFly;
-        return (
-          <button key={it.name} type="button" disabled={disabled} title={disabled ? "Draw a route first" : it.name}
+        if (compact && it.name === "Fly along" && !canFly) return <Fragment key="route">{extra}</Fragment>;
+        const btn = (
+          <button key={it.name} type="button" disabled={disabled} title={disabled ? "Draw a route first" : it.name} aria-label={compact ? it.name : undefined}
             aria-pressed={it.name === active} onClick={() => onPick(it.name)}
-            style={{ height: 28, display: "flex", alignItems: "center", gap: 6, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
+            style={{ height: compact ? 40 : 28, ...(compact ? { width: 40, justifyContent: "center", padding: 0 } : {}), display: "flex", alignItems: "center", gap: 6, padding: compact ? 0 : "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
               ...(it.name === active
                 ? { background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }
                 : { background: "transparent", color: "var(--ink-muted)" }),
               ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}>
-            {it.icon}{it.name}
+            {it.icon}{!compact && it.name}
           </button>
         );
+        return compact && it.name === "Fly along" ? <Fragment key={it.name}>{extra}{btn}</Fragment> : btn;
       })}
     </div>
   );
@@ -209,11 +221,32 @@ const menuItem: CSSProperties = {
 };
 
 /** "Draw route" button beside the view switch; with a saved or evacuation route it opens a small menu. */
-function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, onToggleMenu, onEvac, onClear }: {
+function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, onToggleMenu, onEvac, onClear, compact = false, short = false }: {
   drawing: boolean; menuOpen: boolean; hasRoute: boolean; hasEvac: boolean;
+  /** Phone: a 40 px icon inside the view switch's group. Tablet: the shorter "Route" label. */ compact?: boolean; short?: boolean;
   onDraw: () => void; onCancel: () => void; onToggleMenu: () => void; onEvac: () => void; onClear: () => void;
 }) {
   const extras = hasRoute || hasEvac;
+  const menu = menuOpen && !drawing && (
+    <div role="menu" style={{ position: "absolute", ...(compact ? { left: 0, top: 46 } : { right: 0, top: 40 }), minWidth: 190, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+      borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", zIndex: 2 }}>
+      <button type="button" role="menuitem" onClick={onDraw} style={compact ? { ...menuItem, height: 40 } : menuItem}>Draw new route</button>
+      {hasEvac && <button type="button" role="menuitem" onClick={onEvac} style={compact ? { ...menuItem, height: 40 } : menuItem}>Use evacuation route</button>}
+      {hasRoute && <button type="button" role="menuitem" onClick={onClear} style={compact ? { ...menuItem, height: 40 } : menuItem}>Clear route</button>}
+    </div>
+  );
+  if (compact) {
+    return (
+      <span style={{ position: "relative", display: "flex" }}>
+        <button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
+          aria-label={drawing ? "Cancel drawing" : "Draw route"} title={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
+          style={{ ...segBtn(drawing, 40), width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <Path size={18} weight="bold" />
+        </button>
+        {menu}
+      </span>
+    );
+  }
   return (
     <div style={{ position: "relative", pointerEvents: "auto" }}>
       <div style={{ display: "flex", padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6,
@@ -221,17 +254,10 @@ function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, o
         <button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
           title={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
           style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <Path size={14} weight="bold" />{drawing ? "Drawing" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
+          <Path size={14} weight="bold" />{drawing ? "Drawing" : short ? "Route" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
         </button>
       </div>
-      {menuOpen && !drawing && (
-        <div role="menu" style={{ position: "absolute", right: 0, top: 40, minWidth: 190, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
-          borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)" }}>
-          <button type="button" role="menuitem" onClick={onDraw} style={menuItem}>Draw new route</button>
-          {hasEvac && <button type="button" role="menuitem" onClick={onEvac} style={menuItem}>Use evacuation route</button>}
-          {hasRoute && <button type="button" role="menuitem" onClick={onClear} style={menuItem}>Clear route</button>}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
@@ -253,7 +279,7 @@ const primaryBtn: CSSProperties = {
 };
 const textBtn: CSSProperties = { height: 28, padding: "0 8px", background: "transparent", border: 0, color: "var(--ink-muted)", font: "inherit", cursor: "pointer" };
 const hudShell: CSSProperties = {
-  position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 640,
+  position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 640, maxWidth: "calc(100% - 24px)",
   background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
   whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto",
 };
@@ -344,7 +370,8 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   );
 }
 
-function Tooltip({ r, tS, cellM, pinned, outside, style }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties }) {
+function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties;
+  /** A finger: no Esc to clear, a tap elsewhere moves the pin. */ touch?: boolean }) {
   const ser = r.ser;
   const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
   const wet = r.depth >= wetM, cut = r.depth >= passM;
@@ -386,7 +413,7 @@ function Tooltip({ r, tS, cellM, pinned, outside, style }: { r: Reading; tS: num
         </div>
       )}
       <div style={{ padding: "5px 10px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11 }}>
-        {pinned ? `Pinned · Esc to clear · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
+        {pinned ? `Pinned · ${touch ? "tap elsewhere to move it" : "Esc to clear"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
       </div>
     </div>
   );
@@ -434,13 +461,13 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
 function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
   return (
     // Only the chip takes clicks: the dot and the gap stay click-through, so a building under them can be picked.
-    <button type="button" onClick={onClick} aria-pressed={selected}
+    <button type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected}
       style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
         border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "none" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />
       <span style={{ display: "flex", flexDirection: "column", padding: "4px 9px 5px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", backdropFilter: "blur(6px)",
         border: selected ? "1px solid var(--danfo)" : "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }} data-declutter={selected ? 5 : 1}>
+        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }} data-declutter={selected ? 5 : 1} data-place="">
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
       </span>
@@ -505,24 +532,39 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
 }
 
 /** Labels that overlap give way by priority (data-declutter, higher wins: selected place, river inflows, key events,
- *  then places). The hidden card keeps its dot, so the spot stays marked. Runs every frame after the anchors move. */
-function declutter(root: HTMLElement) {
-  const boxes = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter]"))
-    .map((el) => ({ el, p: Number(el.dataset.declutter) || 0, r: el.getBoundingClientRect() }))
+ *  then places). The hidden card keeps its dot, so the spot stays marked. Runs every frame after the anchors move.
+ *  A phone also declutters the chips marked data-declutter-phone (close-ups, the GPU box, the rain label) and shows at
+ *  most PHONE_PLACES place chips. */
+const PHONE_PLACES = 6;
+function declutter(root: HTMLElement, phone = false) {
+  if (!phone) {
+    root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => { el.style.visibility = ""; });
+    root.querySelectorAll<HTMLElement>("[data-place]").forEach((el) => { el.parentElement!.style.visibility = ""; });
+  }
+  const boxes = Array.from(root.querySelectorAll<HTMLElement>(phone ? "[data-declutter], [data-declutter-phone]" : "[data-declutter]"))
+    .map((el) => ({ el, p: Number(el.dataset.declutter ?? el.dataset.declutterPhone) || 0, r: el.getBoundingClientRect() }))
     .filter((b) => b.r.width > 0)
     .sort((a, b) => b.p - a.p);
+  let places = 0;
   // Map controls and the hint pill are obstacles: labels never sit under them.
   const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block]")).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
   const PAD = 3;
   for (const b of boxes) {
-    const hit = kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
+    const capped = phone && "place" in b.el.dataset && places >= PHONE_PLACES;
+    const hit = capped || kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
     b.el.style.visibility = hit ? "hidden" : "";
-    if (!hit) kept.push(b.r);
+    // On a phone a hidden place goes with its dot: a dot left under another label is the clutter we are removing.
+    if (phone && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
+    if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
 }
 
 // ---------- the stage ----------
-export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase }: MapStageProps) {
+export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase, layout = "desktop" }: MapStageProps) {
+  const phone = layout === "phone";
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+  const touch = useTouch();
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
@@ -621,7 +663,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         c.setView({ orientation: { heading: c.heading, pitch: Cesium.Math.clamp(c.pitch, MIN_PITCH, MAX_PITCH), roll: 0 } });
       }
       anchors.current.forEach((f) => f(s));
-      if (stage.current) declutter(stage.current);
+      if (stage.current) declutter(stage.current, phoneRef.current);
       const now = performance.now();
       if (now - lastCam < 120) return;
       lastCam = now;
@@ -725,8 +767,23 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     };
     const onEnter = () => { over.current = true; };
     const onLeave = () => { over.current = false; seq++; if (!pinnedRef.current) setHover(null); };
-    const onDown = (e: MouseEvent) => { down = e.button === 0 ? local(e) : null; setMenu(null); };
+    // Touch: a long press is the right-click (the waypoint menu).
+    let press: ReturnType<typeof setTimeout> | undefined;
+    const onDown = (e: MouseEvent) => {
+      down = e.button === 0 ? local(e) : null; setMenu(null);
+      clearTimeout(press);
+      if ((e as PointerEvent).pointerType !== "touch" || !down) return;
+      const at = down;
+      press = setTimeout(() => {
+        if (!down || Math.hypot(down.x - at.x, down.y - at.y) > 0) return;
+        down = null;  // the finger's lift is not a tap
+        const p = pick(at.x, at.y);
+        if (p) setMenu({ x: at.x, y: at.y, ...p });
+      }, LONG_PRESS_MS);
+    };
+    const onTouchMove = (e: PointerEvent) => { if (e.pointerType === "touch" && down && Math.hypot(local(e).x - down.x, local(e).y - down.y) > 8) clearTimeout(press); };
     const onUp = (e: MouseEvent) => {
+      clearTimeout(press);
       if (e.button !== 0 || !down) return;
       if (!hoverAllowed()) { down = null; return; }
       const { x, y } = local(e);
@@ -737,6 +794,16 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         const hit = s.pick(new Cesium.Cartesian2(x, y));
         if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
       }
+      // A finger has no hover: a tap reads the depth at that point and pins it (another tap moves the pin).
+      if ((e as PointerEvent).pointerType === "touch") {
+        const p = runId ? pick(x, y) : null;
+        const mine = ++seq;
+        setHover(null);
+        if (!p || !inAoi(p.lon, p.lat) || !runId) { setPinned(null); return; }
+        setPinned({ depth: NaN, max: NaN, loading: true, ...p });
+        void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (mine === seq) setPinned(r ? { ...r, ...p } : null); }, () => { if (mine === seq) setPinned(null); });
+        return;
+      }
       if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
       if (h && !h.loading) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
@@ -744,6 +811,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     let rdown: { x: number; y: number } | null = null;
     const onContext = (e: MouseEvent) => {
       e.preventDefault();
+      if ((e as PointerEvent).pointerType === "touch" || (e as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
       const { x, y } = local(e);
       if (rdown && Math.hypot(x - rdown.x, y - rdown.y) > 4) return;  // it was a right-drag (tilt), not a click
       const p = pick(x, y);
@@ -757,8 +825,11 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     canvas.addEventListener("pointerdown", onRDown);
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("contextmenu", onContext);
+    canvas.addEventListener("pointermove", onTouchMove);
     return () => {
       clearTimeout(timer);
+      clearTimeout(press);
+      canvas.removeEventListener("pointermove", onTouchMove);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mouseenter", onEnter);
       canvas.removeEventListener("mouseleave", onLeave);
@@ -1058,6 +1129,27 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     setFocus(null);
   }, [focusReq, viewer]);
 
+  // ----- phone: zoom buttons and the legend sheet -----
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendBox = useRef<HTMLDivElement>(null);
+  const [legendEmpty, setLegendEmpty] = useState(true);
+  useEffect(() => {
+    const el = legendBox.current;
+    if (!el) return;
+    const check = () => setLegendEmpty(el.childElementCount === 0);
+    check();
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true });
+    return () => mo.disconnect();
+  }, [phone]);
+  /** Along the view direction, a share of the camera's height (positive in, negative out). */
+  const zoomBy = (share: number) => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const c = viewer.camera;
+    const h = Math.max(50, c.positionCartographic.height);
+    if (share > 0) c.zoomIn(h * share); else c.zoomOut(h * -share);
+  };
+
   // ----- fullscreen -----
   const fullscreen = () => {
     const node = stage.current;
@@ -1089,7 +1181,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           return (
           <Anchored key={p.name} anchors={anchors} scene={scene} lon={lp?.[0] ?? p.lon} lat={lp?.[1] ?? p.lat}>
             <div style={{ opacity: lay.places.opacity }}>
-              <PlaceLabel name={p.name} sub={sub(p)} selected={selectedPlace === p.name} onClick={() => setSelectedPlace(selectedPlace === p.name ? null : p.name)} />
+              <PlaceLabel name={p.name} sub={phone ? undefined : sub(p)} selected={selectedPlace === p.name} onClick={() => setSelectedPlace(selectedPlace === p.name ? null : p.name)} />
             </div>
           </Anchored>
           );
@@ -1119,11 +1211,23 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </Anchored>
         ))}
 
-        {pinned && (
+        {pinned && !phone && (
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
-            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} />
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} />
           </Anchored>
         )}
+        {/* Phone: a 236 px card beside the point would run off a 390 px screen. The point gets a dot; the reading sits
+            bottom-left with a close button. */}
+        {pinned && phone && <>
+          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
+            <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
+          </Anchored>
+          <div style={{ position: "absolute", left: 12, bottom: viewState.coords ? 126 : 64, display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} />
+            <button type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
+              style={{ ...groupStyle, ...colBtn, flex: "none" }}><X size={14} weight="bold" /></button>
+          </div>
+        </>}
         {!pinned && hover && (
           <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10 }}>
             <Tooltip r={hover} tS={tS} cellM={cellM} pinned={false} outside={outsideDomain(run, hover.lon, hover.lat, aoi?.grid.bounds_wgs84)} />
@@ -1134,27 +1238,42 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <div role="menu" style={{ position: "absolute", left: menu.x, top: menu.y, minWidth: 160, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
             borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "auto" }}>
             <button type="button" role="menuitem" onClick={() => { dropWaypoint(menu.lon, menu.lat); setMenu(null); }}
-              style={{ width: "100%", height: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 9px", border: 0, borderRadius: 3,
-                background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 12, textAlign: "left", cursor: "pointer" }}>
-              Drop waypoint<span style={{ color: "var(--ink-muted)" }}>W</span>
+              style={{ width: "100%", height: touch ? 40 : 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 9px", border: 0, borderRadius: 3,
+                background: "transparent", color: "var(--ink)", font: "inherit", fontSize: touch ? 13 : 12, textAlign: "left", cursor: "pointer" }}>
+              Drop waypoint{!touch && <span style={{ color: "var(--ink-muted)" }}>W</span>}
             </button>
           </div>
         )}
 
-        <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />
+        {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {run && !!frames?.length && !closeUp.active && (
-          <div style={{ position: "absolute", top: 30, left: 64, pointerEvents: "auto" }}>
+          <div style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), pointerEvents: "auto" }}>
             <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
           </div>
         )}
-        <div data-declutter-block style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
-          <RouteButton drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
-            onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
-            onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
-          <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
-        </div>
-        {/* Below the route and camera controls, so it never covers them. */}
-        <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: 62, transform: "translateX(-50%)", maxWidth: "calc(100% - 32px)" }}>
+        {phone ? (
+          <div data-declutter-block style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
+            <ViewSwitch compact active={active} onPick={pickMode} canFly={route.length >= 2} extra={
+              <RouteButton compact drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
+                onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
+                onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />} />
+          </div>
+        ) : (
+          <div data-declutter-block style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <RouteButton short={layout === "tablet"} drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
+              onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
+              onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
+            <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
+          </div>
+        )}
+        {/* Below the route and camera controls, so it never covers them. On touch there is no drag hint (Cesium's
+            gestures: one finger pans, two rotate and tilt, pinch zooms); the hints for a task in progress stay. */}
+        {(() => {
+          const idle = !simNow.running && !rs.picking && !(rs.visible && rs.mode === "cell" && !drawing && mode === "orbit") && !drawing;
+          if ((touch || phone) && idle) return null;
+          return (
+        <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: phone ? 100 : 62, transform: "translateX(-50%)", maxWidth: phone ? "calc(100% - 24px)" : "calc(100% - 32px)",
+          ...(phone ? { whiteSpace: "normal", textAlign: "center", width: "max-content" } : {}) }}>
           {simNow.running ? (rs.mode === "cell" ? "Simulating · the cloud follows the storm cell and rains harder as the pattern peaks" : "Simulating · the rain grows and eases with the time pattern")
             : rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
             : rs.picking === "centre" ? "Click the map to place the storm centre · Esc to cancel"
@@ -1164,6 +1283,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             : mode === "fly" ? "Drag to look around · scroll or E / Q for height · Esc to orbit"
             : "Drag to pan · right-drag or Ctrl+drag to orbit and tilt · scroll to zoom · W to drop a waypoint"}
         </span>
+          );
+        })()}
         {mode === "free" && (
           <span style={{ ...pill, position: "absolute", left: "50%", bottom: 26, transform: "translateX(-50%)", ...FIG }}>
             Move speed {freeSpeed.toFixed(freeSpeed < 1 ? 2 : 1)}× · scroll to change
@@ -1185,8 +1306,23 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
         {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} bounds={aoi?.grid.bounds_wgs84} />}
-        {/* One bottom-left slot for every map legend, stacked so they never overlap. */}
-        <div data-declutter-block style={{ position: "absolute", left: 16, bottom: viewState.coords ? 84 : 44, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
+        {/* One bottom-left slot for every map legend, stacked so they never overlap. On a phone the legend button opens
+            them as a small sheet instead (they would cover half the map). */}
+        <div role={phone ? "dialog" : undefined} aria-label={phone ? "Legends" : undefined} data-declutter-block style={phone
+          ? { position: "absolute", left: 12, right: 12, bottom: 12, maxHeight: "60%", display: legendOpen ? "flex" : "none", flexDirection: "column",
+            background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--shadow-float)", pointerEvents: "auto", zIndex: 3 }
+          : { display: "contents" }}>
+          {phone && <div style={{ display: "flex", alignItems: "center", height: 40, padding: "0 0 0 12px", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
+            <span style={{ fontWeight: 600 }}>Legends</span>
+            <button type="button" aria-label="Close legends" onClick={() => setLegendOpen(false)}
+              style={{ marginLeft: "auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, color: "var(--ink-muted)", cursor: "pointer" }}>
+              <X size={14} weight="bold" />
+            </button>
+          </div>}
+          {phone && legendEmpty && <p style={{ margin: 0, padding: 12, color: "var(--ink-muted)", fontSize: 13 }}>The layers that are on have no legend. Turn on flow, hazard, drains or time to flood in Layers.</p>}
+        <div ref={legendBox} data-declutter-block className={phone ? "dr-legends-phone" : undefined} style={phone
+          ? { minHeight: 0, overflowY: "auto", display: legendEmpty ? "none" : "flex", flexDirection: "column", alignItems: "stretch", gap: 8, padding: 10 }
+          : { position: "absolute", left: 16, bottom: viewState.coords ? (layout === "tablet" ? 96 : 84) : 44, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
           {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rs.visible && rs.preview && (
           <div className="ft-legend" style={{ pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
@@ -1200,11 +1336,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <FlowLegend runId={run?.status === "done" ? run.run_id : undefined} />
           {!closeUp.active && <DrainsLegend aoi={aoi} run={run} runsBase={runsBase} />}
         </div>
+        </div>
         <DrainsMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} runsBase={runsBase} hidden={!!closeUp.active} />
         <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />
 
         {place && (
-          <div style={{ position: "absolute", left: "50%", bottom: 74, transform: "translateX(-50%)", display: "flex", flexDirection: "column", minWidth: 520, background: "var(--surface-raised)",
+          <div style={{ position: "absolute", ...(phone ? { left: 12, right: 12, bottom: 44 } : { left: "50%", bottom: 74, transform: "translateX(-50%)", minWidth: 520 }), display: "flex", flexDirection: "column", background: "var(--surface-raised)",
             border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, height: 36, padding: "0 8px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
               <RoadHorizon size={15} weight="fill" color="var(--hazard)" style={{ flex: "none" }} />
@@ -1235,6 +1372,30 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         )}
 
+        {layout !== "desktop" ? (
+          <>
+            {/* Phone: top right, under the header. Tablet: bottom right, clear of the coordinate chip (the desktop row
+                would run into it at 768 px). */}
+            <div data-declutter-block style={{ position: "absolute", right: phone ? 12 : 16, ...(phone ? { top: 12 } : { bottom: 26 }), display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
+              <button type="button" data-tour="plan" aria-label={view === "Plan" ? "2D plan view. Switch to 3D" : "3D view. Switch to the 2D plan view"} onClick={() => pickView(view === "Plan" ? "Orbit" : "Plan")}
+                style={{ ...groupStyle, ...colBtn, fontWeight: 600, fontSize: 12 }}>{view === "Plan" ? "2D" : "3D"}</button>
+              <div style={{ ...groupStyle, height: "auto", padding: 0, flexDirection: "column" }}>
+                <button type="button" aria-label="Zoom in" onClick={() => zoomBy(0.4)} style={{ ...colBtn, background: "transparent", border: 0 }}><Plus size={16} weight="bold" /></button>
+                <span aria-hidden="true" style={{ width: 24, height: 1, background: "var(--hairline)" }} />
+                <button type="button" aria-label="Zoom out" onClick={() => zoomBy(-0.6)} style={{ ...colBtn, background: "transparent", border: 0 }}><Minus size={16} weight="bold" /></button>
+              </div>
+              {phone ? (
+                <button type="button" data-tour="legend" aria-label="Legends" aria-expanded={legendOpen} onClick={() => setLegendOpen((v) => !v)}
+                  style={{ ...groupStyle, ...colBtn, ...(legendOpen ? { background: "var(--pressed-bg)", color: "var(--ground)" } : {}) }}><Info size={16} weight="bold" /></button>
+              ) : (
+                <button type="button" aria-label="Fullscreen" title="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></button>
+              )}
+            </div>
+            <div data-declutter-block style={{ position: "absolute", ...(phone ? { left: 12, bottom: viewState.coords ? 96 : 34 } : { right: 72, bottom: viewState.coords ? 96 : 26 }), pointerEvents: "none" }}>
+              <ScaleBar nice={cam.nice} px={cam.px} />
+            </div>
+          </>
+        ) : (
         <div data-declutter-block style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
           <ScaleBar nice={cam.nice} px={cam.px} />
           <div style={{ ...groupStyle, gap: 2 }}>
@@ -1247,6 +1408,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             <ArrowsOut size={15} weight="bold" />
           </button>
         </div>
+        )}
       </div>
     </div>
   );

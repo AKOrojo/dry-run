@@ -1,6 +1,6 @@
 // Dock (rev 5 dock()): timeline, three charts, key events. Everything reads the one clock.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent, ReactNode } from "react";
+import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { CaretDown, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
 import type { RunEvents, RunManifest } from "../lib/api";
 import { setFocus } from "../lib/focus";
@@ -87,7 +87,7 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
   const past = pts.slice(0, pi + 1), fut = pts.slice(pi);
   const hours = Math.max(1, Math.round(tTotal / 3600));
   const xl = [0, 1, 2, 3].map((k) => Math.round((hours * k) / 3)).filter((h, k, a) => a.indexOf(h) === k);
-  const style = { display: "block", overflow: "visible", fontFamily: "var(--font-sans)", fontSize: 10.5, ...FIG } as const;
+  const style = { display: "block", overflow: "visible", fontFamily: "var(--font-sans)", fontSize: "var(--chart-tick, 10.5px)", ...FIG } as const;
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} style={style}>
       <defs>
@@ -367,7 +367,7 @@ function abNow(a: number, b: number, digits: number) {
 type RainStorm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
 
 /** Before a run, with a rain area set: the rain at the storm centre over time, and the preview depth inside each place. */
-function RainDock({ storm, now }: { storm: RainStorm; now?: ReactNode }) {
+function RainDock({ storm, now, layout = "row" }: { storm: RainStorm; now?: ReactNode; layout?: DockLayout }) {
   const r = useRain();
   const f = r.preview;
   const [rows, setRows] = useState<{ name: string; mm: number }[]>([]);
@@ -379,16 +379,16 @@ function RainDock({ storm, now }: { storm: RainStorm; now?: ReactNode }) {
   }, [f?.png, r.places]);
   const series = useMemo(() => hyetograph(storm.total_mm, storm.duration_h, storm.pattern ?? "uniform"), [storm.total_mm, storm.duration_h, storm.pattern]);
   const moving = isCell(r) && r.moving;
-  const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
+  const shell = dockShell(layout);
   return (
-    <div data-tour="timeline" style={shell}>
-      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+    <div data-tour={layout === "extras" ? undefined : "timeline"} style={shell}>
+      {layout !== "extras" && <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <Band title="Rain at the storm centre" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>
           mm/h{moving ? " · moving cell, so the centre is where the storm is at each moment" : ""}</span>} />
         <ChartFigure last title="Rain intensity" unit="mm/h" now={`${Math.max(...series).toFixed(0)} peak`} series={series} color="var(--depth-3)" gid="rn" playI={-1} ymaxMin={Math.max(...series) * 1.2} tTotal={storm.duration_h * 3600}
           aria="Rain intensity at the storm centre over the storm duration" />
-      </div>
-      {now ?? <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
+      </div>}
+      {layout !== "two" && (now ?? <div style={{ display: "flex", flexDirection: "column", borderLeft: layout === "row" ? "1px solid var(--hairline)" : undefined, minHeight: 0 }}>
         <Band title="Where it rains" />
         {rows.length === 0 ? <p style={{ margin: 0, padding: 14, color: "var(--ink-muted)", fontSize: 12 }}>{r.places.length ? "Waiting for the preview" : "No places in this area"}</p> : (
           <ol style={{ margin: "4px 0 0", padding: 0, listStyle: "none", minHeight: 0, overflowY: "auto" }}>
@@ -401,12 +401,23 @@ function RainDock({ storm, now }: { storm: RainStorm; now?: ReactNode }) {
             ))}
           </ol>
         )}
-      </div>}
+      </div>)}
     </div>
   );
 }
 
-export function Dock({ storm, run, series, ghost, third, side, note }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+/** Where the dock is drawn (board 13). "row": desktop, the charts in a row and key events at the right. "two": a tablet,
+ *  under the map, the timeline and two charts. "extras": the tablet drawer's Timeline tab, what "two" leaves out (the
+ *  third chart and key events). "stack": the phone Timeline sheet, every chart full width with key events below. */
+export type DockLayout = "row" | "two" | "extras" | "stack";
+const dockShell = (layout: DockLayout): CSSProperties => (layout === "row"
+  ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 }
+  : layout === "two" ? { display: "flex", flexDirection: "column", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 }
+  : { display: "flex", flexDirection: "column", background: "var(--surface)", minHeight: 0, border: layout === "extras" ? "1px solid var(--hairline)" : undefined,
+    borderRadius: layout === "extras" ? 6 : undefined, overflow: layout === "extras" ? "hidden" : undefined });
+
+export function Dock({ storm, run, series, ghost, third, side, note, layout = "row" }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+  layout?: DockLayout;
   /** Compare mode: run A, drawn under `run` (B) in the charts. */ ghost?: RunManifest;
   /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. */
   third?: ReactNode; side?: ReactNode; note?: string }) {
@@ -422,15 +433,18 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   const events = useMemo(() => (ts && ts.t_s.length > 1 ? deriveEvents(ts, rainStopS, srv) : []), [ts, rainStopS, srv]);
   const pond = srv?.events.find((e) => e.kind === "pond_closure");
   const pondKm = pond ? (pond.road_km ?? ts?.road_km_impassable[0] ?? null) : null;
-  const shell = { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 } as const;
+  const shell = dockShell(layout);
   const rainSet = useRain();
   // While a run simulates, or the finished run plays with "Clouds and rain" on, the side panel is Rain now.
   const wsrc = useWeatherSource(run);
   const rainNow = wsrc ? <RainNow src={wsrc} /> : null;
-  if ((!ts || ts.t_s.length < 2) && storm && rainSet.mode !== "whole" && rainSet.visible) return <RainDock storm={storm} now={rainNow ?? undefined} />;
+  if ((!ts || ts.t_s.length < 2) && storm && rainSet.mode !== "whole" && rainSet.visible) return <RainDock storm={storm} now={rainNow ?? undefined} layout={layout} />;
   if (!ts || ts.t_s.length < 2) {
-    return <div data-tour="timeline" style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" /><p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p></div>
-      {rainNow ?? <KeyEvents events={[]} nowS={0} />}</div>;
+    const empty = <p style={{ margin: 0, padding: 18, color: "var(--ink-muted)" }}>Run a simulation to see the timeline and charts.</p>;
+    if (layout === "stack") return <div data-tour="timeline" style={shell}>{empty}{rainNow}</div>;
+    if (layout === "extras") return <div style={shell}>{rainNow ?? <KeyEvents events={[]} nowS={0} />}</div>;
+    return <div data-tour="timeline" style={shell}><div style={{ display: "flex", flexDirection: "column" }}><Band title="Timeline" />{empty}</div>
+      {layout === "row" && (rainNow ?? <KeyEvents events={[]} nowS={0} />)}</div>;
   }
   const durS = ts.t_s[ts.t_s.length - 1];
   const pi = nearest(ts.t_s, t_s);
@@ -449,28 +463,50 @@ export function Dock({ storm, run, series, ghost, third, side, note }: { storm?:
   const events$ = (extra?: ReactNode) => <KeyEvents events={events} nowS={t_s} runId={runKey} extra={extra} />;
   const eventsOrWater = water && run && sidePick === "water" ? <WaterWent run={run} onEvents={() => setSidePick("events")} />
     : events$(water ? <SideSwitch to="water" onClick={() => setSidePick("water")} /> : undefined);
-  return (
-    <div data-tour="timeline" style={shell}>
-      <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
-        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note ?? (!ghost ? drainNote(run) : undefined)} />
-        {lay.profile.on && !ghost ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
-          <ChartFigure title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
-            aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />
-          <ChartFigure title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
-            aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />
-          {third ?? (ds && thirdPick === "drains"
+  const sidePanel = side ?? (lay.loads.on && !ghost ? <LoadsPanel /> : rainNow && wsrc?.live ? rainNow : rainNow
+    ? <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
+        {rainNow}{eventsOrWater}
+      </div>
+    : eventsOrWater);
+  const narrow = layout !== "row";
+  const charts = [
+          <ChartFigure key="fa" last={narrow} title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
+            aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />,
+          <ChartFigure key="rk" last={layout === "two" ? true : narrow} title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
+            aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />,
+          third ?? (ds && thirdPick === "drains"
             ? <ChartFigure last title="Drain network running full" unit="%" now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
                 color="var(--depth-3)" gid="dn" ymaxMin={100} threshold={[FULL_PCT, `Full ${FULL_PCT} %`]} {...common}
                 aria={`Share of the drain network running full over time; ${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} % at the playhead`} />
             : <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
-                color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />)}
+                color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />),
+  ];
+  const profile = lay.profile.on && !ghost;
+  // Narrow layouts: one chart per row, a hairline between them; the side panel then reads as a full-width list.
+  const rows = (cs: ReactNode[]) => cs.map((c, k) => <div key={k} style={{ borderTop: k || layout !== "extras" ? "1px solid var(--hairline)" : undefined, minWidth: 0 }}>{c}</div>);
+  const sideBlock = <div className="dr-dock-side" style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>{sidePanel}</div>;
+  if (layout === "stack") {
+    return <div data-tour="timeline" style={shell}>{profile ? <ProfileDock /> : rows(charts)}{sideBlock}</div>;
+  }
+  if (layout === "extras") return <div style={shell}>{!profile && rows([charts[2]])}{sideBlock}</div>;
+  if (layout === "two") {
+    return (
+      <div data-tour="timeline" style={shell}>
+        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note ?? (!ghost ? drainNote(run) : undefined)} />
+        {profile ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
+          {charts[0]}<div style={{ borderLeft: "1px solid var(--hairline)", minWidth: 0 }}>{charts[1]}</div></div>}
+      </div>
+    );
+  }
+  return (
+    <div data-tour="timeline" style={shell}>
+      <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
+        <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note ?? (!ghost ? drainNote(run) : undefined)} />
+        {profile ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
+          {charts}
         </div>}
       </div>
-      {side ?? (lay.loads.on && !ghost ? <LoadsPanel /> : rainNow && wsrc?.live ? rainNow : rainNow
-        ? <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
-            {rainNow}{eventsOrWater}
-          </div>
-        : eventsOrWater)}
+      {sidePanel}
     </div>
   );
 }

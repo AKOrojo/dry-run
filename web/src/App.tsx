@@ -31,7 +31,12 @@ import { Dock } from "./components/Dock";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { cachedBaseRun, isBase } from "./lib/areas";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
-import type { SimBar } from "./components/Sidebar";
+import type { SimBar, Tab } from "./components/Sidebar";
+import { createPortal } from "react-dom";
+import { MiniPlayer, Sheet, TabBar } from "./components/phone/Phone";
+import type { PhoneTab, Snap } from "./components/phone/Phone";
+import { useBreakpoint } from "./lib/breakpoint";
+import type { DockLayout } from "./components/Dock";
 import { Mode, TopBar } from "./components/TopBar";
 import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, domainSwitchVisible, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
 import type { RainState } from "./lib/rain";
@@ -119,6 +124,22 @@ export default function App() {
   const { t_s } = useClock();
   const view = useView();
   const cu = useCloseUp();
+  // ---- Board 13: phone (tab bar + sheets) and tablet (side panel as a drawer). The shell owns the side panel's tab there.
+  const bp = useBreakpoint();
+  const [sideTab, setSideTab] = useState<Tab>("Scenario");
+  const [sheet, setSheet] = useState<PhoneTab | null>(null);
+  const [snap, setSnap] = useState<Snap>("half");
+  const [drawer, setDrawer] = useState(false);
+  const [sheetBody, setSheetBody] = useState<HTMLDivElement | null>(null);
+  // The coordinate chip moves into the phone's ⋮ menu: off when a phone opens the page, back on when it widens.
+  const wasPhone = useRef(false);
+  useEffect(() => {
+    if (bp === "phone" && !wasPhone.current) setView({ coords: false });
+    else if (bp !== "phone" && wasPhone.current) setView({ coords: true });
+    wasPhone.current = bp === "phone";
+    if (bp !== "phone") setSheet(null);
+    if (bp !== "tablet") setDrawer(false);
+  }, [bp]);
   const pinSeries = usePinnedSeries();
   const aoiId = aoi?.aoi_id;
   const rainState = useRain();
@@ -473,18 +494,53 @@ export default function App() {
   // Tide only applies to coastal areas: an AOI with river inflows is inland.
   const coastal = !Object.keys(aoi?.layers ?? {}).some((k) => k.includes("inflows"));
 
+  const phoneOf = (t: Tab): PhoneTab => (t === "Compare" ? "Scenario" : t === "Sources" ? "Layers" : t === "Timeline" ? "Timeline" : t);
+  const sideOf = (t: PhoneTab): Tab => (t === "Scenario" ? (comparing ? "Compare" : "Scenario") : t === "Timeline" ? sideTab : t);
+  const phoneTab = (t: PhoneTab) => {
+    if (t === sheet && !(t === "Layers" && sideTab === "Sources")) { setSheet(null); return; }
+    if (t !== sheet) setSnap("half");
+    setSheet(t);
+    if (t !== "Timeline") setSideTab(sideOf(t));
+  };
+  /** The side panel asks for a tab (a mode change, a picked building, the Sources link): open it where it lives. */
+  const openSide = (t: Tab) => {
+    setSideTab(t);
+    if (bp === "phone") { if (sheet !== phoneOf(t)) setSnap("half"); setSheet(phoneOf(t)); }
+    else if (bp === "tablet") setDrawer(true);
+  };
+  /** The tour opens the sheet or drawer its step points into, and closes it for steps on the map or the header. */
+  const tourStep = (id: string) => {
+    const where: Record<string, PhoneTab> = { scenario: "Scenario", rain: "Scenario", "rain-domain": "Scenario", drainage: "Scenario", simulate: "Scenario", "sim-status": "Scenario",
+      layers: "Layers", flow: "Layers", gpu3d: "Layers", timeline: "Timeline", marks: "Timeline", agent: "Agent" };
+    const t = where[id];
+    if (bp === "phone") {
+      setSheet(t ?? null); setSnap("half");
+      if (t && t !== "Timeline") setSideTab(sideOf(t));
+    } else if (bp === "tablet") {
+      const inDrawer = t && t !== "Agent" && !(t === "Timeline" && id === "timeline");
+      setDrawer(!!inDrawer);
+      if (inDrawer) setSideTab(t === "Timeline" ? "Timeline" : sideOf(t));
+    }
+  };
+  const playerRun = (pair ? pair.b : run);
+  const mainDock = !cu.active && !buildingView && !agentView;
+  const dock = (layout: DockLayout) => (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+          third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
+          note={pair ? "One clock drives A and B" : undefined} layout={layout} />);
+  const narrow = bp !== "desktop";
+
   return (
-    <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
+    <div className={`dr-app body bp-${bp}${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}${drawer ? " drawer-open" : ""}${bp === "phone" && sheet ? " sheet-open" : ""}`}>
       <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} aoiName={aoi?.name} defaultAoi={defaultAoi} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
         mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
-        onCopyLink={copyLink} onSaveImage={saveImage} />
+        onCopyLink={copyLink} onSaveImage={saveImage} layout={bp} drawerOpen={drawer} onDrawer={() => setDrawer((d) => !d)} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: side ? "50%" : 0 }}>
             <ErrorBoundary name="map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
             {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase}
-              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} />}
+              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} layout={bp} />}
             </ErrorBoundary>
           </div>
           {side && aoi && pair && (
@@ -502,14 +558,25 @@ export default function App() {
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
           </div>
         </div>
-        {view.timeline && (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
-          third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
-          note={pair ? "One clock drives A and B" : undefined} />)}
+        {bp !== "phone" && view.timeline && dock(bp === "tablet" ? "two" : "row")}
+        {bp === "phone" && (
+          <Sheet hidden={!sheet} tab={sheet} title={sheet === "Scenario" && comparing ? "Compare" : sideTab === "Sources" && sheet === "Layers" ? "Sources" : sheet ?? ""} snap={snap} onSnap={setSnap} onClose={() => setSheet(null)}
+            head={sheet === "Timeline" && playerRun?.status === "done" ? <MiniPlayer inline run={playerRun} /> : undefined}>
+            <div ref={setSheetBody} style={{ display: sheet && sheet !== "Timeline" ? "flex" : "none", flex: "1 1 auto", minHeight: 0, flexDirection: "column" }} />
+            {sheet === "Timeline" && <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", paddingBottom: "env(safe-area-inset-bottom)" }}>{dock("stack")}</div>}
+          </Sheet>
+        )}
       </div>
-      {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
-      <div style={{ display: view.sidebar ? "contents" : "none" }}>
+      {bp === "phone" && playerRun?.status === "done" && sheet !== "Timeline" && <MiniPlayer run={playerRun} />}
+      {bp === "phone" && <TabBar active={sheet} onTab={phoneTab} agentRuns={session.runIds.length} />}
+      {bp === "tablet" && drawer && <div className="dr-scrim" aria-hidden="true" onClick={() => setDrawer(false)} />}
+      {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. On a phone it lives
+          in the sheet (a portal), on a tablet in the drawer. */}
+      <div className={bp === "tablet" ? "dr-drawer" : undefined} style={{ display: bp === "tablet" ? (drawer ? "flex" : "none") : bp === "phone" ? "none" : view.sidebar ? "contents" : "none" }}
+        onKeyDown={bp === "tablet" ? (e) => { if (e.key === "Escape" && !e.defaultPrevented) setDrawer(false); } : undefined}>
+      {(() => { const panel = (
       <ErrorBoundary name="side panel" resetKey={aoi?.aoi_id} style={{ borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
-      <Sidebar aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
+      <Sidebar {...(narrow ? { tab: sideTab, onTab: openSide } : {})} phone={bp === "phone"} timeline={bp === "tablet" && mainDock && view.timeline ? dock("extras") : undefined} aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
           inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
@@ -530,9 +597,10 @@ export default function App() {
           pattern, onPattern: (v) => { touched.current = true; setPattern(v); }, level, onLevel: setLevel,
           coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, linkNote: linkNote ? { message: linkNote, detail: `Opened ${aoi?.name ?? "the default area"} instead.`, onDismiss: () => setLinkNote(null) } : null, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
         }} />
-      </ErrorBoundary>
+      </ErrorBoundary>);
+      return bp === "phone" ? (sheetBody ? createPortal(panel, sheetBody) : null) : panel; })()}
       </div>
-      {tour && <Tour onClose={() => setTour(false)} />}
+      {tour && <Tour onClose={() => setTour(false)} layout={bp} onStep={tourStep} />}
     </div>
   );
 }

@@ -242,7 +242,7 @@ export function CloudsRain({ scene, anchors, src, hidden }: {
   if (wx.now.presence <= 0) return null;
   return (
     <Anchored anchors={anchors} scene={scene} lon={wx.now.centre[0]} lat={wx.now.centre[1]} clamp={[110, 80, 110, 130]}>
-      <span data-testid="weather-label" style={{ position: "absolute", left: 0, top: 0, transform: "translate(-50%, calc(-100% - 18px))", background: "color-mix(in srgb, var(--ground) 86%, transparent)",
+      <span data-testid="weather-label" className="dr-rain-chip" data-declutter-phone={2} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-50%, calc(-100% - 18px))", background: "color-mix(in srgb, var(--ground) 86%, transparent)",
         backdropFilter: "blur(6px)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", padding: "4px 9px 5px",
         display: "flex", flexDirection: "column", whiteSpace: "nowrap" }}>
         <span style={{ fontSize: 12, fontWeight: 600, ...FIG }}>{title}</span>

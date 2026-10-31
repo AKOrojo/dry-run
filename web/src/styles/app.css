@@ -54,10 +54,50 @@ body { background: var(--ground); }
 .dr-tagline { display: contents; }
 @media (max-width: 599px) { .dr-tagline { display: none; } }
 
-@media (max-width: 900px) {
-  .dr-app { grid-template-columns: 1fr; grid-template-rows: 48px 60vh 284px auto; height: auto; min-height: 100vh; }
-  .dr-main { display: contents; }
-  .dr-panel { border-left: 0; border-top: var(--stroke-hairline) solid var(--hairline); overflow-y: visible; }
-  .dr-badges { top: 52px; left: 66px; }
-  .dr-app.no-timeline { grid-template-rows: 48px 60vh auto; }
-}
+/* Board 13. Breakpoints by width only (lib/breakpoint.ts adds the class): phone under 600 px, tablet 600-1023 px,
+   desktop from 1024 px (the rules above, unchanged). Never a horizontal scroll, text under 11 px or a target under 40 px. */
+html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
+.dr-app.bp-phone, .dr-app.bp-tablet { --chart-tick: 11px; }
+
+.dr-app.bp-tablet { grid-template-columns: minmax(0, 1fr); height: 100dvh; }
+.dr-app.bp-tablet .dr-main { grid-template-rows: minmax(0, 1fr) auto; }
+.dr-app.bp-tablet.no-timeline .dr-main { grid-template-rows: minmax(0, 1fr); }
+.dr-app.bp-tablet .dr-drawer { position: fixed; top: 48px; right: 0; bottom: 0; z-index: 6; width: min(360px, 100%); flex-direction: column;
+  background: var(--ground); box-shadow: var(--shadow-float); }
+.dr-app.bp-tablet .dr-scrim { position: fixed; inset: 48px 0 0 0; z-index: 5; background: color-mix(in srgb, var(--ground) 55%, transparent); }
+
+.dr-app.bp-phone { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+.dr-app.bp-phone > header { flex: none; height: 48px; }
+.dr-app.bp-phone .dr-main { position: relative; display: block; flex: 1 1 auto; min-height: 0; }
+.dr-app.bp-phone .dr-map { position: absolute; inset: 0; }
+.dr-app.bp-phone .dr-badges { top: 112px; left: 12px; }
+/* Touch targets in the sheets: every control at least 40 px tall (the cards are the desktop cards). */
+.dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"], input:not([type="range"]):not([type="checkbox"]):not([type="radio"])),
+.dr-app.bp-phone .dr-sheet-body li[title], .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
+.dr-app.bp-phone .dr-sheet-body label:has(> input[type="number"]) { min-height: 40px; box-sizing: border-box; }
+.dr-app.bp-tablet .dr-drawer :is(button, select, [role="combobox"]) { min-height: 40px; }
+
+.dr-app.bp-phone .dr-sheet-body label:has(input[type="checkbox"]) { min-height: 40px; }
+.dr-app.bp-phone .dr-sheet-body input[type="range"] { min-height: 41px; }
+/* The small layer slider and the map's place chips keep their look; their hit area grows to 40 px. */
+.dr-app.bp-phone .dr-sheet-body .dr-hit { top: -14px !important; bottom: -14px !important; height: auto !important; min-height: 0; }
+.dr-app.bp-phone .dr-place-label { min-height: 40px; }
+.dr-app.bp-phone .dr-place-label > span:last-child { position: relative; }
+.dr-app.bp-phone .dr-place-label > span:last-child::after { content: ""; position: absolute; inset: -8px -6px; }
+.dr-app:is(.bp-phone, .bp-tablet) > header [role="combobox"] { min-height: 40px; }
+/* Tablet: the desktop frame, with every target at least 40 px (a finger on a 768 px screen). */
+.dr-app.bp-tablet :is(button, [role="slider"], [role="combobox"], select) { min-height: 40px; min-width: 40px; }
+.dr-app.bp-tablet :is(input[type="range"], input[type="text"], input[type="search"], input:not([type])) { min-height: 41px; }
+.dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) { min-height: 42px; box-sizing: border-box; }
+.dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) > input { align-self: stretch; }
+.dr-app.bp-tablet label:has(input[type="checkbox"]) { min-height: 40px; }
+.dr-app.bp-tablet .dr-hit { top: -14px !important; bottom: -14px !important; height: auto !important; min-height: 0; }
+.dr-app.bp-tablet .dr-place-label { min-height: 40px; min-width: 0; }
+.dr-app.bp-tablet .dr-place-label > span:last-child { position: relative; }
+.dr-app.bp-tablet .dr-place-label > span:last-child::after { content: ""; position: absolute; inset: -8px -6px; }
+.dr-app.bp-tablet .dr-compass-n { font-size: 11px !important; }
+/* The layer rows' native checkbox sits invisibly over the drawn 16 px box: on touch it covers 40 px around it. */
+.dr-app:is(.bp-phone, .bp-tablet) label > span > input[type="checkbox"] { inset: auto !important; left: -12px !important; top: -12px !important; width: 40px !important; height: 40px !important; }
+.dr-app:is(.bp-phone, .bp-tablet) label > input[role="switch"] { inset: 0 !important; width: 100% !important; height: 100% !important; }
+/* Phone: the rain label gives the map back while a sheet is open (it would sit over the half sheet's edge). */
+.dr-app.bp-phone.sheet-open .dr-rain-chip { display: none !important; }
