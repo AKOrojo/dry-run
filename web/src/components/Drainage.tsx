@@ -315,7 +315,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const prev = useRef<Cesium.PrimitiveCollection>();
   useEffect(() => {
     const drop = () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
-    if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); viewer?.scene.requestRender(); return; }
+    if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
     if (photoreal && !heights) return;
     let live = true;
     const ready = photoreal ? Promise.resolve() : Promise.all([Cesium.GroundPolylinePrimitive.initializeTerrainHeights(), Cesium.GroundPrimitive.initializeTerrainHeights()]);
@@ -412,7 +412,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const [hoverZone, setHoverZone] = useState<string | null>(null);
   useEffect(() => {
     if (!show || !viewer || viewer.isDestroyed()) return;
-    const s = viewer.scene, c = viewer.camera;
+    const s = viewer.scene, c = viewer.camera, canvas = viewer.canvas;
     const update = () => {
       if (s.isDestroyed()) return;
       const r = c.computeViewRectangle();
@@ -423,18 +423,19 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     let last = 0;
     const move = (e: MouseEvent) => {
       const now = performance.now();
-      if (now - last < 150 || !zones.length) return;
+      if (s.isDestroyed() || now - last < 150 || !zones.length) return;
       last = now;
-      const r = viewer.canvas.getBoundingClientRect();
+      const r = canvas.getBoundingClientRect();
       const hit = c.pickEllipsoid(new Cesium.Cartesian2(e.clientX - r.left, e.clientY - r.top), s.globe.ellipsoid);
       if (!hit) { setHoverZone(null); return; }
       const g = Cesium.Cartographic.fromCartesian(hit), q: LL = [Cesium.Math.toDegrees(g.longitude), Cesium.Math.toDegrees(g.latitude)];
       setHoverZone(zones.find((z) => z.parts.some((ring) => inRing(q, ring)))?.id ?? null);
     };
     const leave = () => setHoverZone(null);
-    viewer.canvas.addEventListener("mousemove", move);
-    viewer.canvas.addEventListener("mouseleave", leave);
-    return () => { c.moveEnd.removeEventListener(update); viewer.canvas.removeEventListener("mousemove", move); viewer.canvas.removeEventListener("mouseleave", leave); };
+    canvas.addEventListener("mousemove", move);
+    canvas.addEventListener("mouseleave", leave);
+    // The viewer may already be destroyed (the area changed): its getters throw then, so use what was captured above.
+    return () => { c.moveEnd.removeEventListener(update); canvas.removeEventListener("mousemove", move); canvas.removeEventListener("mouseleave", leave); };
   }, [show, viewer, zones]);
   const inView = (q: LL) => !cam.rect || (q[0] >= cam.rect[0] && q[0] <= cam.rect[2] && q[1] >= cam.rect[1] && q[1] <= cam.rect[3]);
   const zoneLabels = useMemo(() => {
