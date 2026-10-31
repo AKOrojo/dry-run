@@ -987,6 +987,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
   // Inspect store: the pinned point wins over the hover.
   const shown = pinned ?? hover;
+  // A new hover or pinned card is an obstacle at once, not on the next render (labels would flash over it).
+  useLayoutEffect(() => { if (stage.current) declutter(stage.current, phoneRef.current); }, [hover, pinned]);
   useEffect(() => {
     setInspect(shown && !shown.loading ? { lon: shown.lon, lat: shown.lat, depth_m: shown.depth, max_m: shown.max,
       wet_t: shown.ser?.first_flooded_s ?? null, impassable_t: shown.ser?.first_impassable_s ?? null } : null);
