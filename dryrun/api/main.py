@@ -477,6 +477,19 @@ def aoi_presets(aoi_id: str):
     return JSONResponse(presets.scenarios(aoi_id), headers={"Cache-Control": "public, max-age=300"})
 
 
+@app.get("/api/aoi/{aoi_id}/observations")
+def aoi_observations(aoi_id: str, run_id: str | None = None):
+    """Flood observations inside this AOI: {aoi_id, observations: [Observation]}. With ?run_id=, each one's
+    sim_depth_m is that run's max depth at the pin. Empty until someone uploads a photo; nothing is seeded."""
+    from dryrun.api import observations
+
+    _check_aoi(aoi_id)
+    if run_id is not None and not RUN_ID.match(run_id):
+        raise HTTPException(400, "bad run_id")
+    body = {"aoi_id": aoi_id, "observations": observations.list_for_aoi(aoi_id, run_id)}
+    return JSONResponse(body, headers={"Cache-Control": "public, max-age=30"})
+
+
 @app.get("/api/aoi/{aoi_id}/level_sensitivity")
 def aoi_level_sensitivity(aoi_id: str):
     """Precomputed lagoon/sea level sensitivity: {storm, datum, note, rows: [{level_m, run_id, flooded_km2, buildings}]}.
