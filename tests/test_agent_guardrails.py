@@ -354,7 +354,7 @@ def test_aoi_info_exposes_river_inflows_and_presets(monkeypatch):
 
 def test_demo_presets_are_valid_specs():
     rows = presets.demo()["scenarios"]
-    assert rows and {s["aoi_id"] for s in rows} >= {"lagos-lekki-v2", "texas-guadalupe-v0"}
+    assert rows and {s["aoi_id"] for s in rows} >= {"lagos-lekki-v3", "nyc-queens-v1", "texas-guadalupe-v0"}
     for s in rows:
         ScenarioSpec.model_validate(s)  # a preset the agent copies must pass run_simulation's validation
 

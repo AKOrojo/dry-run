@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -63,7 +64,7 @@ INFERRED_INLET_SPACING_M = 50.0  # catch basins along drivable roads where none 
 DESIGN_SLOPE = 0.001  # bed slope for the network's nominal capacity (report: flat coastal Lekki, assumed)
 ZONE_OUTFALL_SPACING_M = 1000.0  # outfalls closer than this share a zone
 ZONE_MIN_INLETS = 50  # smaller zones merge into their nearest neighbour
-ZONE_TILE_M = 1000.0  # outfall catchments split into ~1 km tiles: local pipes are sized for local area, so a
+ZONE_TILE_M = 500.0  # outfall catchments split into ~500 m tiles: local pipes are sized for local area, so a
 #                       downpour on one tile must not use the spare capacity of a dry tile 3 km away
 SURCHARGE_QUANTILE = 0.10  # a zone overflows first at its lowest 10 % of inlet cells
 
@@ -301,7 +302,7 @@ def _nearest(grid: GridSpec, cells: np.ndarray, pts: list[dict]) -> np.ndarray:
 
 
 def zones(grid: GridSpec, land: np.ndarray, inlets: np.ndarray, dem: np.ndarray, outfalls: list[dict],
-          places: list[dict] | None = None, min_inlets: int = ZONE_MIN_INLETS) -> tuple[np.ndarray, list[dict]]:
+          places: list[dict] | None = None, min_inlets: int | None = None) -> tuple[np.ndarray, list[dict]]:
     """Lumped sewer zones: every land cell drains to its nearest outfall (after thinning to
     ZONE_OUTFALL_SPACING_M); catchments with fewer than min_inlets inlets merge into the next nearest. Each
     catchment is then cut into ZONE_TILE_M tiles (tiles with fewer than min_inlets inlets join the catchment's
@@ -311,6 +312,7 @@ def zones(grid: GridSpec, land: np.ndarray, inlets: np.ndarray, dem: np.ndarray,
     places: [{"name", "ring": [(lon, lat), ...]}] to name zones by the neighbourhood holding most of their cells.
     Returns (zone id per cell, -1 off land; zone records).
     """
+    min_inlets = ZONE_MIN_INLETS if min_inlets is None else min_inlets
     land = np.asarray(land, bool)
     zid = np.full(land.shape, -1, np.int32)
     cells = np.flatnonzero(land.reshape(-1))
@@ -677,7 +679,8 @@ def build_aoi(src_dir: str, dst_dir: str, new_id: str, raw_dir: str) -> dict:
     np.save(dst / "inlets_count.npy", inlets.astype(np.float32))
     np.save(dst / "sewer_zones.npy", zid.astype(np.int32))
     (dst / "drains.geojson").write_text(json.dumps(gj, separators=(",", ":")))
-    man.update(aoi_id=new_id, contract_version="0.8.0")
+    version = new_id.rsplit("-", 1)[-1]
+    man.update(aoi_id=new_id, contract_version="0.8.0", name=re.sub(r"\(v\d+\)", f"({version})", man["name"]))
     man["layers"].update(drain_network="drain_network.json", inlets_count="inlets_count.npy",
                          sewer_zones="sewer_zones.npy", drains_geojson="drains.geojson")
     for k in ("drain_network", "inlets_count", "sewer_zones", "drains_geojson"):

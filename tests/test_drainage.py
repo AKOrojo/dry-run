@@ -105,8 +105,8 @@ def test_directions():
     open_ = _run(Drainage(flap_gates=False), [TideLevel(boundary_level_m=2.0)])
     assert gated[3]["_drainage"]["stats"]["drain_outfall_m3"] >= 0
     assert _flooded(gated[2], gated[1]) <= _flooded(open_[2], open_[1])
-    up = _run(None, [DrainUpgrade(capacity_factor=2.0)])
-    assert _flooded(up[2], up[1]) <= _flooded(clean[2], clean[1]) + 50
+    up = _run(Drainage(blockage_pct=0), [DrainUpgrade(capacity_factor=2.0)])
+    assert _flooded(up[2], up[1]) < _flooded(clean[2], clean[1])
 
 
 def test_small_capacity_fills_and_surcharges():

@@ -704,12 +704,14 @@ def test_level_sensitivity_route():
     from dryrun.api.main import app
 
     c = TestClient(app)
-    for aoi in ("lagos-lekki-v2", "nyc-queens-v0"):
+    for aoi in ("lagos-lekki-v3", "nyc-queens-v1", "lagos-lekki-v2", "nyc-queens-v0"):  # old ids stay readable
         t = c.get(f"/api/aoi/{aoi}/level_sensitivity").json()
         levels = [r["level_m"] for r in t["rows"]]
         assert levels == sorted(levels) and levels[0] == -0.5 and t["storm"] and t["note"]
-        base = next(s for s in presets.scenarios(aoi) if not s.get("interventions") and "spatial" not in s["storm"])
-        assert t["rows"][0]["flooded_km2"] > 0 and base  # the -0.5 m row is the reference storm itself
+        assert t["rows"][0]["flooded_km2"] > 0  # the -0.5 m row is the reference storm itself
+    for aoi in ("lagos-lekki-v3", "nyc-queens-v1"):
+        assert any(not s.get("interventions") and not s.get("drainage") and "spatial" not in s["storm"]
+                   for s in presets.scenarios(aoi))
     assert c.get("/api/aoi/texas-guadalupe-v0/level_sensitivity").status_code == 404
 
 

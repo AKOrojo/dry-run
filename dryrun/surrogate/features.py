@@ -56,6 +56,8 @@ DEFAULT_CONFIGS = {
     # small buildings_in_ponds); a dense, mostly sealed neighbourhood for green.
     "lagos-lekki-v1": AOIConfig("lagos-lekki-v1", "Lekki Phase 1", "Open land near Ajah"),
     "lagos-lekki-v2": AOIConfig("lagos-lekki-v2", "Lekki Phase 1", "Open land near Ajah"),
+    # v3: the drain network (contract 0.8.0); drain_factor scales the channels, add_mm_h stays a sink
+    "lagos-lekki-v3": AOIConfig("lagos-lekki-v3", "Lekki Phase 1", "Open land near Ajah"),
 }
 
 

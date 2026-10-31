@@ -343,8 +343,8 @@ drainage step runs after every surface step and moves water between the street a
 
 - **Closed sewers (Queens).** Water enters only at the cells holding one of NYC DEP's 7,672 catch basins in the box,
   through the HEC-22 sag-inlet law: the smaller of a weir (Cw 1.66, perimeter 1.8 m) and an orifice (Co 0.67,
-  0.18 m2), reduced by blockage. It fills one lumped sewer per zone. The 34 zones are Voronoi catchments of the CSO
-  and storm outfalls cut into 1 km tiles, because NYC does not publish its sewersheds. Each zone empties through its
+  0.18 m2), reduced by blockage. It fills one lumped sewer per zone. The 78 zones are Voronoi catchments of the CSO
+  and storm outfalls cut into 500 m tiles, because NYC does not publish its sewersheds. Each zone empties through its
   outfall at up to capacity x 0.85 (runoff) x area. The default is the pre-1973 Queens standard of 1.5 in/h
   (38.1 mm/h); 44.5 and 54.1 mm/h are offered as the 5- and 10-year designs. Pipe storage is 12 mm over the zone.
   The receiving water (the tide setting) cuts the outflow, and flap gates stop it running back in. A full zone
@@ -364,23 +364,57 @@ period, blockage 0-90 %, outfall tide / free / blocked, flap gates, and inferred
 captured, overflow, outfall and stored volumes, peak fill, the time the system filled, the overflow window, the fill
 of every drain line and zone per frame (`drain_fill.json`), and the limits that apply.
 
-Measured on the drainage AOIs (local machine, solver, mass balance 0.0 % in every run):
+Measured on the drainage AOIs (local machine, solver, mass balance 0.0 % in every run; Queens runs 8 h):
 
 | Scenario | Fixed sink (v2 / v0) | Drain model (v3 / v1) | Runtime |
 |---|---|---|---|
-| Lagos 120 mm / 3 h | 21.86 km2, 29,137 buildings | 21.08 km2, 26,076 buildings (blockage 0 %: 20.70, 70 %: 21.90) | 21.7 s -> 32.2 s |
-| Lagos 120 mm / 3 h, lagoon +0.5 m | | 26.91 km2 (the drains are tide-locked now) | |
-| Queens Ida peak hour 80 mm | 2.89 km2 | 2.05 km2; sewers 82 % full, overflow 0:50-1:20 | 12.3 s -> 12.2 s |
-| Queens 80 mm, outfalls blocked | | 2.83 km2; full after 44 min | |
-| Queens 44.5 mm / 1 h (5-year design storm) | 1.25 km2 | 1.06 km2 | |
+| Lagos 120 mm / 3 h | 21.86 km2, 29,137 buildings | 21.08 km2, 26,114 buildings (blockage 0 %: 20.70, 70 %: 21.91) | 22.2 s -> 31.3 s |
+| Lagos 120 mm / 3 h, lagoon +0.5 m | | 26.91 km2 (the drains are tide-locked) | 34.7 s |
+| Queens Ida peak hour 80 mm | 2.62 km2 | 1.85 km2; sewers 66 % full, overflow 0:40-2:00 | 23.6 s -> 22.5 s |
+| Queens 80 mm, outfalls blocked | | 2.72 km2; full after 51 min | 24.7 s |
+| Queens 44.5 mm / 1 h (5-year design storm) | 1.07 km2 | 0.97 km2 | 13.9 s -> 15.7 s |
+| Queens Ida, Central Park rate (hero) | 4.55 km2 (sink off) | 4.13 km2 (outfalls blocked); 2.99 km2 (catch basins half clogged) | 36.1 s -> 36.1 s |
 
 The open network costs about 2 x (channel nodes / cells) extra run time (`speed.DRAIN_CHANNEL_COST`). Closed zones
 cost nothing measurable.
 
-Limits: lumped sewers have no pipes, manholes or basements, so no single overflowing inlet can be named. Lagos drain
-sizes and blockage are scenario settings, not measurements, so read Lagos as relative susceptibility, not absolute
-depth. Validation against NYC 311 reports and the DEP Stormwater Flood Maps, and the refit of the Lagos built-up
-infiltration (which stood in for unmapped drains), follow in the next PR.
+#### Validation (`evals/validation/drainage.py`)
+
+Hurricane Ida, 181 mm / 4.5 h centre-peaked (Central Park rate), Queens. Street hit = share of the 85 street-flooding
+311 reports with water within 30 m, lift = over random road cells. Backup lift = share of sewer-backup and basement
+reports inside a zone the run filled (>= 95 %), over the share of road cells inside one.
+
+| Case | Flooded | Street hit (95 % CI) | Street lift | Zones full | Backup lift |
+|---|---|---|---|---|---|
+| Fixed sink 13 mm/h (v0) | 3.67 km2 | 70.6 % (60-80) | 1.65 | | |
+| Fixed sink, sewers off (v0 hero) | 4.55 km2 | 71.8 % (62-81) | 1.55 | | |
+| Sewers 1.5 in/h (v1 default) | 2.70 km2 | 65.9 % (56-77) | 1.73 | 46 / 78 | 1.47 |
+| Sewers 1.75 in/h (5-year) | 2.56 km2 | 64.7 % (54-75) | 1.73 | 42 / 78 | 1.49 |
+| Sewers 0.75 in/h (half) | 3.34 km2 | 69.4 % (59-79) | 1.67 | 70 / 78 | 1.06 |
+| Sewers, outfalls blocked | 4.13 km2 | 71.8 % (62-81) | 1.64 | 78 / 78 | 1.00 |
+| Sewers, catch basins 50 % clogged | 2.99 km2 | 68.2 % (58-79) | 1.69 | 38 / 78 | 1.54 |
+
+The sewer model finds the reported streets at least as well per road cell (lift 1.73 against 1.65) while flooding a
+quarter less area, and the zones it fills hold 1.5 x their share of the sewer-backup reports. When every zone is
+full (outfalls blocked, half capacity) the backup signal disappears, as it must. All street hit rates overlap
+within their 95 % intervals: 85 reports cannot separate these cases.
+
+Against the NYC DEP Stormwater Flood Map "Moderate, current sea level" (2.13 in/h for 1 h; wet = 0.10 m or more on
+land), the fixed sink catches 61 % of DEP's flooded cells (CSI 0.113) and the sewer model 40 % (CSI 0.087). 87 % of
+DEP's flooding is on roads, in street sags that DEP's pipe-by-pipe model fills from surcharging manholes. Lumped zones
+spread a zone's surcharge over its lowest inlets, so they miss many of those sags. Finer zones help: 300 m tiles
+(235 zones) reach 47 % (CSI 0.097) and a street hit of 68 %, but drop the backup lift to 1.36, so 500 m is kept.
+
+Lagos: the 6 mm/h built-up loss in v2 stood in for unmapped drains. Refitted on the Sentinel-1 drain-down of 12 July
+with the drain network in place (rates 2 / 3 / 4 / 6 mm/h leave 1.43 / 0.64 / 0.26 / 0.08 km2 of land wet against
+the observed near-zero), it still needs 6 mm/h: the drains carry street water away, but they do not empty the
+closed pits and yards that the built-up loss represents. v3 keeps 6 mm/h.
+
+Limits: lumped sewers have no pipes, manholes or basements, so no single overflowing inlet can be named, and they
+cannot reproduce DEP's street-sag flooding cell by cell. Roof leaders are not modelled: in Queens, roofs drain
+straight into the sewer, so rain on buildings and yards ponds on the surface here in the design storm, where the city
+expects none. Lagos drain sizes and blockage are scenario settings, not measurements, so read Lagos as relative
+susceptibility, not absolute depth.
 
 ### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
 The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a
@@ -497,12 +531,15 @@ places). It is served as plain numpy. `surrogate_sweep` ranks intervention combi
 `is_surrogate=True`. Its numbers have no `run_id`, so the claim verifier cannot accept them, and the agent must
 confirm a candidate with `run_simulation`. Fixture AOI, 300 runs, 5-fold CV: R² 0.95 to 0.97 on all five targets
 (flooded buildings MAE ≈ 21 of a baseline ≈ 200). It ranks well but over-predicts when impacts are small.
-Lagos (`lagos-lekki-v1`, green on "Lekki Phase 1", pond on "Open land near Ajah"), 300 runs, 5-fold CV: R² 0.95 to 0.96
-on all five targets (flooded buildings MAE ≈ 2,000, about 7 % of a typical 30,000). The pond polygon covers 4 building
-cells, so pond candidates report a small `buildings_in_ponds`. Checked end to end at 120 mm / 3 h: the top three
-candidates all cut flooded buildings from 30,202 to about 11,500 on the solver, so the ranking holds. Absolute errors
-are large when impacts are small, though: it predicted 7,232 buildings where the solver gave 11,453, and 62 road km
-where the solver gave 27. The direction of the error differs between AOIs. Only solver numbers are citable.
+Lagos (`lagos-lekki-v3`, drain network, green on "Lekki Phase 1", pond on "Open land near Ajah"), 300 runs, 5-fold CV:
+R² 0.95 to 0.96 on all five targets (flooded buildings MAE ≈ 1,900, about 7 % of a typical 26,000). On v3 the drain
+factor scales the effective width of the drains and canals (their conveyance and storage), and new drains add a sink
+on top. Checked end to
+end at 120 mm / 3 h: the top three candidates (drains x3 with new drains and green; the same plus the pond; drains x3
+with new drains) cut flooded buildings from 26,114 to 4,538, 4,532 and 4,914 on the solver, so the ranking holds. It
+predicted 23,488 for the baseline and 5,041 for the top candidate: absolute errors stay around 10 % here, larger when
+impacts are small. The pond polygon covers 4 building cells, so pond candidates report a small `buildings_in_ponds`.
+Only solver numbers are citable.
 
 ## Provenance
 
