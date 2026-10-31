@@ -72,6 +72,8 @@ export function CoordChip({ viewer, scene, anchors, aoiId }: { viewer?: Cesium.V
 
   const pickFmt = (f: Fmt) => { setFmt(f); try { localStorage.setItem(FMT_KEY, f); } catch { /* storage blocked */ } };
 
+  // A new area: the last position belongs to the old one (asking the new area's DEM for it is a 400).
+  useEffect(() => { setAt(null); setMark(null); }, [aoiId]);
   // The 3D map's heights are ellipsoidal (tens of metres off sea level), so ground comes from the model's DEM once the pointer rests.
   useEffect(() => {
     if (!at || !aoiId) { setGround(null); return; }

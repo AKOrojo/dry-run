@@ -316,6 +316,8 @@ export type ScenarioProps = {
   /** null = Normal (no tide intervention), otherwise the boundary level in metres. */
   level: number | null; onLevel: (v: number | null) => void;
   coastal: boolean; busy: boolean; canRun: boolean; onSimulate: () => void; err: Failure | null;
+  /** A shared link whose run or area is gone: shown once at the top of Scenario until dismissed. */
+  linkNote?: { message: string; detail: string; onDismiss: () => void } | null;
   sim: SimBar; onStop: () => void; onClear: () => void;
   /** A run is on the map (Simulate, a link, a replay or the agent) and nothing is running: Clear simulation shows. */
   canClear: boolean;
@@ -575,6 +577,11 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
+            {scenario.linkNote && (
+              <Notice message={scenario.linkNote.message} detail={scenario.linkNote.detail}>
+                <Button onClick={scenario.linkNote.onDismiss}>Dismiss</Button>
+              </Notice>
+            )}
             <CardLock.Provider value={locked ? lockLabel : null}><StormCard {...scenario} /></CardLock.Provider>
             <CardLock.Provider value={locked ? lockLabel : null}>
               <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard hasInflows={!!aoi?.layers?.inflows} /></div>

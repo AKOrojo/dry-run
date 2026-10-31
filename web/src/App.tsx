@@ -179,6 +179,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [runId]);
 
+  const [linkNote, setLinkNote] = useState<string | null>(null);
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
     getConfig().then(async (h) => {
@@ -189,6 +190,15 @@ export default function App() {
       const want = m?.scenario.aoi_id ?? linked ?? h.default_aoi;
       const a = await getAOI(want).catch(() => getAOI(h.default_aoi));
       setAoi(a);
+      // A link whose run or area no longer exists: say so, and drop the dead ids so a reload or a copied link does not repeat it.
+      const runGone = !!shared.run && !m, aoiGone = !runGone && !!shared.aoi && a.aoi_id !== want;
+      if (runGone || aoiGone) {
+        setLinkNote(runGone ? "The shared run was not found" : "The shared area is not available");
+        const u = new URL(window.location.href);
+        ["run", "t", "aoi"].forEach((k) => u.searchParams.delete(k));
+        if (a.aoi_id !== h.default_aoi) u.searchParams.set("aoi", a.aoi_id);
+        window.history.replaceState(null, "", u.toString());
+      }
       if (m?.status === "done" && m.scenario.aoi_id === a.aoi_id) {
         const max_s = m.frames.at(-1)?.t_s ?? 0;
         setRun(m);
@@ -200,7 +210,7 @@ export default function App() {
   // buildings_url is the default AOI's footprint file; other AOIs serve theirs as a layer (same id/height_m format).
   const aoiBuildingsUrl = aoi && (aoi.aoi_id === defaultAoi && buildingsUrl ? buildingsUrl
     : `${API}/api/aoi/${aoi.aoi_id}/layer/buildings_geojson`);
-  const switchAoi = (id: string) => { stop(); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
+  const switchAoi = (id: string) => { stop(); setLinkNote(null); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {
     const url = sharedViewUrl({ aoi: aoi?.aoi_id, run: runId, t: t_s });
@@ -485,7 +495,7 @@ export default function App() {
         ) : undefined} scenario={{
           rain, onRain: (v) => { touched.current = true; setRain(v); }, durationH, onDuration: (v) => { touched.current = true; setDurationH(v); },
           pattern, onPattern: (v) => { touched.current = true; setPattern(v); }, level, onLevel: setLevel,
-          coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
+          coastal, busy, canRun: !!aoi && rainReady, onSimulate: () => go(), err: simErr, linkNote: linkNote ? { message: linkNote, detail: `Opened ${aoi?.name ?? "the default area"} instead.`, onDismiss: () => setLinkNote(null) } : null, sim: simBar, onStop: stop, onClear: clearSim, canClear: !!run && !live && !busy,
         }} />
       </div>
       {tour && <Tour onClose={() => setTour(false)} />}
