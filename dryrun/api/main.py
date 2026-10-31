@@ -227,16 +227,20 @@ def health():
 AOI_SUCCESSORS = {"lagos-lekki-v1": "lagos-lekki-v3", "lagos-lekki-v2": "lagos-lekki-v3", "nyc-queens-v0": "nyc-queens-v1"}
 
 
+# (time of the last check for unpublished ids, successors found published). A published AOI id never changes, so a
+# found successor is kept for the life of the process; only ids still missing are re-checked, at most once a minute.
 _SUCC_CACHE: tuple[float, dict[str, str]] = (0.0, {})
 
 
 def _aoi_successors() -> dict[str, str]:
-    """Cached for a minute: /api/config is on every page load, and an unpublished id would cost a storage miss."""
+    """/api/config is on every page load: once every successor is published, this does no storage reads at all."""
     global _SUCC_CACHE
-    if time.time() - _SUCC_CACHE[0] < 60:
-        return _SUCC_CACHE[1]
-    out = {}
-    for old, new in AOI_SUCCESSORS.items():
+    checked, found = _SUCC_CACHE
+    missing = {old: new for old, new in AOI_SUCCESSORS.items() if old not in found}
+    if not missing or time.time() - checked < 60:
+        return found
+    out = dict(found)
+    for old, new in missing.items():
         try:
             storage.load_aoi(new)
         except Exception:  # noqa: BLE001 - not published yet
