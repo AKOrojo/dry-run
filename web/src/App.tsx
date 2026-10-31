@@ -199,14 +199,16 @@ export default function App() {
   }, []);
 
   // Read-only rev 5 data. A missing endpoint (404) just leaves the matching feature off.
+  const hasInflows = !!aoi?.layers?.inflows;
   useEffect(() => {
     setExtras({ boundary: null, inflows: null });
     if (!aoiId) return;
     let cancelled = false;
     getBoundary(aoiId).then((b) => { if (!cancelled) setExtras({ boundary: b?.features?.length ? b : null }); });
-    getInflows(aoiId).then((f) => { if (!cancelled) setExtras({ inflows: f?.features?.length ? f : null }); });
+    // Only river areas (Texas) publish an inflows layer; asking the others is a 404 on every load.
+    if (hasInflows) getInflows(aoiId).then((f) => { if (!cancelled) setExtras({ inflows: f?.features?.length ? f : null }); });
     return () => { cancelled = true; };
-  }, [aoiId]);
+  }, [aoiId, hasInflows]);
   useEffect(() => {
     setExtras({ events: null });
     if (!runId) return;
