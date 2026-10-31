@@ -53,6 +53,7 @@ def test_estimate_then_stream_then_cached(client):
     assert s0["frames_total"] == s0["t_end_s"] // s0["output_interval_s"] + 1
     assert s0["frames_total"] == len(evs[-1]["data"]["manifest"]["frames"])  # the count the board shows
     assert evs[-1]["data"]["manifest"]["status"] == "done"
+    assert all(ev["data"]["joined"] is False for ev in evs if ev["kind"] == "progress")  # its own job
     p = [ev["data"] for ev in evs if ev["kind"] == "progress"][-1]
     assert p["fraction"] == 1.0 and p["eta_s"] == 0.0
     e2 = client.post("/api/simulate/estimate", json=spec(41)).json()
@@ -230,3 +231,41 @@ def test_estimate_echoes_resolved_drainage():
     assert _drainage(aoi, s) == {"system": "closed", "capacity_mm_h": 54.1, "blockage_pct": 30.0, "outfall": "tide"}
     plain = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=50, duration_h=1))
     assert _drainage(aoi, plain)["capacity_mm_h"] == 38.1  # nothing set: the AOI default
+
+
+def test_second_viewer_is_marked_joined(client, monkeypatch):
+    """A stream that attaches to a job someone else already started says so (joined=true)."""
+    import threading
+
+    from dryrun.api import simulate_routes
+
+    monkeypatch.setattr(simulate_routes, "TICK_S", 0.05)
+    release, stop = threading.Event(), threading.Event()
+
+    def held_work(job, s):
+        release.wait(5)
+        jobs.finish(job, error=jobs.Cancelled(job.run_id))
+
+    monkeypatch.setattr(simulate_routes, "_work", held_work)
+
+    def reader(out, until):
+        with client.stream("POST", "/api/simulate/stream", json=spec(49)) as r:
+            for line in r.iter_lines():
+                if line.startswith("data: "):
+                    out.append(json.loads(line[6:]))
+                    if until():
+                        return
+
+    first: list = []
+    t1 = threading.Thread(target=reader, args=(first, stop.is_set))  # stays attached until stop
+    t1.start()
+    while len(first) < 2:
+        release.wait(0.01)
+    second: list = []
+    t2 = threading.Thread(target=reader, args=(second, lambda: len(second) >= 2))
+    t2.start()
+    t2.join(5)
+    stop.set()
+    release.set()
+    t1.join(5)
+    assert first[1]["data"]["joined"] is False and second[1]["data"]["joined"] is True

@@ -6,7 +6,8 @@ POST /api/simulate/estimate  ScenarioSpec ->
      drainage: the resolved {system, capacity_mm_h, blockage_pct, outfall}, or null = the constant drain sink)
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
     started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
-    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured}
+    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured, joined}
+              (joined: this stream attached to a job another viewer had already started for the same run_id)
     done      {manifest}                                              terminal
     cancelled {reason}                                                terminal
     error     {code, message, retryable}                              terminal
@@ -196,6 +197,7 @@ async def stream(spec: ScenarioSpec, request: Request):
             yield _event("done", {"manifest": json.loads(m.model_dump_json())})
             return
         job, created = jobs.attach(est["run_id"], est["t_end_s"], est["est_s"], _writes_total(est["frames_total"]))
+        joined = not created
         jobs.watch(job, job_id, cancel_token)
         try:
             if created:
@@ -204,17 +206,18 @@ async def stream(spec: ScenarioSpec, request: Request):
                 if not jobs.watching(job_id):  # this viewer cancelled (DELETE)
                     waited = 0.0
                     while job.cancelled and not job.finished.is_set() and waited < CANCEL_WAIT_S:
-                        yield _event("progress", {**job.progress(), "phase": "cancelling"})
+                        yield _event("progress", {**job.progress(), "phase": "cancelling", "joined": joined})
                         await asyncio.to_thread(job.finished.wait, TICK_S)
                         waited += TICK_S
                     yield _event("cancelled", {"reason": "cancelled by this client"})
                     return
-                yield _event("progress", job.progress())
+                yield _event("progress", {**job.progress(), "joined": joined})
                 if await request.is_disconnected():
                     return
                 await asyncio.to_thread(job.finished.wait, TICK_S)
             if job.manifest is not None:
-                yield _event("progress", {**job.progress(), "phase": "saving", "fraction": 1.0, "eta_s": 0.0})
+                yield _event("progress", {**job.progress(), "phase": "saving", "fraction": 1.0, "eta_s": 0.0,
+                                          "joined": joined})
                 yield _event("done", {"manifest": json.loads(job.manifest.model_dump_json())})
             elif isinstance(job.error, jobs.Cancelled):
                 yield _event("cancelled", {"reason": "every viewer of this run left"})
