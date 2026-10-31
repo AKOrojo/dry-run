@@ -414,7 +414,12 @@ Limits: lumped sewers have no pipes, manholes or basements, so no single overflo
 cannot reproduce DEP's street-sag flooding cell by cell. Roof leaders are not modelled: in Queens, roofs drain
 straight into the sewer, so rain on buildings and yards ponds on the surface here in the design storm, where the city
 expects none. Lagos drain sizes and blockage are scenario settings, not measurements, so read Lagos as relative
-susceptibility, not absolute depth.
+susceptibility, not absolute depth. In OpenStreetMap no Lekki canal or stream reaches the lagoon: the mapped canals
+stop 0.5-0.9 km short, so they drain through roadside drains. All 117 outfalls are roadside drains (115) or ditches
+(2), and Lagos's default capacity (2.7 mm/h) is their combined full-bank discharge, about 80 m3/s, over the 106 km2 of
+land. It is an outlet capacity, not a design standard like Queens' 1.5 in/h, and it does not bind: in the 120 mm / 3 h
+baseline the outfalls average about 10 m3/s, because the flat, tide-backed network fills first. No canal links are
+invented to close the gap.
 
 ### Close-up 3D flow (`dryrun/patch3d/`, contract 0.6.0)
 The city-scale run stays 2D (depth-averaged); a full 3D solve of a city is days of compute per scenario. For a
