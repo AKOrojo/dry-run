@@ -216,6 +216,9 @@ const ZONE_LABELS = 6, OUTFALL_CHIPS = 6;
 /** Photoreal: lines float this far over the terrain (the 3D tiles hide a ground-clamped line), dimmer where buildings hide them. */
 const PHOTOREAL_LIFT_M = 15;
 /** Outfall chips only show when the camera is this low. */
+// Terrain level for heights under drains: about 30 m posts, the model's own grid, and a handful of tiles. "Most detailed"
+// went to level 15-16 over the US and asked for thousands of tiles for Queens' catch basins.
+const TERRAIN_LEVEL = 12;
 const INLET_MAX_M = 1800;
 /** Inlets (thousands of catch basins) only at street scale: under this many metres per pixel at the view centre. */
 const INLET_MAX_MPP = 0.8;
@@ -305,7 +308,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     inlets.forEach(put);
     outfalls.forEach((o) => put(o.at));
     const cartos = [...keys.values()];
-    Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, cartos)
+    Cesium.sampleTerrain(viewer.terrainProvider, TERRAIN_LEVEL, cartos)
       .then(() => { if (!off) setHeights(new Map([...keys.keys()].map((k, i) => [k, cartos[i].height ?? 0]))); })
       .catch(() => { if (!off) setHeights(new Map()); });
     return () => { off = true; };
