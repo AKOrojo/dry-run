@@ -83,7 +83,7 @@ def _rel(rid: str, name: str) -> str:
     return f"render/{rid}/{name}"
 
 
-CLAIM_S = 900  # a render takes 50-75 s, worst case 2 image calls x 2 attempts x 180 s plus vision; older = crashed
+CLAIM_S = 900  # a render takes 50-90 s, worst case 2 image calls x 2 attempts x 180 s plus vision; older = crashed
 WAIT_S = 240  # how long an identical request waits for the first one (under the Cloud Run request timeout)
 WAIT_POLL_S = 2.0
 

@@ -571,7 +571,8 @@ How the pictures are made, and why:
 - Pictures are cached by `render_id` (the runs, the grid cell, the view, the photo and the provider). A replay, or a
   second click in the same cell, costs nothing and needs no key. Identical requests in flight share one render. A new render makes two image calls and two vision
   calls, so it needs the judge or team key, counts against the per-IP cap (20/h) and the daily cap
-  (`DRYRUN_RENDER_PER_DAY`, 100), and takes about 50-75 s. `provider: "fake"` draws offline placeholders for UI work.
+  (`DRYRUN_RENDER_PER_DAY`, 100), and takes about 50-90 s (49-74 s locally, 89 s on Cloud Run). `provider: "fake"`
+  draws offline placeholders for UI work.
 
 ## Provenance
 
