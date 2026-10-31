@@ -28,7 +28,7 @@ const LINE_KINDS: LineKind[] = ["canal", "open_drain", "covered_drain", "gutter_
 const LINE_STYLE: Record<LineKind, { width: number; dash?: boolean; label: string }> = {
   open_drain: { width: 5, label: "Open drain" },
   covered_drain: { width: 5, dash: true, label: "Covered section" },
-  gutter_inferred: { width: 2.5, label: "Roadside gutter (inferred)" },
+  gutter_inferred: { width: 2.5, label: "Roadside gutter" },
   canal: { width: 6, label: "Canal" },
 };
 const isLine = (k: DrainKind): k is LineKind => (LINE_KINDS as string[]).includes(k);
