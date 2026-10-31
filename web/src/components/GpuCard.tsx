@@ -6,9 +6,9 @@ import { Crosshair, Cube, GraphicsCard, Info, Stop } from "@phosphor-icons/react
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { API } from "../lib/api";
 import {
-  GpuError, dimsFor, fits, gpuAvailable, gpuLimits, largestBox, patchDims, solvePatchInBrowser,
+  GpuError, dimsFor, fits, gpuAdvice, gpuProbe, largestBox, patchDims, solvePatchInBrowser,
 } from "../lib/patch3d-gpu";
-import type { PatchDims } from "../lib/patch3d-gpu";
+import type { GpuProbe, PatchDims } from "../lib/patch3d-gpu";
 import { abortSolve, boxCentre, setGpuBox, setSolveController, useGpuBox } from "../lib/gpubox";
 import { assemblePatch, setCloseUp } from "../lib/patch3d";
 import type { PatchRow } from "../lib/patch3d";
@@ -42,6 +42,7 @@ const ERRORS: Record<string, string> = {
 };
 
 const muted: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
+
 const btn: CSSProperties = { height: 32, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "0 12px",
   borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13, whiteSpace: "nowrap", cursor: "pointer" };
 const icon = { size: 15, weight: "bold" as const, "aria-hidden": true, style: { flex: "none" } };
@@ -79,20 +80,19 @@ export function GpuCard({ run, aoi, buildingsUrl }: { run?: RunManifest; aoi?: A
   const box = useGpuBox();
   const runId = run?.status === "done" ? run.run_id : undefined;
   const bounds = aoi?.grid.bounds_wgs84 ?? null;
-  const [limits, setLimits] = useState<{ maxBuffer: number; description: string } | null | undefined>(undefined);
+  const [probe, setProbe] = useState<GpuProbe | undefined>(undefined);
+  const limits = probe === undefined ? undefined : probe.limits;
   const [memoryMb, setMemoryMb] = useState(readMb);
   const [dims, setDims] = useState<PatchDims | null>(null);
   const [dimsErr, setDimsErr] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const webgpu = gpuAvailable();
   const running = !!box.run;
 
   useEffect(() => {
-    if (!webgpu) { setLimits(null); return; }
     let off = false;
-    gpuLimits().then((l) => { if (!off) setLimits(l); }, () => { if (!off) setLimits(null); });
+    gpuProbe().then((p) => { if (!off) setProbe(p); }, () => { if (!off) setProbe({ reason: "device-lost", limits: null }); });
     return () => { off = true; };
-  }, [webgpu]);
+  }, []);
   useEffect(() => { setGpuBox({ bounds, shown: !!runId }); }, [bounds, runId]);
   useEffect(() => {
     if (!running) return;
@@ -152,9 +152,10 @@ export function GpuCard({ run, aoi, buildingsUrl }: { run?: RunManifest; aoi?: A
                 <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>WebGPU available · up to {bytesText(limits.maxBuffer)} per buffer</span>
               </span>
             ) : (
-              <span style={{ fontWeight: 600 }}>{limits === undefined ? "Checking the GPU" : "WebGPU is not available in this browser"}</span>
+              <span style={{ fontWeight: 600 }}>{probe === undefined ? "Checking the GPU" : gpuAdvice(probe.reason).title}</span>
             )}
           </div>
+          {probe && probe.reason !== "ok" && <p style={muted}>{gpuAdvice(probe.reason).help}</p>}
           {limits === null && <p style={muted}>The demo boxes still open from the cached OpenFOAM result in 3D close-ups.</p>}
           {limits && (
             <>

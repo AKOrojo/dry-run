@@ -23,14 +23,74 @@ export function gpuAvailable(): boolean {
   return typeof navigator !== "undefined" && "gpu" in navigator && !!(navigator as Navigator & { gpu?: GPU }).gpu;
 }
 
-/** The adapter's largest buffer (bytes), for fits(); null without WebGPU. */
-export async function gpuLimits(): Promise<{ maxBuffer: number; description: string } | null> {
-  if (!gpuAvailable()) return null;
-  const ad = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-  if (!ad) return null;
+/** The high-performance adapter, else any adapter: some drivers (and Edge with a blocklisted discrete GPU) answer
+ *  null to the powerPreference request but still offer the integrated GPU. A throwing request counts as null. */
+async function adapter(): Promise<GPUAdapter | null> {
+  for (const opts of [{ powerPreference: "high-performance" } as GPURequestAdapterOptions, undefined]) {
+    const ad = await navigator.gpu.requestAdapter(opts).catch(() => null);
+    if (ad) return ad;
+  }
+  return null;
+}
+
+export type GpuLimits = { maxBuffer: number; description: string };
+/** Why WebGPU can or cannot run here:
+ *  no-api      the browser has no navigator.gpu (old browser, Linux Edge/Chrome without the flag, policy off)
+ *  no-adapter  navigator.gpu exists but offers no adapter (graphics acceleration off, GPU or driver blocklisted,
+ *              remote desktop / VM)
+ *  device-lost an adapter exists but opening a device failed (driver reset, out of GPU memory) */
+export type GpuReason = "ok" | "no-api" | "no-adapter" | "device-lost";
+export type GpuProbe = { reason: GpuReason; limits: GpuLimits | null };
+
+export async function gpuProbe(): Promise<GpuProbe> {
+  if (!gpuAvailable()) return { reason: "no-api", limits: null };
+  const ad = await adapter();
+  if (!ad) return { reason: "no-adapter", limits: null };
+  try {
+    (await ad.requestDevice()).destroy();
+  } catch {
+    return { reason: "device-lost", limits: null };
+  }
   const info = (ad as GPUAdapter & { info?: GPUAdapterInfo }).info;
-  return { maxBuffer: Math.min(ad.limits.maxStorageBufferBindingSize, ad.limits.maxBufferSize),
-           description: [info?.vendor, info?.architecture, info?.description].filter(Boolean).join(" ") };
+  return { reason: "ok", limits: { maxBuffer: Math.min(ad.limits.maxStorageBufferBindingSize, ad.limits.maxBufferSize),
+                                   description: [info?.vendor, info?.architecture, info?.description].filter(Boolean).join(" ") } };
+}
+
+/** Desktop Linux (not Android), where Chromium-based browsers ship WebGPU behind flags. */
+export function isLinux(nav: { userAgent?: string; userAgentData?: { platform?: string } } | undefined =
+  typeof navigator !== "undefined" ? (navigator as Navigator & { userAgentData?: { platform?: string } }) : undefined): boolean {
+  const platform = nav?.userAgentData?.platform;
+  if (platform) return platform === "Linux";
+  const ua = nav?.userAgent ?? "";
+  return /Linux/.test(ua) && !/Android/.test(ua) && !/CrOS/.test(ua);
+}
+
+const LINUX_FLAGS = "On Linux, WebGPU is behind a flag. Open edge://flags (chrome://flags in Chrome), turn on Unsafe "
+  + "WebGPU Support and Vulkan, then restart the browser.";
+
+/** The card's title and what-to-do line for each reason (the UI copy lives here so the choice is testable). */
+export function gpuAdvice(reason: GpuReason, linux = isLinux()): { title: string; help: string } {
+  if ((reason === "no-api" || reason === "no-adapter") && linux) {
+    return { title: reason === "no-api" ? "WebGPU is not available in this browser" : "WebGPU is turned off for this GPU",
+             help: LINUX_FLAGS };
+  }
+  switch (reason) {
+    case "ok": return { title: "GPU adapter", help: "" };
+    case "no-api": return { title: "WebGPU is not available in this browser",
+                            help: "This browser has no WebGPU. Use a current Chrome or Edge on Windows or Mac." };
+    case "no-adapter": return { title: "WebGPU is turned off for this GPU",
+                                help: "WebGPU is off for this GPU. Turn on graphics acceleration in the browser settings, then "
+                                  + "reload. edge://gpu or chrome://gpu shows WebGPU's status." };
+    case "device-lost": return { title: "The GPU could not start WebGPU",
+                                 help: "The browser found the GPU but could not open it, often after a driver reset. Reload the "
+                                   + "page; if it keeps happening, update the graphics driver. edge://gpu or chrome://gpu shows "
+                                   + "WebGPU's status." };
+  }
+}
+
+/** The adapter's largest buffer (bytes), for fits(); null when WebGPU cannot run (gpuProbe says why). */
+export async function gpuLimits(): Promise<GpuLimits | null> {
+  return (await gpuProbe()).limits;
 }
 
 const query = (center: [number, number], sizeM: number, cellM: number, extra: Record<string, string> = {}) =>
@@ -79,7 +139,7 @@ export async function solvePatchInBrowser(api: string, runId: string, center: [n
   const r = await fetch(`${api}/api/runs/${runId}/patch3d_inputs?${query(center, sizeM, cellM)}`, { signal: opts.signal });
   if (!r.ok) throw new GpuError(`patch inputs: HTTP ${r.status} ${await r.text().catch(() => "")}`.trim(), "inputs");
   const inp = decodeInputs((await r.json()) as PatchInputsDoc);
-  const ad = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+  const ad = await adapter();
   if (!ad) throw new GpuError("no WebGPU adapter", "no-webgpu");
   const maxBuffer = Math.min(ad.limits.maxStorageBufferBindingSize, ad.limits.maxBufferSize);
   const fit = fits(inp, opts.memoryMb, maxBuffer);
