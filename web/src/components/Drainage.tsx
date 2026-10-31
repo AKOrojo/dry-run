@@ -466,7 +466,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       })}
       {outfallChips.map((o) => (
         <Anchored key={o.id} anchors={anchors} scene={scene} lon={o.at[0]} lat={o.at[1]}>
-          <span data-declutter={2} title={o.name ?? undefined} style={{ ...chip, position: "absolute", left: 12, top: -8 }}>
+          <span data-declutter={2} data-flip-x="0" title={o.name ?? undefined} style={{ ...chip, position: "absolute", left: 12, right: "auto", top: -8 }}>
             <span style={{ display: "block", fontWeight: 600 }}>Outfall to {o.receiving ?? recvDefault ?? "the receiving water"}</span>
             <span style={{ display: "block", color: "var(--ink-muted)" }}>{gatesOn(o) ? "gated" : "open mouth"}{level ? ` · ${level.boundary_level_m >= 0 ? "+" : "−"}${Math.abs(level.boundary_level_m).toFixed(1)} m` : ""}</span>
           </span>

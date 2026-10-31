@@ -59,7 +59,10 @@ export function parseLatLon(text: string): { lat: number; lon: number } | { erro
 
 const tray = { background: "var(--ground)", borderRadius: "var(--radius-md)", boxShadow: "var(--inset-shadow)" } as const;
 
-export function CoordChip({ viewer, scene, anchors, aoiId, bounds }: { viewer?: Cesium.Viewer; scene?: Cesium.Scene; anchors: React.MutableRefObject<Anchors>; aoiId?: string; bounds?: number[] }) {
+export function CoordChip({ viewer, scene, anchors, aoiId, bounds, bottom = 26, left = 16, maxWidth }: { viewer?: Cesium.Viewer; scene?: Cesium.Scene; anchors: React.MutableRefObject<Anchors>; aoiId?: string; bounds?: number[];
+  /** Where it sits (above the map's credit line) and how wide it may grow before the map's other bottom controls:
+   *  past that the Go-to box shrinks, then the row wraps. */
+  bottom?: number; left?: number; maxWidth?: string }) {
   const [fmt, setFmt] = useState<Fmt>(readFmt);
   const [at, setAt] = useState<{ lat: number; lon: number } | null>(null);
   const [ground, setGround] = useState<number | null>(null);
@@ -152,10 +155,10 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds }: { viewer?: 
             background: "color-mix(in srgb, var(--danfo) 22%, transparent)", boxShadow: "0 0 0 2px var(--ground)" }} />
         </Anchored>
       )}
-      <div data-tour="coords" data-declutter-block style={{ position: "absolute", left: 16, bottom: 26, display: "flex", flexDirection: "column", gap: 4, pointerEvents: "auto" }}>
+      <div data-tour="coords" data-declutter-block style={{ position: "absolute", left, bottom, maxWidth, display: "flex", flexDirection: "column", gap: 4, pointerEvents: "auto" }}>
         {err && <span role="alert" style={{ alignSelf: "flex-start", padding: "3px 9px", fontSize: 11, color: "var(--hazard)", background: "color-mix(in srgb, var(--ground) 90%, transparent)",
           border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)" }}>{err}</span>}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px 6px 10px", background: "color-mix(in srgb, var(--ground) 86%, transparent)", backdropFilter: "blur(6px)",
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, rowGap: 6, padding: "6px 8px 6px 10px", background: "color-mix(in srgb, var(--ground) 86%, transparent)", backdropFilter: "blur(6px)",
           border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, whiteSpace: "nowrap" }}>
           <Crosshair size={14} color="var(--ink-muted)" style={{ flex: "none" }} aria-hidden="true" />
           <span data-testid="coord-text" style={{ fontFamily: mono, minWidth: fmt === "DMS" ? 168 : 128, ...FIG }}>{at ? formatLL(at.lat, at.lon, fmt) : "–"}</span>
@@ -166,7 +169,7 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds }: { viewer?: 
           </span>
           <input value={text} onChange={(e) => { setText(e.target.value); setErr(null); }} onKeyDown={onKey} placeholder="Go to lat, lon…" aria-label="Go to latitude, longitude" aria-invalid={!!err}
             spellCheck={false} autoComplete="off"
-            style={{ width: 150, height: 24, padding: "0 8px", background: "var(--ground)", color: "var(--ink)", border: `1px solid ${err ? "var(--hazard)" : "var(--control-edge)"}`,
+            style={{ width: 150, flex: "0 1 150px", minWidth: 60, height: 24, padding: "0 8px", background: "var(--ground)", color: "var(--ink)", border: `1px solid ${err ? "var(--hazard)" : "var(--control-edge)"}`,
               borderRadius: "var(--radius-md)", fontFamily: "inherit", fontSize: 11, outline: "none" }} />
           <button type="button" aria-label={copied ? "Copied" : "Copy coordinates"} title={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
             {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}

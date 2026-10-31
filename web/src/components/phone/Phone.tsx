@@ -64,7 +64,8 @@ export function TabBar({ active, onTab, agentRuns = 0 }: { active: PhoneTab | nu
 }
 
 /** A bottom sheet over the map. Drag the handle between half and full height, or down past half to close. */
-export function Sheet({ title, snap, onSnap, onClose, head, hidden = false, tab, children }: {
+export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = false, tab, fullOnly = false, children }: {
+  /** A phone on its side: no half snap, the sheet opens at full height; drag down closes it. */ fullOnly?: boolean;
   title: string; snap: Snap; onSnap: (s: Snap) => void; onClose: () => void;
   /** The tab-bar tab this sheet is the panel of. */ tab?: PhoneTab | null;
   /** Closed: still mounted, so the side panel inside keeps its state (a running agent session keeps streaming). */ hidden?: boolean;
@@ -81,7 +82,8 @@ export function Sheet({ title, snap, onSnap, onClose, head, hidden = false, tab,
     ro.observe(parent);
     return () => ro.disconnect();
   }, []);
-  const full = Math.max(0, room - 8), half = Math.round(room / 2);
+  const snap: Snap = fullOnly ? "full" : snapProp;
+  const full = Math.max(0, room - 8), half = fullOnly ? full : Math.round(room / 2);
   const target = snap === "full" ? full : half;
   const down = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
@@ -93,14 +95,14 @@ export function Sheet({ title, snap, onSnap, onClose, head, hidden = false, tab,
     if (!drag) return;
     const moved = Math.abs(e.clientY - drag.y0) > 6;
     setDrag(null);
-    if (!moved) { onSnap(snap === "half" ? "full" : "half"); return; }  // a tap on the handle toggles
+    if (!moved) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); return; }  // a tap toggles (closes when full-only)
     const h = drag.h;
-    if (h < half * 0.6) onClose();
+    if (h < half * (fullOnly ? 0.75 : 0.6)) onClose();
     else onSnap(h > (half + full) / 2 ? "full" : "half");
   };
   const onKey = (e: ReactKeyboardEvent) => {
     if (e.key === "ArrowUp") { e.preventDefault(); onSnap("full"); }
-    else if (e.key === "ArrowDown") { e.preventDefault(); if (snap === "full") onSnap("half"); else onClose(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); if (snap === "full" && !fullOnly) onSnap("half"); else onClose(); }
   };
   useEffect(() => {
     if (hidden) return;
@@ -117,8 +119,8 @@ export function Sheet({ title, snap, onSnap, onClose, head, hidden = false, tab,
       <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
         style={{ position: "relative", flex: "none", touchAction: "none", cursor: "grab", background: "var(--surface)", borderBottom: "1px solid var(--hairline)" }}>
         {/* The handle's target is the top 40 px of the header; the title sits under its lower half. */}
-        <button type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) onSnap(snap === "half" ? "full" : "half"); }}
-          aria-label={snap === "half" ? `Expand the ${title} panel` : `Shrink the ${title} panel`}
+        <button type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); } }}
+          aria-label={fullOnly ? `Close the ${title} panel` : snap === "half" ? `Expand the ${title} panel` : `Shrink the ${title} panel`}
           style={{ position: "absolute", left: 0, right: 0, top: 0, display: "flex", height: 40, alignItems: "flex-start", justifyContent: "center", padding: "8px 0 0", background: "transparent", border: 0, cursor: "inherit", zIndex: 1 }}>
           <span aria-hidden="true" style={{ width: 36, height: 4, borderRadius: "var(--radius-pill)", background: "var(--control-edge)" }} />
         </button>

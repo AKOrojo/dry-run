@@ -101,3 +101,6 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 .dr-app:is(.bp-phone, .bp-tablet) label > input[role="switch"] { inset: 0 !important; width: 100% !important; height: 100% !important; }
 /* Phone: the rain label gives the map back while a sheet is open (it would sit over the half sheet's edge). */
 .dr-app.bp-phone.sheet-open .dr-rain-chip { display: none !important; }
+/* Phone on its side: keep clear of the notch. The coordinate chip's controls are touch targets too. */
+.dr-app.bp-phone { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); box-sizing: border-box; }
+.dr-app.bp-phone [data-tour="coords"] :is(button, input) { min-height: 40px; min-width: 40px; }

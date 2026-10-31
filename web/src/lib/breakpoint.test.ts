@@ -14,4 +14,14 @@ describe("breakpointFor", () => {
     expect(breakpointFor(1024)).toBe("desktop");
     expect(breakpointFor(1440)).toBe("desktop");
   });
+
+  it("a phone on its side (under 500 px tall, under 1024 px wide) is a phone; desktop stays desktop", () => {
+    expect(breakpointFor(844, 390)).toBe("phone");
+    expect(breakpointFor(932, 430)).toBe("phone");
+    expect(breakpointFor(1023, 499)).toBe("phone");
+    expect(breakpointFor(768, 1024)).toBe("tablet");
+    expect(breakpointFor(1023, 500)).toBe("tablet");
+    expect(breakpointFor(1024, 400)).toBe("desktop");
+    expect(breakpointFor(1280, 720)).toBe("desktop");
+  });
 });

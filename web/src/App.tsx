@@ -35,7 +35,7 @@ import type { SimBar, Tab } from "./components/Sidebar";
 import { createPortal } from "react-dom";
 import { MiniPlayer, Sheet, TabBar } from "./components/phone/Phone";
 import type { PhoneTab, Snap } from "./components/phone/Phone";
-import { useBreakpoint } from "./lib/breakpoint";
+import { useBreakpoint, useShort } from "./lib/breakpoint";
 import type { DockLayout } from "./components/Dock";
 import { Mode, TopBar } from "./components/TopBar";
 import { buildStorm, rainSummary, initRain, rain as rainStore, setRain as patchRain, domainSwitchVisible, spatialOf, stormKey, useRain, useRainPreview } from "./lib/rain";
@@ -126,6 +126,7 @@ export default function App() {
   const cu = useCloseUp();
   // ---- Board 13: phone (tab bar + sheets) and tablet (side panel as a drawer). The shell owns the side panel's tab there.
   const bp = useBreakpoint();
+  const short = useShort();
   const [sideTab, setSideTab] = useState<Tab>("Scenario");
   const [sheet, setSheet] = useState<PhoneTab | null>(null);
   const [snap, setSnap] = useState<Snap>("half");
@@ -560,7 +561,7 @@ export default function App() {
         </div>
         {bp !== "phone" && view.timeline && dock(bp === "tablet" ? "two" : "row")}
         {bp === "phone" && (
-          <Sheet hidden={!sheet} tab={sheet} title={sheet === "Scenario" && comparing ? "Compare" : sideTab === "Sources" && sheet === "Layers" ? "Sources" : sheet ?? ""} snap={snap} onSnap={setSnap} onClose={() => setSheet(null)}
+          <Sheet hidden={!sheet} tab={sheet} fullOnly={short} title={sheet === "Scenario" && comparing ? "Compare" : sideTab === "Sources" && sheet === "Layers" ? "Sources" : sheet ?? ""} snap={snap} onSnap={setSnap} onClose={() => setSheet(null)}
             head={sheet === "Timeline" && playerRun?.status === "done" ? <MiniPlayer inline run={playerRun} /> : undefined}>
             <div ref={setSheetBody} style={{ display: sheet && sheet !== "Timeline" ? "flex" : "none", flex: "1 1 auto", minHeight: 0, flexDirection: "column" }} />
             {sheet === "Timeline" && <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", paddingBottom: "env(safe-area-inset-bottom)" }}>{dock("stack")}</div>}

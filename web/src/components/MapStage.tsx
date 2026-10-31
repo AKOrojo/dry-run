@@ -5,7 +5,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
 import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
-import { useTouch } from "../lib/breakpoint";
+import { useShort, useTouch } from "../lib/breakpoint";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
@@ -370,27 +370,28 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   );
 }
 
-function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties;
-  /** A finger: no Esc to clear, a tap elsewhere moves the pin. */ touch?: boolean }) {
+function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = false }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties;
+  /** A finger: no Esc to clear, a tap elsewhere moves the pin. */ touch?: boolean;
+  /** Beside its point on the map: declutter() keeps it clear of the bottom controls and the edges. */ clamp?: boolean }) {
   const ser = r.ser;
   const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
   const wet = r.depth >= wetM, cut = r.depth >= passM;
   const permanent = !!ser?.permanent_water;
   const since = (t: number | null | undefined) => (!ser ? "" : t == null ? "never" : `since ${fmtT(t)}`);
   if (outside) return (
-    <div data-declutter-block role="tooltip" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block data-clamp={clamp ? "" : undefined} role="tooltip" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
       Outside the simulated area
     </div>
   );
   if (r.loading) return (
-    <div data-declutter-block role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block data-clamp={clamp ? "" : undefined} role="tooltip" aria-busy="true" style={{ width: 236, padding: "10px 12px", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", color: "var(--ink-muted)", ...style }}>
       Loading depth… the first point on a run can take a few seconds.
     </div>
   );
   return (
-    <div data-declutter-block role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
+    <div data-declutter-block data-clamp={clamp ? "" : undefined} role="tooltip" style={{ width: 236, display: "flex", flexDirection: "column", background: "var(--surface-raised)", border: "1px solid var(--hairline)",
       borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, lineHeight: "17px", overflow: "hidden", ...style }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, padding: "8px 10px 6px" }}>
         {permanent ? (
@@ -541,20 +542,72 @@ function declutter(root: HTMLElement, phone = false) {
     root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => { el.style.visibility = ""; });
     root.querySelectorAll<HTMLElement>("[data-place]").forEach((el) => { el.parentElement!.style.visibility = ""; });
   }
+  // A chip that would run off the right edge sits left of its point instead (when it fits there): place chips
+  // swap sides with their dot, the chips marked data-flip-x (outfalls) move from left: 12 to right: 12.
+  const edge = root.getBoundingClientRect();
+  root.querySelectorAll<HTMLElement>("[data-place]").forEach((chip) => {
+    const btn = chip.parentElement!, w = chip.offsetWidth;
+    if (!w) return;
+    const at = btn.parentElement!.getBoundingClientRect(), x = at.left;  // the Anchored wrapper sits on the point
+    chip.dataset.off = x < edge.left || x > edge.right || at.top < edge.top || at.top > edge.bottom ? "1" : "";  // the point is off the map
+    const flip = x + 12 + w > edge.right - 4 && x - 12 - w >= edge.left + 4;
+    if ((btn.dataset.flip === "1") === flip) return;
+    btn.dataset.flip = flip ? "1" : "";
+    btn.style.flexDirection = flip ? "row-reverse" : "";
+    btn.style.transform = flip ? "translate(calc(-100% + 4px), -50%)" : "translate(-4px, -50%)";
+  });
+  root.querySelectorAll<HTMLElement>("[data-flip-x]").forEach((chip) => {
+    const w = chip.offsetWidth;
+    if (!w) return;
+    const x = chip.parentElement!.getBoundingClientRect().left;
+    const flip = x + 12 + w > edge.right - 4 && x - 12 - w >= edge.left + 4;
+    if ((chip.dataset.flipX === "1") === flip) return;
+    chip.dataset.flipX = flip ? "1" : "0";
+    chip.style.left = flip ? "auto" : "12px";
+    chip.style.right = flip ? "12px" : "auto";
+  });
   const boxes = Array.from(root.querySelectorAll<HTMLElement>(phone ? "[data-declutter], [data-declutter-phone]" : "[data-declutter]"))
     .map((el) => ({ el, p: Number(el.dataset.declutter ?? el.dataset.declutterPhone) || 0, r: el.getBoundingClientRect() }))
     .filter((b) => b.r.width > 0)
     .sort((a, b) => b.p - a.p);
   let places = 0;
+  // A pinned card beside its point takes the first free side: below-right, above-right, below-left, above-left.
+  // Free means clear of the bottom controls, the credits and the map's edge; with none free, the least covered spot.
+  const fixed = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block]:not([data-clamp]), .cesium-viewer-bottom :not(:has(*))"))
+    .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+  root.querySelectorAll<HTMLElement>("[data-clamp]").forEach((card) => {
+    const at = card.parentElement!.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
+    if (!w) return;
+    const cost = (x: number, y: number) => {
+      const out = Math.max(0, edge.left + 4 - x) + Math.max(0, x + w - edge.right + 4) + Math.max(0, edge.top + 4 - y) + Math.max(0, y + h - edge.bottom + 4);
+      return out * 1e3 + fixed.reduce((a, k) => a + Math.max(0, Math.min(x + w, k.right) - Math.max(x, k.left)) * Math.max(0, Math.min(y + h, k.bottom) - Math.max(y, k.top)), 0);
+    };
+    // Offsets from the anchor: the four sides first, then (a point in a crowded corner) any spot that still touches it.
+    const spots: [number, number][] = [[0, 0], [0, 20 - h], [-w - 32, 0], [-w - 32, 20 - h]];
+    for (let dy = 0; dy >= -h - 24; dy -= 8) for (let dx = 0; dx >= -w - 32; dx -= 8) spots.push([dx, dy]);
+    let best = spots[0], bestC = Infinity;
+    for (const o of spots) {
+      const c = cost(at.left + o[0], at.top + o[1]);
+      if (c < bestC) { best = o; bestC = c; }
+      if (c === 0) break;
+    }
+    const t = `translate(${best[0]}px, ${best[1]}px)`;
+    if (card.style.transform !== t) card.style.transform = t;
+  });
   // Map controls and the hint pill are obstacles: labels never sit under them.
-  const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block]")).map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+  const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
+    .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);  // and the credits (an attribution requirement)
   const PAD = 3;
   for (const b of boxes) {
-    const capped = phone && "place" in b.el.dataset && places >= PHONE_PLACES;
-    const hit = capped || kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
+    const isPlace = "place" in b.el.dataset;
+    const capped = phone && isPlace && places >= PHONE_PLACES;
+    // A label the map's edge would cut (under the header, the player or the tab bar) is hidden, not clipped.
+    const outside = b.r.right > edge.right + 1 || b.r.left < edge.left - 1 || b.r.top < edge.top - 1 || b.r.bottom > edge.bottom + 1;
+    const hit = capped || outside || !!b.el.dataset.off || kept.some((k) => b.r.left < k.right + PAD && b.r.right > k.left - PAD && b.r.top < k.bottom + PAD && b.r.bottom > k.top - PAD);
     b.el.style.visibility = hit ? "hidden" : "";
     // On a phone a hidden place goes with its dot: a dot left under another label is the clutter we are removing.
-    if (phone && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
+    // So does a place whose point is off the map, on any layout.
+    if ((phone || b.el.dataset.off) && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
     if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
 }
@@ -1129,6 +1182,50 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     setFocus(null);
   }, [focusReq, viewer]);
 
+  // ----- the bottom-left stack: Cesium's credit line (an attribution requirement, never covered), then the
+  // coordinate chip, then the scale bar and cards. Both heights are measured: the credits wrap on a phone.
+  const [credH, setCredH] = useState(24);
+  const [credW, setCredW] = useState(220);
+  const [chipH, setChipH] = useState(0);
+  const rightGroup = useRef<HTMLDivElement>(null);
+  const [rightW, setRightW] = useState(0);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const cred = viewer.bottomContainer as HTMLElement;
+    const chip = stage.current?.querySelector<HTMLElement>('[data-tour="coords"]');
+    // The container spans the map's width; the credits are its visible leaves (logos, the attribution link).
+    const measure = () => {
+      const bottom = cred.getBoundingClientRect().bottom;
+      const leaves = Array.from(cred.querySelectorAll<HTMLElement>("*")).filter((e) => !e.childElementCount)
+        .map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+      const left = stage.current?.getBoundingClientRect().left ?? 0;
+      setCredH(leaves.length ? Math.ceil(bottom - Math.min(...leaves.map((r) => r.top))) + 3 : 0);
+      setCredW(leaves.length ? Math.ceil(Math.max(...leaves.map((r) => r.right)) - left) : 0);
+      setChipH(chip ? Math.ceil(chip.getBoundingClientRect().height) : 0);
+      setRightW(rightGroup.current ? Math.ceil(rightGroup.current.getBoundingClientRect().width) : 0);
+    };
+    const ro = new ResizeObserver(measure);
+    // The container keeps its size when a credit arrives, so each credit element is watched itself; a logo
+    // (Google's) is an image that has no width until it loads, hence the load listener too.
+    const watch = () => {
+      ro.disconnect();
+      ro.observe(cred);
+      cred.querySelectorAll<HTMLElement>("*").forEach((e) => ro.observe(e));
+      if (chip) ro.observe(chip);
+      if (rightGroup.current) ro.observe(rightGroup.current);
+      measure();
+    };
+    watch();
+    const mo = new MutationObserver(watch);
+    mo.observe(cred, { childList: true, subtree: true, attributes: true, characterData: true });
+    cred.addEventListener("load", measure, true);
+    return () => { ro.disconnect(); mo.disconnect(); cred.removeEventListener("load", measure, true); };
+  }, [viewer, viewState.coords, layout]);
+  const aboveCredits = credH + 8;
+  const chipBottom = phone ? aboveCredits : Math.max(26, aboveCredits);
+  const short = useShort();
+  const aboveChip = viewState.coords ? chipBottom + chipH + 8 : aboveCredits;
+
   // ----- phone: zoom buttons and the legend sheet -----
   const [legendOpen, setLegendOpen] = useState(false);
   const legendBox = useRef<HTMLDivElement>(null);
@@ -1213,7 +1310,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
         {pinned && !phone && (
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
-            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} />
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} clamp />
           </Anchored>
         )}
         {/* Phone: a 236 px card beside the point would run off a 390 px screen. The point gets a dot; the reading sits
@@ -1222,7 +1319,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
             <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
           </Anchored>
-          <div style={{ position: "absolute", left: 12, bottom: viewState.coords ? 126 : 64, display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
+          <div style={{ position: "absolute", ...(short ? { right: 64, bottom: aboveCredits } : { left: 12, bottom: aboveChip + 30 }), display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
             <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} />
             <button type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
               style={{ ...groupStyle, ...colBtn, flex: "none" }}><X size={14} weight="bold" /></button>
@@ -1247,7 +1344,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {run && !!frames?.length && !closeUp.active && (
-          <div style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), pointerEvents: "auto" }}>
+          <div data-declutter-block={phone ? "" : undefined} style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), pointerEvents: "auto" }}>
             <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
           </div>
         )}
@@ -1272,7 +1369,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           const idle = !simNow.running && !rs.picking && !(rs.visible && rs.mode === "cell" && !drawing && mode === "orbit") && !drawing;
           if ((touch || phone) && idle) return null;
           return (
-        <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: phone ? 100 : 62, transform: "translateX(-50%)", maxWidth: phone ? "calc(100% - 24px)" : "calc(100% - 32px)",
+        <span data-declutter-block style={{ ...pill, position: "absolute", left: "50%", top: phone ? 100 : 62, transform: "translateX(-50%)", maxWidth: phone ? "calc(100% - 128px)" : "calc(100% - 32px)",
           ...(phone ? { whiteSpace: "normal", textAlign: "center", width: "max-content" } : {}) }}>
           {simNow.running ? (rs.mode === "cell" ? "Simulating · the cloud follows the storm cell and rains harder as the pattern peaks" : "Simulating · the rain grows and eases with the time pattern")
             : rs.picking === "polygon" ? "Click to add points · Enter to finish · Backspace to undo · Esc to cancel"
@@ -1305,11 +1402,13 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
         <CloudsRain viewer={viewer} scene={scene} anchors={anchors} run={run} src={weather} hidden={view === "Plan" || !!closeUp.active} />
-        {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} bounds={aoi?.grid.bounds_wgs84} />}
+        {viewState.coords && <CoordChip viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} bounds={aoi?.grid.bounds_wgs84}
+          bottom={chipBottom} left={phone ? 12 : 16}
+          maxWidth={phone ? "calc(100% - 24px)" : layout === "tablet" ? "calc(100% - 88px)" : rightW ? `calc(100% - ${rightW + 48}px)` : undefined} />}
         {/* One bottom-left slot for every map legend, stacked so they never overlap. On a phone the legend button opens
             them as a small sheet instead (they would cover half the map). */}
         <div role={phone ? "dialog" : undefined} aria-label={phone ? "Legends" : undefined} data-declutter-block style={phone
-          ? { position: "absolute", left: 12, right: 12, bottom: 12, maxHeight: "60%", display: legendOpen ? "flex" : "none", flexDirection: "column",
+          ? { position: "absolute", left: 12, right: 12, bottom: aboveCredits, maxHeight: "60%", display: legendOpen ? "flex" : "none", flexDirection: "column",
             background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--shadow-float)", pointerEvents: "auto", zIndex: 3 }
           : { display: "contents" }}>
           {phone && <div style={{ display: "flex", alignItems: "center", height: 40, padding: "0 0 0 12px", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
@@ -1322,7 +1421,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           {phone && legendEmpty && <p style={{ margin: 0, padding: 12, color: "var(--ink-muted)", fontSize: 13 }}>The layers that are on have no legend. Turn on flow, hazard, drains or time to flood in Layers.</p>}
         <div ref={legendBox} data-declutter-block className={phone ? "dr-legends-phone" : undefined} style={phone
           ? { minHeight: 0, overflowY: "auto", display: legendEmpty ? "none" : "flex", flexDirection: "column", alignItems: "stretch", gap: 8, padding: 10 }
-          : { position: "absolute", left: 16, bottom: viewState.coords ? (layout === "tablet" ? 96 : 84) : 44, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
+          : { position: "absolute", left: 16, bottom: viewState.coords ? Math.max(layout === "tablet" ? 0 : 84, aboveChip + 8) : Math.max(44, aboveCredits + 4), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
           {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rs.visible && rs.preview && (
           <div className="ft-legend" style={{ pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
@@ -1341,7 +1440,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />
 
         {place && (
-          <div style={{ position: "absolute", ...(phone ? { left: 12, right: 12, bottom: 44 } : { left: "50%", bottom: 74, transform: "translateX(-50%)", minWidth: 520 }), display: "flex", flexDirection: "column", background: "var(--surface-raised)",
+          <div style={{ position: "absolute", ...(phone ? { left: 12, right: 12, bottom: aboveChip + 30 } : { left: "50%", bottom: 74, transform: "translateX(-50%)", minWidth: 520 }), display: "flex", flexDirection: "column", background: "var(--surface-raised)",
             border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, height: 36, padding: "0 8px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
               <RoadHorizon size={15} weight="fill" color="var(--hazard)" style={{ flex: "none" }} />
@@ -1391,12 +1490,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
                 <button type="button" aria-label="Fullscreen" title="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></button>
               )}
             </div>
-            <div data-declutter-block style={{ position: "absolute", ...(phone ? { left: 12, bottom: viewState.coords ? 96 : 34 } : { right: 72, bottom: viewState.coords ? 96 : 26 }), pointerEvents: "none" }}>
+            <div data-declutter-block style={{ position: "absolute", ...(phone ? (short ? { left: credW + 16, bottom: 8 } : { left: 12, bottom: aboveChip }) : { right: 72, bottom: viewState.coords ? aboveChip : 26 }), pointerEvents: "none" }}>
               <ScaleBar nice={cam.nice} px={cam.px} />
             </div>
           </>
         ) : (
-        <div data-declutter-block style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
+        <div ref={rightGroup} data-declutter-block style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
           <ScaleBar nice={cam.nice} px={cam.px} />
           <div style={{ ...groupStyle, gap: 2 }}>
             <button type="button" data-tour="plan" aria-pressed={view === "Plan"} onClick={() => pickView("Plan")} style={segBtn(view === "Plan", 24)}>2D</button>
