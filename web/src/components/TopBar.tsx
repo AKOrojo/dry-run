@@ -4,6 +4,10 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { CaretDown, ChatTeardropText, Check, CloudRain, Columns, DownloadSimple, Layout, Link, MapTrifold, Moon, Question, ShareNetwork, Sun } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { Checkbox, FIG } from "./rev5";
+import { Select } from "./controls/Select";
+import type { SelectGroup } from "./controls/Select";
+import { areaDetail, areaFacts } from "../lib/areas";
+import type { AreaFacts } from "../lib/areas";
 import { applyTheme, getTheme, Theme } from "../lib/theme";
 import { setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { setView, useView } from "../lib/view";
@@ -140,8 +144,21 @@ function ShareMenu({ onCopyLink, onSaveImage }: { onCopyLink: () => Promise<stri
   );
 }
 
-export function TopBar({ rainText, aois, aoiId, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage }: {
+/** The area picker (board 11): areas with what each models, and the open area under "Earlier versions" when a shared
+ *  link opened one that has since been replaced. */
+function AreaSelect({ aois, aoiId, aoiName, defaultAoi, onAoi }: { aois: { aoi_id: string; name: string }[]; aoiId?: string; aoiName?: string;
+  defaultAoi?: string; onAoi: (id: string) => void }) {
+  const [facts, setFacts] = useState<Record<string, AreaFacts>>({});
+  const load = () => aois.forEach((a) => { void areaFacts(a.aoi_id).then((f) => setFacts((m) => (m[a.aoi_id] === f ? m : { ...m, [a.aoi_id]: f }))); });
+  const groups: SelectGroup[] = [{ caption: "Areas", options: aois.map((a) => ({ value: a.aoi_id, label: a.name, detail: areaDetail(facts[a.aoi_id], a.aoi_id === defaultAoi) })) }];
+  if (aoiId && !aois.some((a) => a.aoi_id === aoiId))
+    groups.push({ caption: "Earlier versions", options: [{ value: aoiId, label: `${aoiName ?? aoiId} (earlier version)`, detail: "Opened from a shared link" }] });
+  return <Select variant="header" label="Area" tour="area" value={aoiId} onChange={onAoi} groups={groups} onOpen={load} />;
+}
+
+export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rainMm, durationH, pattern, mode, onMode, agentRuns, onTour, onCopyLink, onSaveImage }: {
   aois: { aoi_id: string; name: string }[]; aoiId?: string; onAoi: (id: string) => void;
+  /** The open area's name (it may be an earlier version that is not in `aois`, opened from a shared link). */ aoiName?: string; defaultAoi?: string;
   rainMm: number; durationH: number; pattern: keyof typeof PATTERN_TEXT; /** Where the rain falls, or null for "pattern over the area". */ rainText?: string | null;
   mode: Mode; onMode: (m: Mode) => void; agentRuns: number; onTour: () => void;
   /** Both return the short status line to show ("Link copied", or why it failed). */
@@ -154,18 +171,11 @@ export function TopBar({ rainText, aois, aoiId, onAoi, rainMm, durationH, patter
   return (
     <header style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", gap: 14, padding: "0 12px 0 16px", background: "var(--surface)",
       borderBottom: "1px solid var(--hairline)", boxShadow: "0 2px 8px var(--elev-drop-soft)", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>
-      <span style={{ fontSize: 16, lineHeight: "20px", fontWeight: 700, letterSpacing: "-0.01em" }}>Dry Run</span>{vr}
-      <span style={{ color: "var(--ink-muted)" }}>Flood scenario analysis</span>
-      <span style={{ width: 0, height: 22, borderLeft: "1px dashed var(--hairline)", margin: "0 6px" }} />
-      {aois.length > 0 && (
-        <span style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
-          <select aria-label="Area" value={aoiId ?? ""} onChange={(e) => onAoi(e.target.value)}
-            style={{ appearance: "none", WebkitAppearance: "none", background: "transparent", border: 0, color: "var(--ink)", font: "inherit", fontWeight: 600, padding: "0 18px 0 0", cursor: "pointer" }}>
-            {aois.map((a) => <option key={a.aoi_id} value={a.aoi_id}>{a.name}</option>)}
-          </select>
-          <CaretDown size={12} weight="bold" color="var(--ink-muted)" style={{ position: "absolute", right: 0, pointerEvents: "none" }} />
-        </span>
-      )}
+      <span style={{ fontSize: 16, lineHeight: "20px", fontWeight: 700, letterSpacing: "-0.01em" }}>Dry Run</span>
+      {/* The tagline gives way to the area picker on a phone (app.css). */}
+      <span className="dr-tagline">{vr}<span style={{ color: "var(--ink-muted)" }}>Flood scenario analysis</span>
+        <span style={{ width: 0, height: 22, borderLeft: "1px dashed var(--hairline)", margin: "0 6px" }} /></span>
+      {aois.length > 0 && <AreaSelect aois={aois} aoiId={aoiId} aoiName={aoiName} defaultAoi={defaultAoi} onAoi={onAoi} />}
       <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)" }}>
         <CloudRain size={15} weight="bold" />
         <span style={{ color: "var(--ink)", ...FIG }}>{rainMm} mm / {durationH} h</span>{rainText ?? `${PATTERN_TEXT[pattern]} over the area`}

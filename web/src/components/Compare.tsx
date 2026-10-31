@@ -1,7 +1,7 @@
 // Compare mode (rev 5 Compare.dc.html): pick runs A and B from this session, then B against A.
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
-import { ArrowCounterClockwise, CaretDown, Columns, House, RoadHorizon, Users, Waves } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Columns, House, RoadHorizon, Users, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import * as Cesium from "cesium";
 import { API } from "../lib/api";
@@ -9,6 +9,7 @@ import type { AOIManifest, RunManifest } from "../lib/api";
 import { Change, DIFF_MIN_M, PlaceRow } from "../lib/compare";
 import { Button, fmtT } from "./ds";
 import { Band, Card, FIG, mono } from "./rev5";
+import { Select } from "./controls/Select";
 import { describeIv } from "./Sidebar";
 import { Globe } from "./Globe";
 
@@ -35,14 +36,7 @@ function RunSelect({ l, runs, value, onChange }: { l: "A" | "B"; runs: RunManife
   return (
     <div style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr)", gap: 8, alignItems: "center" }}>
       <Letter l={l} />
-      <span style={{ position: "relative", display: "flex", alignItems: "center", minWidth: 0 }}>
-        <select aria-label={`Run ${l}`} value={value ?? ""} onChange={(e) => onChange(e.target.value)}
-          style={{ appearance: "none", WebkitAppearance: "none", width: "100%", minWidth: 0, height: 32, padding: "0 28px 0 10px", background: "var(--raised-bg)", color: "var(--ink)",
-            border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", boxShadow: "var(--raised-shadow)", font: "inherit", textOverflow: "ellipsis" }}>
-          {runs.map((m) => <option key={m.run_id} value={m.run_id}>{runLabel(m)}</option>)}
-        </select>
-        <CaretDown size={12} weight="bold" color="var(--ink-muted)" style={{ position: "absolute", right: 10, pointerEvents: "none" }} />
-      </span>
+      <Select label={`Run ${l}`} value={value} onChange={onChange} options={runs.map((m) => ({ value: m.run_id, label: runLabel(m), detail: m.run_id, detailMono: true }))} />
     </div>
   );
 }

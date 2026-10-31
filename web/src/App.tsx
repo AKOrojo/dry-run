@@ -29,6 +29,7 @@ import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
 import { Dock } from "./components/Dock";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { cachedBaseRun, isBase } from "./lib/areas";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
 import type { SimBar } from "./components/Sidebar";
 import { Mode, TopBar } from "./components/TopBar";
@@ -48,8 +49,6 @@ import { adoptDrainage, drainageSpec, resetDrainage, useDrainage } from "./lib/d
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-/** An area's baseline preset: whole-area rain, no interventions (warmed on the server, so its run is cached). */
-const isBase = (p: ScenarioSpec) => !p.interventions?.length && !p.storm.spatial && p.storm.total_mm > 0;
 const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
 /** The contract's Storm.pattern default: what the warmed presets use, so the first Simulate opens from cache. */
 const DEFAULT_PATTERN: Pattern = "center_peaked";
@@ -381,12 +380,10 @@ export default function App() {
   aoiNow.current = aoiId;
   const openDemo = async () => {
     const id = aoiId;
-    const ps = id ? await getPresets(id) : null;
-    const base = ps?.find(isBase);
-    const est = base && await estimateSim(base).catch(() => null);
+    const runId = id ? await cachedBaseRun(id) : null;
     if (aoiNow.current !== id) return;
-    if (!est?.cached) throw new Error("No demo run is ready for this area yet. Simulate one from the Scenario tab.");
-    const m = await getRun(est.run_id);
+    if (!runId) throw new Error("No demo run is ready for this area yet. Simulate one from the Scenario tab.");
+    const m = await getRun(runId);
     if (aoiNow.current !== id || m.status !== "done") return;
     setRun(m); addRun(m); startClock(m);
   };
@@ -478,7 +475,7 @@ export default function App() {
 
   return (
     <div className={`dr-app body${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}`}>
-      <TopBar rainText={rainSummary(rainState)} aois={aoi && aois.length && !aois.some((x) => x.aoi_id === aoi.aoi_id) ? [...aois, { aoi_id: aoi.aoi_id, name: `${aoi.name} (earlier version)` }] : aois} aoiId={aoi?.aoi_id} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
+      <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} aoiName={aoi?.name} defaultAoi={defaultAoi} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
         mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
         onCopyLink={copyLink} onSaveImage={saveImage} />
       <div className="dr-main">

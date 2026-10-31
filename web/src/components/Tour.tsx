@@ -10,6 +10,7 @@ const PAD = 6;
 const MARGIN = 12;
 
 const ALL_STEPS = [
+  { id: "area", title: "Pick the area", body: "Switch areas here. Each one says what its drains are and whether its demo run is cached, so it opens at once." },
   { id: "scenario", title: "Set up a storm", body: "Choose rain total, duration and pattern, and the lagoon level on coastal areas." },
   { id: "rain", title: "Choose where it rains", body: "Place a storm cell, draw an area or pick a place, and see the rain before you simulate." },
   { id: "rain-domain", title: "Simulate just the rain area", body: "With a storm cell, drawn area or place, simulate only where it rains for a faster run. Outside that area is dimmed after the run." },

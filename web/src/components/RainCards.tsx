@@ -3,6 +3,7 @@ import { useRef } from "react";
 import type { CSSProperties } from "react";
 import { CircleDashed, MapPin, NavigationArrow, Polygon, Target, Warning } from "@phosphor-icons/react";
 import { Card, Field, FIG, mono, raisedButton, Segmented } from "./rev5";
+import { Select } from "./controls/Select";
 import { coord } from "./WaypointDetails";
 import { compassOf, domainSwitchVisible, effectiveCentre, isCell, setMoving, setRain, setRainMode, useRain } from "../lib/rain";
 import type { RainMode } from "../lib/rain";
@@ -160,13 +161,8 @@ export function RainAreaCard({ hasInflows = false }: { hasInflows?: boolean }) {
         {s.mode === "place" && (
           <>
             <Field label="Place">
-              <label style={{ position: "relative", display: "flex", alignItems: "center", height: 32, padding: "0 10px", background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 2px var(--elev-drop-soft)" }}>
-                <select aria-label="Place" value={s.place ?? ""} onChange={(e) => setRain({ place: e.target.value })} disabled={!s.places.length}
-                  style={{ width: "100%", background: "transparent", border: 0, outline: "none", color: "var(--ink)", font: "inherit", fontWeight: 600 }}>
-                  {!s.places.length && <option value="">No places in this area</option>}
-                  {s.places.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-                </select>
-              </label>
+              <Select label="Place" value={s.place} onChange={(v) => setRain({ place: v })} disabled={!s.places.length}
+                placeholder={s.places.length ? "Choose a place" : "No places in this area"} options={s.places.map((p) => ({ value: p.name, label: p.name }))} />
             </Field>
             {s.placeAsCell ? (
               <>

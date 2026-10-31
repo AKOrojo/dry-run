@@ -51,6 +51,9 @@ body { background: var(--ground); }
 /* Keyboard focus on the inline-styled controls */
 .dr-app button:focus-visible, .dr-app select:focus-visible, .dr-app input:focus-visible + span, .dr-app label:focus-within { outline: var(--stroke-focus) solid var(--focus-ring); outline-offset: 2px; }
 
+.dr-tagline { display: contents; }
+@media (max-width: 599px) { .dr-tagline { display: none; } }
+
 @media (max-width: 900px) {
   .dr-app { grid-template-columns: 1fr; grid-template-rows: 48px 60vh 284px auto; height: auto; min-height: 100vh; }
   .dr-main { display: contents; }
