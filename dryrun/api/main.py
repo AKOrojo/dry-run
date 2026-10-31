@@ -24,6 +24,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -32,6 +33,7 @@ from dryrun import storage
 from dryrun.api import ratelimit  # noqa: E402
 from dryrun.api.errors import error_body  # noqa: E402
 from dryrun.api.ratelimit import limit  # noqa: E402
+from dryrun.api.static import PrecompressedStatic  # noqa: E402
 from dryrun.contracts import (
     CONTRACT_VERSION,
     AOIManifest,
@@ -100,6 +102,9 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Dry Run API", version=CONTRACT_VERSION, lifespan=lifespan)
+# JSON and GeoJSON responses. It skips text/event-stream (buffering would hold back the simulate and agent streams)
+# and anything that already has a Content-Encoding (the precompressed frontend files).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 RUN_ID = re.compile(r"^r_[0-9a-f]{16}$")
 AOI_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -636,4 +641,4 @@ if storage.MODE == "local":
     app.mount("/runs", StaticFiles(directory=storage.LOCAL_RUNS), name="runs")
 _dist = Path(os.getenv("DRYRUN_WEB_DIST", "web/dist"))
 if _dist.exists():
-    app.mount("/", StaticFiles(directory=_dist, html=True), name="web")
+    app.mount("/", PrecompressedStatic(directory=_dist, html=True), name="web")
