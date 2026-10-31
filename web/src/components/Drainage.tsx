@@ -10,7 +10,7 @@ import {
   designMmH, drainStats, fillAt, fillTone, FULL_PCT, getDrainFill, getDrains, returnPeriods, setDrainage, resetDrainage,
   SYSTEM_EXPLAIN, SYSTEM_LABEL, SYSTEM_SHORT, useDrainage,
 } from "../lib/drainage";
-import type { DrainFeature, DrainFill, DrainKind, DrainSystem, Outfall } from "../lib/drainage";
+import type { DrainCard, DrainFeature, DrainFill, DrainKind, DrainSystem, Outfall } from "../lib/drainage";
 import { Anchored } from "./Anchored";
 import type { Anchors } from "./Anchored";
 import { Slider, Toggle } from "./RainCards";
@@ -65,7 +65,13 @@ export function DrainageCard({ aoi, run }: { aoi?: AOIManifest; run?: RunManifes
   const recv = def.receiving;
   const place = aoi.name.split(",")[0].trim();
   const mmh = c.returnPeriod != null ? designMmH(def, c.returnPeriod) ?? c.capacityMmH : c.capacityMmH;
-  const capText = `${+mmh.toFixed(1)} mm/h of rain${rps.length ? ` (${+(mmh / MM_PER_IN).toFixed(1)} in/h)` : ""}${assumed ? " (assumed)" : ""}`;
+  // Closed: a design rain rate for the sewers. Open or mixed: what the drains carry out when full, spread over the
+  // whole area (Eng A), a different and usually much smaller quantity.
+  const outlet = c.system !== "closed";
+  const capText = outlet ? `${+mmh.toFixed(1)} mm/h, spread over the area${assumed ? " (assumed)" : ""}`
+    : `${+mmh.toFixed(1)} mm/h of rain${rps.length ? ` (${+(mmh / MM_PER_IN).toFixed(1)} in/h)` : ""}${assumed ? " (assumed)" : ""}`;
+  const outletExplain = `For open drains this is how much rain the drains can carry out to the ${recv} when they run full, spread over the whole area.`
+    + (def.system === "open" ? ` ${place}'s mapped drains reach the ${recv} only through narrow roadside channels on very flat ground, so it is low; most of the storm is held in the drains and streets.` : "");
   const [lo, hi] = def.blockage_range_pct;
   const limits = (run?.status === "done" && run.scenario.aoi_id === aoi.aoi_id && run.drainage_limits?.length ? run.drainage_limits : def.limits) ?? [];
   const outfallHint = c.outfall === "tide" ? `Water leaves only while the drains stand above the ${recv} level.`
@@ -81,15 +87,16 @@ export function DrainageCard({ aoi, run }: { aoi?: AOIManifest; run?: RunManifes
         <Field label="System" hint={SYSTEM_EXPLAIN[c.system]}>
           <Segmented<DrainSystem> options={SYSTEMS} active={c.system} onChange={(system) => setDrainage({ system })} />
         </Field>
-        <Field label="Capacity, design storm" hint={capText}>
+        <Field label={outlet ? "Outlet capacity" : "Sewer capacity (design)"} hint={outlet ? undefined : capText}>
           {rps.length > 0 && (
             <Segmented<string> options={[...rps.map((rp) => ({ value: String(rp), label: `${rp} yr` })), { value: TYPED, label: "mm/h" }]}
               active={c.returnPeriod != null ? String(c.returnPeriod) : TYPED}
               onChange={(v) => setDrainage(v === TYPED ? { returnPeriod: null, capacityMmH: mmh } : { returnPeriod: +v, capacityMmH: designMmH(def, +v) ?? c.capacityMmH })} />
           )}
           {c.returnPeriod == null && (
-            <NumberInput value={c.capacityMmH} unit="mm/h" min={0} max={200} step={1} label="Rain the drains can take, mm/h" onChange={(capacityMmH) => setDrainage({ capacityMmH })} />
+            <NumberInput value={c.capacityMmH} unit="mm/h" min={0} max={200} step={outlet ? 0.1 : 1} label={outlet ? "Outlet capacity, mm/h" : "Sewer capacity, mm/h"} onChange={(capacityMmH) => setDrainage({ capacityMmH })} />
           )}
+          {outlet && <><p style={hint}>{capText}</p><p style={hint}>{outletExplain}</p></>}
         </Field>
         <Slider label="Blocked by debris and silt" value={c.blockagePct} min={lo} max={hi} step={5} text={`${c.blockagePct} %`} lo={`${lo} %`} hi={`${hi} %`}
           onChange={(blockagePct) => setDrainage({ blockagePct })} />
@@ -153,6 +160,35 @@ const centroidOf = (ring: LL[]): LL => {
   for (let i = 0; i < n; i++) { x += ring[i][0]; y += ring[i][1]; }
   return [x / n, y / n];
 };
+/** Douglas–Peucker in local metres: the zones come off the model grid as staircases. */
+function simplify(p: LL[], tolM: number): LL[] {
+  if (p.length < 4) return p;
+  const k = 111320 * Math.cos((p[0][1] * Math.PI) / 180), m = 110540;
+  const keep = new Uint8Array(p.length); keep[0] = keep[p.length - 1] = 1;
+  const stack: [number, number][] = [[0, p.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const ax = p[a][0] * k, ay = p[a][1] * m, bx = p[b][0] * k, by = p[b][1] * m, dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+    let best = -1, far = tolM;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs(dy * (p[i][0] * k - ax) - dx * (p[i][1] * m - ay)) / len;
+      if (d > far) { far = d; best = i; }
+    }
+    if (best >= 0) { keep[best] = 1; stack.push([a, best], [best, b]); }
+  }
+  const out = p.filter((_, i) => keep[i]);
+  return out.length >= 4 ? out : p;
+}
+const ZONE_TOL_M = 15;
+const inRing = (q: LL, ring: LL[]) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > q[1]) !== (yj > q[1]) && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+};
+
 /** Points every ~STEP m along a line, so a line lifted over the terrain follows it. */
 const STEP_M = 30;
 function densify(p: LL[]): LL[] {
@@ -171,18 +207,37 @@ const toneColor = (pct: number | null | undefined) => { const t = fillTone(pct);
 /** Tone bucket of a fill (0 = no fill yet): lines only rebuild when a bucket changes. */
 const bucketOf = (pct: number | null | undefined) => (pct == null ? 0 : pct < 40 ? 1 : pct < 80 ? 2 : pct < FULL_PCT ? 3 : 4);
 const BUCKET_PCT = [null, 0, 40, 80, FULL_PCT];
+/** No fill yet (before a run, or a line the run has no fill for): muted ink, gutters thinner still; full strength
+ *  only once the fill colours apply. */
+const mutedColor = (kind: LineKind) => cssColor("--ink").withAlpha(kind === "gutter_inferred" ? 0.35 : 0.5);
+const mutedWidth = (kind: LineKind) => (kind === "gutter_inferred" ? 1.5 : LINE_STYLE[kind].width - 1);
+/** Zone labels: the fullest few in view, plus the zone under the cursor. Outfall chips only close in. */
+const ZONE_LABELS = 6, OUTFALL_CHIPS = 6;
 /** Photoreal: lines float this far over the terrain (the 3D tiles hide a ground-clamped line), dimmer where buildings hide them. */
 const PHOTOREAL_LIFT_M = 15;
-/** Inlets (thousands of catch basins) only show when the camera is this low. */
+/** Outfall chips only show when the camera is this low. */
 const INLET_MAX_M = 1800;
+/** Inlets (thousands of catch basins) only at street scale: under this many metres per pixel at the view centre. */
+const INLET_MAX_MPP = 0.8;
 const CHIP_MAX = 5, CHIP_MIN_PCT = 80;
 
 type Line = { id: string; kind: LineKind; name: string | null; parts: LL[][]; mid: LL };
 type Zone = { id: string; name: string | null; parts: LL[][]; at: LL };
 type Point = { id: string; at: LL; name: string | null; receiving: string | null; gated: boolean | null };
 
+/** What the map shows follows the drainage in effect: the shown run's (as it ran), else the card's. Open systems have no
+ *  sewer zones or inlets; gutters only when roadside gutters are on (never on closed systems). */
+function shownKinds(aoi: AOIManifest | undefined, done: RunManifest | undefined, card: DrainCard | null) {
+  const def = aoi?.drainage_default;
+  const sent = done?.scenario.drainage;
+  const system = ((done ? sent?.system : card?.system) ?? def?.system ?? "closed") as DrainSystem;
+  const gutters = system !== "closed" && !!((done ? sent?.roadside_gutters : card?.roadsideGutters) ?? def?.roadside_gutters);
+  return (k: DrainKind) => (k === "gutter_inferred" ? gutters : k === "sewer_zone" || k === "inlet" ? system !== "open" : true);
+}
+
 function useDrainLayer(aoi?: AOIManifest, run?: RunManifest, runsBase?: string) {
   const lay = useLayers();
+  const card = useDrainage().card;
   const on = lay.drains.on && !!aoi?.drainage_default;
   const [fs, setFs] = useState<DrainFeature[] | null>(null);
   useEffect(() => {
@@ -203,7 +258,10 @@ function useDrainLayer(aoi?: AOIManifest, run?: RunManifest, runsBase?: string) 
     return () => { off = true; };
   }, [on, done?.run_id, runsBase]);  // eslint-disable-line react-hooks/exhaustive-deps
   const legacy = !!done && fill === null;
-  return { on: on && !!fs && !legacy, fs, fill: done ? fill ?? null : null };
+  const keep = shownKinds(aoi, done, card);
+  const key = ["gutter_inferred", "sewer_zone", "inlet"].map((k) => +keep(k as DrainKind)).join("");
+  const shown = useMemo(() => fs?.filter((f) => keep(f.properties.kind)) ?? null, [fs, key]);  // eslint-disable-line react-hooks/exhaustive-deps
+  return { on: on && !!fs && !legacy, fs: shown, fill: done ? fill ?? null : null };
 }
 
 // ============================================================ the map layer
@@ -218,7 +276,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     for (const f of fs ?? []) {
       const p = f.properties;
       if (isLine(p.kind)) { const parts = partsOf(f).filter((q) => q.length > 1); if (parts.length) lines.push({ id: p.id, kind: p.kind, name: p.name ?? null, parts, mid: midOf(parts.reduce((a, b) => (pathM(b) > pathM(a) ? b : a))) }); }
-      else if (p.kind === "sewer_zone") { const parts = partsOf(f).filter((q) => q.length > 2); if (parts.length) zones.push({ id: p.id, name: p.name ?? null, parts, at: centroidOf(parts[0]) }); }
+      else if (p.kind === "sewer_zone") { const parts = partsOf(f).filter((q) => q.length > 2).map((q) => simplify(q, ZONE_TOL_M)); if (parts.length) zones.push({ id: p.id, name: p.name ?? null, parts, at: centroidOf(parts[0]) }); }
       else if (p.kind === "outfall" && f.geometry.type === "Point") outfalls.push({ id: p.id, at: f.geometry.coordinates, name: p.name ?? null, receiving: p.receiving ?? null, gated: p.gated ?? null });
       else if (p.kind === "inlet" && f.geometry.type === "Point") inlets.push(f.geometry.coordinates);
     }
@@ -233,24 +291,25 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const pctOf = useMemo(() => (fill && fi >= 0 ? fillAt(fill, fill.t_s[fi]) : null), [fill, fi]);
   const toneKey = useMemo(() => [...lines, ...zones].map((x) => bucketOf(pctOf?.get(x.id))).join(""), [lines, zones, pctOf]);
 
-  // Photoreal: terrain heights under every line vertex and inlet, sampled once per network. globe.getHeight only knows the tiles
+  // Terrain heights under the points (inlets, outfalls) and, on Photoreal, every line vertex, sampled once per network. globe.getHeight only knows the tiles
   // loaded for the current view, and a line built before they load would sit under the 3D tiles.
   const photoreal = basemap === "photoreal";
   const [heights, setHeights] = useState<Map<string, number> | null>(null);
   useEffect(() => {
     setHeights(null);
-    if (!show || !photoreal || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) return;
+    if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length && !inlets.length && !outfalls.length)) return;
     let off = false;
     const keys = new Map<string, Cesium.Cartographic>();
     const put = (q: LL) => keys.set(llKey(q), Cesium.Cartographic.fromDegrees(q[0], q[1]));
-    [...lines, ...zones].forEach((x) => x.parts.forEach((p) => densify(p).forEach(put)));
+    if (photoreal) [...lines, ...zones].forEach((x) => x.parts.forEach((p) => densify(p).forEach(put)));
     inlets.forEach(put);
+    outfalls.forEach((o) => put(o.at));
     const cartos = [...keys.values()];
     Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, cartos)
       .then(() => { if (!off) setHeights(new Map([...keys.keys()].map((k, i) => [k, cartos[i].height ?? 0]))); })
       .catch(() => { if (!off) setHeights(new Map()); });
     return () => { off = true; };
-  }, [show, photoreal, viewer, lines, zones, inlets]);
+  }, [show, photoreal, viewer, lines, zones, inlets, outfalls]);
 
   // Lines (with a ground-coloured halo) and sewer-zone fills, rebuilt when a tone bucket changes.
   const prev = useRef<Cesium.PrimitiveCollection>();
@@ -279,19 +338,21 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
           col.add(new Cesium.GroundPolylinePrimitive({ geometryInstances: insts, asynchronous: false, appearance: new Cesium.PolylineMaterialAppearance({ material: material(c, dash) }) }));
         }
       };
-      // Zones: a translucent fill in the tone of their storage, and an outline.
+      // Zones: a translucent fill in the tone of their storage (it carries the meaning) and a hairline outline.
       const zoneInsts = zones.flatMap((z) => z.parts.map((ring) => new Cesium.GeometryInstance({
         geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(ring.flat())) }),
         attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(toneColor(pctOf?.get(z.id) ?? null).withAlpha(0.2)) } })));
       if (zoneInsts.length) col.add(new Cesium.GroundPrimitive({ geometryInstances: zoneInsts, asynchronous: false, classificationType: photoreal ? Cesium.ClassificationType.BOTH : Cesium.ClassificationType.TERRAIN,
         appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }) }));
       const byBucket = (xs: { id: string }[]) => { const m = new Map<number, typeof xs>(); xs.forEach((x) => { const b = bucketOf(pctOf?.get(x.id)); m.set(b, [...(m.get(b) ?? []), x]); }); return m; };
-      byBucket(zones).forEach((zs, b) => add((zs as Zone[]).flatMap((z) => z.parts), 1.5, toneColor(BUCKET_PCT[b])));
-      // A halo under each kind, then its lines by tone (thin gutters first, canals on top).
+      byBucket(zones).forEach((zs, b) => add((zs as Zone[]).flatMap((z) => z.parts), 1, b ? toneColor(BUCKET_PCT[b]).withAlpha(0.35) : cssColor("--ink").withAlpha(0.2)));
+      // Unfilled lines muted; filled ones over a halo, by tone (thin gutters first, canals on top).
       for (const kind of [...LINE_KINDS].reverse()) {
-        const st = LINE_STYLE[kind], ofKind = lines.filter((l) => l.kind === kind);
-        add(ofKind.flatMap((l) => l.parts), st.width + 3, ground);
-        byBucket(ofKind).forEach((ls, b) => add((ls as Line[]).flatMap((l) => l.parts), st.width, toneColor(BUCKET_PCT[b]), st.dash));
+        const st = LINE_STYLE[kind], groups = byBucket(lines.filter((l) => l.kind === kind));
+        add(((groups.get(0) ?? []) as Line[]).flatMap((l) => l.parts), mutedWidth(kind), mutedColor(kind), st.dash);
+        const filled = [...groups].filter(([b]) => b > 0);
+        add(filled.flatMap(([, ls]) => (ls as Line[]).flatMap((l) => l.parts)), st.width + 3, ground);
+        filled.forEach(([b, ls]) => add((ls as Line[]).flatMap((l) => l.parts), st.width, toneColor(BUCKET_PCT[b]), st.dash));
       }
       drop();
       viewer.scene.primitives.add(col);
@@ -302,21 +363,87 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   }, [show, viewer, lines, zones, toneKey, basemap, heights]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); }, [viewer]);
 
-  // Inlets: small dots, only close in.
+  // Inlets: small dots, only at street scale (the points outside the view are culled by Cesium).
   useEffect(() => {
-    if (!show || !viewer || viewer.isDestroyed() || !inlets.length || (photoreal && !heights)) return;
+    if (!show || !viewer || viewer.isDestroyed() || !inlets.length || !heights) return;
     const globe = viewer.scene.globe, lift = photoreal ? PHOTOREAL_LIFT_M : 1;
     const pts = new Cesium.PointPrimitiveCollection();
-    const ink = cssColor("--ink").withAlpha(0.85), edge = cssColor("--ground");
-    inlets.forEach(([lon, lat]) => pts.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, (heights?.get(llKey([lon, lat])) ?? globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0) + lift), pixelSize: 3, color: ink, outlineColor: edge, outlineWidth: 1 }));
+    const ink = cssColor("--ink").withAlpha(0.7);
+    inlets.forEach(([lon, lat]) => pts.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, (heights?.get(llKey([lon, lat])) ?? globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0) + lift), pixelSize: 4, color: ink, outlineWidth: 0 }));
+    pts.show = false;
     viewer.scene.primitives.add(pts);
     const s = viewer.scene;
-    const near = () => { if (!s.isDestroyed()) pts.show = s.camera.positionCartographic.height < INLET_MAX_M; };
+    let last = 0;
+    const near = () => {
+      const now = performance.now();
+      if (s.isDestroyed() || now - last < 200) return;
+      last = now;
+      const w = s.canvas.clientWidth, h = s.canvas.clientHeight;
+      const hit = w && h ? s.camera.pickEllipsoid(new Cesium.Cartesian2(w / 2, h / 2), s.globe.ellipsoid) : undefined;
+      const mpp = hit ? s.camera.getPixelSize(new Cesium.BoundingSphere(hit, 1), w, h) : Infinity;
+      const show = mpp < INLET_MAX_MPP;
+      if (show !== pts.show) { pts.show = show; s.requestRender(); }
+    };
     near();
     s.postRender.addEventListener(near);
     s.requestRender();
     return () => { if (!s.isDestroyed()) { s.postRender.removeEventListener(near); s.primitives.remove(pts); } };
   }, [show, viewer, inlets, photoreal, heights]);
+
+  // Outfall marks as billboards (hundreds of them; DOM marks would be re-placed every frame).
+  useEffect(() => {
+    if (!show || !viewer || viewer.isDestroyed() || !outfalls.length || !heights) return;
+    const s = viewer.scene, dpr = Math.min(window.devicePixelRatio || 1, 2), px = 16;
+    const cv = document.createElement("canvas"); cv.width = cv.height = px * dpr;
+    const g = cv.getContext("2d")!; g.scale(dpr, dpr);
+    const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    g.beginPath(); g.arc(8, 8, 6.5, 0, 2 * Math.PI); g.fillStyle = css("--ground"); g.fill(); g.lineWidth = 1.5; g.strokeStyle = css("--ink"); g.stroke();
+    g.beginPath(); g.moveTo(4.5, 8); g.lineTo(11.5, 8); g.lineWidth = 1.8; g.lineCap = "round"; g.stroke();
+    const bb = new Cesium.BillboardCollection({ scene: s });
+    const lift = photoreal ? PHOTOREAL_LIFT_M : 2;
+    outfalls.forEach((o) => bb.add({ image: cv, width: px, height: px, position: Cesium.Cartesian3.fromDegrees(o.at[0], o.at[1], (heights.get(llKey(o.at)) ?? 0) + lift) }));
+    s.primitives.add(bb);
+    s.requestRender();
+    return () => { if (!s.isDestroyed()) s.primitives.remove(bb); };
+  }, [show, viewer, outfalls, photoreal, heights]);
+
+  // The view (for labels and chips) and the zone under the cursor.
+  const [cam, setCam] = useState<{ rect: [number, number, number, number] | null; h: number }>({ rect: null, h: Infinity });
+  const [hoverZone, setHoverZone] = useState<string | null>(null);
+  useEffect(() => {
+    if (!show || !viewer || viewer.isDestroyed()) return;
+    const s = viewer.scene, c = viewer.camera;
+    const update = () => {
+      if (s.isDestroyed()) return;
+      const r = c.computeViewRectangle();
+      setCam({ rect: r ? [r.west, r.south, r.east, r.north].map(Cesium.Math.toDegrees) as [number, number, number, number] : null, h: c.positionCartographic.height });
+    };
+    update();
+    c.moveEnd.addEventListener(update);
+    let last = 0;
+    const move = (e: MouseEvent) => {
+      const now = performance.now();
+      if (now - last < 150 || !zones.length) return;
+      last = now;
+      const r = viewer.canvas.getBoundingClientRect();
+      const hit = c.pickEllipsoid(new Cesium.Cartesian2(e.clientX - r.left, e.clientY - r.top), s.globe.ellipsoid);
+      if (!hit) { setHoverZone(null); return; }
+      const g = Cesium.Cartographic.fromCartesian(hit), q: LL = [Cesium.Math.toDegrees(g.longitude), Cesium.Math.toDegrees(g.latitude)];
+      setHoverZone(zones.find((z) => z.parts.some((ring) => inRing(q, ring)))?.id ?? null);
+    };
+    const leave = () => setHoverZone(null);
+    viewer.canvas.addEventListener("mousemove", move);
+    viewer.canvas.addEventListener("mouseleave", leave);
+    return () => { c.moveEnd.removeEventListener(update); viewer.canvas.removeEventListener("mousemove", move); viewer.canvas.removeEventListener("mouseleave", leave); };
+  }, [show, viewer, zones]);
+  const inView = (q: LL) => !cam.rect || (q[0] >= cam.rect[0] && q[0] <= cam.rect[2] && q[1] >= cam.rect[1] && q[1] <= cam.rect[3]);
+  const zoneLabels = useMemo(() => {
+    const named = zones.filter((z) => z.name);
+    const top = pctOf ? named.filter((z) => inView(z.at)).sort((a, b) => (pctOf.get(b.id) ?? 0) - (pctOf.get(a.id) ?? 0)).slice(0, ZONE_LABELS) : [];
+    const hov = named.find((z) => z.id === hoverZone);
+    return hov && !top.includes(hov) ? [...top, hov] : top;
+  }, [zones, pctOf, cam, hoverZone]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const outfallChips = useMemo(() => (cam.h < INLET_MAX_M ? outfalls.filter((o) => inView(o.at)).slice(0, OUTFALL_CHIPS) : []), [outfalls, cam]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const chips = useMemo(() => !pctOf ? [] : lines.map((l) => ({ l, pct: pctOf.get(l.id) ?? 0 })).filter((x) => x.pct >= CHIP_MIN_PCT).sort((a, b) => b.pct - a.pct).slice(0, CHIP_MAX), [lines, pctOf]);
   if (!show) return null;
@@ -325,7 +452,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const gatesOn = (o: Point) => o.gated ?? aoi?.drainage_default?.flap_gates ?? false;
   return (
     <>
-      {zones.filter((z) => z.name).map((z) => {
+      {zoneLabels.map((z) => {
         const p = pctOf?.get(z.id);
         return (
           <Anchored key={z.id} anchors={anchors} scene={scene} lon={z.at[0]} lat={z.at[1]}>
@@ -333,9 +460,8 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
           </Anchored>
         );
       })}
-      {outfalls.map((o) => (
+      {outfallChips.map((o) => (
         <Anchored key={o.id} anchors={anchors} scene={scene} lon={o.at[0]} lat={o.at[1]}>
-          <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 0, transform: "translate(-50%, -50%)" }}><OutfallMark /></span>
           <span data-declutter={2} title={o.name ?? undefined} style={{ ...chip, position: "absolute", left: 12, top: -8 }}>
             <span style={{ display: "block", fontWeight: 600 }}>Outfall to {o.receiving ?? recvDefault ?? "the receiving water"}</span>
             <span style={{ display: "block", color: "var(--ink-muted)" }}>{gatesOn(o) ? "gated" : "open mouth"}{level ? ` · ${level.boundary_level_m >= 0 ? "+" : "−"}${Math.abs(level.boundary_level_m).toFixed(1)} m` : ""}</span>
@@ -389,7 +515,7 @@ export function DrainsLegend({ aoi, run, runsBase }: { aoi?: AOIManifest; run?: 
       <span style={{ fontSize: 13, lineHeight: "18px", fontWeight: 600 }}>Drains</span>
       {LINE_KINDS.filter((k) => kinds.has(k)).map((k) => <span key={k} style={row}>{swatch(k)}{LINE_STYLE[k].label}</span>)}
       {kinds.has("sewer_zone") && <span style={row}><span style={{ width: 28, display: "flex", justifyContent: "center" }}><span style={{ width: 14, height: 10, border: "1.5px solid var(--ink)", background: "color-mix(in srgb, var(--ink) 20%, transparent)", borderRadius: 2 }} /></span>Sewer zone</span>}
-      {kinds.has("inlet") && <span style={row}><span style={{ width: 28, display: "flex", justifyContent: "center" }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--ink)" }} /></span>Inlet (close in)</span>}
+      {kinds.has("inlet") && <span style={row}><span style={{ width: 28, display: "flex", justifyContent: "center" }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: "color-mix(in srgb, var(--ink) 70%, transparent)" }} /></span>Inlet (street scale)</span>}
       {kinds.has("outfall") && <span style={row}><span style={{ width: 28, display: "flex", justifyContent: "center" }}><OutfallMark size={14} /></span>Outfall</span>}
       {fill && (
         <>
