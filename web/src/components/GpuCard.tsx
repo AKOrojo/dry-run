@@ -2,7 +2,7 @@
 // browser) for the run on the map, and open it in the existing 3D close-up viewer.
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { Crosshair, Cube, GraphicsCard, Info, Stop } from "@phosphor-icons/react";
+import { Crosshair, Cube, GraphicsCard, Info, PlayCircle, Stop } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { API } from "../lib/api";
 import {
@@ -76,8 +76,18 @@ async function runSolve(runId: string, buildingsUrl: string | undefined, centre:
   }
 }
 
-export function GpuCard({ run, aoi, buildingsUrl }: { run?: RunManifest; aoi?: AOIManifest; buildingsUrl?: string }) {
+/** The three steps, shown while no run is open. */
+const STEPS = ["Open a run", "Pick the box on the map", "Run 3D here"];
+
+/** `onDemo` opens the area's cached demo run; it rejects with a sentence when there is none. */
+export function GpuCard({ run, aoi, buildingsUrl, onDemo }: { run?: RunManifest; aoi?: AOIManifest; buildingsUrl?: string; onDemo?: () => Promise<void> }) {
   const box = useGpuBox();
+  const [demo, setDemo] = useState<{ busy: boolean; err: string | null }>({ busy: false, err: null });
+  const openDemo = () => {
+    if (!onDemo || demo.busy) return;
+    setDemo({ busy: true, err: null });
+    onDemo().then(() => setDemo({ busy: false, err: null }), (e: unknown) => setDemo({ busy: false, err: e instanceof Error ? e.message : "Could not open the demo run." }));
+  };
   const runId = run?.status === "done" ? run.run_id : undefined;
   const bounds = aoi?.grid.bounds_wgs84 ?? null;
   const [probe, setProbe] = useState<GpuProbe | undefined>(undefined);
@@ -159,7 +169,25 @@ export function GpuCard({ run, aoi, buildingsUrl }: { run?: RunManifest; aoi?: A
           {limits === null && <p style={muted}>The demo boxes still open from the cached OpenFOAM result in 3D close-ups.</p>}
           {limits && (
             <>
-              {!runId && <p style={muted}>Load or simulate a run first.</p>}
+              {!runId && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {STEPS.map((t, i) => (
+                      <li key={t} style={{ display: "flex", alignItems: "center", gap: 8, color: i === 0 ? "var(--ink)" : "var(--ink-muted)" }}>
+                        <span aria-hidden="true" style={{ width: 20, height: 20, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)",
+                          border: "1px solid var(--hairline)", background: "var(--ground)", fontSize: 11, fontWeight: 600, ...FIG }}>{i + 1}</span>
+                        {t}
+                      </li>
+                    ))}
+                  </ol>
+                  {onDemo && (
+                    <button type="button" onClick={openDemo} disabled={demo.busy} style={{ ...btn, ...raisedButton, alignSelf: "flex-start", fontWeight: 600, opacity: demo.busy ? 0.6 : 1 }}>
+                      <PlayCircle {...icon} />{demo.busy ? "Opening the demo run…" : "Open the demo run"}
+                    </button>
+                  )}
+                  {demo.err && <p role="alert" style={{ ...muted, color: "var(--hazard)" }}>{demo.err}</p>}
+                </div>
+              )}
               <div {...(!runId || running ? { inert: "" } : {})} style={{ display: "flex", flexDirection: "column", gap: 12, opacity: !runId ? 0.5 : 1 }}>
                 <Slider label="GPU memory it may use" value={memoryMb} min={512} max={8192} step={512} text={mbText(memoryMb)} lo="512 MB" hi="8 GB"
                   onChange={(v) => { setMemoryMb(v); saveMb(v); }} />

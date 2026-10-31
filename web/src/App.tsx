@@ -48,6 +48,8 @@ import { adoptDrainage, drainageSpec, resetDrainage, useDrainage } from "./lib/d
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+/** An area's baseline preset: whole-area rain, no interventions (warmed on the server, so its run is cached). */
+const isBase = (p: ScenarioSpec) => !p.interventions?.length && !p.storm.spatial && p.storm.total_mm > 0;
 const startClock = (m: RunManifest) => clock.set({ t_s: 0, max_s: m.frames.at(-1)?.t_s ?? 0, playing: !reducedMotion() });
 /** The contract's Storm.pattern default: what the warmed presets use, so the first Simulate opens from cache. */
 const DEFAULT_PATTERN: Pattern = "center_peaked";
@@ -136,7 +138,7 @@ export default function App() {
     touched.current = false;
     let off = false;
     getPresets(aoiId).then((ps) => {
-      const base = ps?.find((p) => !p.interventions?.length && !p.storm.spatial && p.storm.total_mm > 0);
+      const base = ps?.find(isBase);
       if (off || !base || runRef.current || touched.current) return;
       setRain(base.storm.total_mm); setDurationH(base.storm.duration_h);
       setPattern(base.storm.pattern ?? DEFAULT_PATTERN); setSimHours(base.sim_hours);
@@ -373,6 +375,21 @@ export default function App() {
   const session = useMemo(() => deriveSession(agentEvents), [agentEvents]);
   const agentList = useMemo(() => session.runIds.map((id) => runs.find((r) => r.run_id === id)).filter((m): m is RunManifest => !!m), [session, runs]);
   const placeVals = usePlaceStat(session.place, session.runIds);
+  // The GPU card's "Open the demo run": the area's baseline run, only if it is already cached (never starts a simulation).
+  // If the area changes while it loads, the old area's run is dropped.
+  const aoiNow = useRef(aoiId);
+  aoiNow.current = aoiId;
+  const openDemo = async () => {
+    const id = aoiId;
+    const ps = id ? await getPresets(id) : null;
+    const base = ps?.find(isBase);
+    const est = base && await estimateSim(base).catch(() => null);
+    if (aoiNow.current !== id) return;
+    if (!est?.cached) throw new Error("No demo run is ready for this area yet. Simulate one from the Scenario tab.");
+    const m = await getRun(est.run_id);
+    if (aoiNow.current !== id || m.status !== "done") return;
+    setRun(m); addRun(m); startClock(m);
+  };
   const showAgentRun = (m: RunManifest) => { setRun(m); startClock(m); setAgentShown({ id: m.run_id, picked: true }); };
   const agentView = mode === "Agent" && agentList.length > 0;
 
@@ -495,7 +512,7 @@ export default function App() {
       {/* The sidebar stays mounted while View hides it, so a running agent session keeps streaming. */}
       <div style={{ display: view.sidebar ? "contents" : "none" }}>
       <ErrorBoundary name="side panel" resetKey={aoi?.aoi_id} style={{ borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
-      <Sidebar aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
+      <Sidebar aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
           inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={

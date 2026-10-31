@@ -539,8 +539,8 @@ function SourcesCard({ sources }: { sources: string[] }) {
   );
 }
 
-export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus, closeup = false, buildingsUrl }: {
-  buildingsUrl?: string;
+export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agent, agentMode = false, inspect, inspectAfter, inspectFocus, closeup = false, buildingsUrl, onDemo }: {
+  buildingsUrl?: string; onDemo?: () => Promise<void>;
   aoi?: AOIManifest; run?: RunManifest; scenario: ScenarioProps; sources: string[];
   /** Compare mode: the Compare tab's cards; Inspect then describes the run the map shows. */
   compare?: ReactNode; onScenario?: () => void;
@@ -573,7 +573,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       <Tabs tabs={comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS} active={tab} onTab={setTab} />
       <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
-        {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} /></>}
+        {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Inspect" && inspect}
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (

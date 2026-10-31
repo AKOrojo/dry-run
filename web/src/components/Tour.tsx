@@ -23,7 +23,7 @@ const ALL_STEPS = [
   { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
   { id: "flow", title: "Read flow and hazard", body: "Turn on flow arrows, the AIDR hazard rating and loads on buildings, or draw a line to see depth along it." },
-  { id: "gpu3d", title: "3D on your GPU", body: "Solve a 3D close-up of any box on your own graphics card. Choose how much GPU memory to use; nothing is uploaded." },
+  { id: "gpu3d", title: "3D on your GPU", body: "Solve a 3D close-up of any box on your own graphics card; nothing is uploaded. No run open yet? Open the demo run, pick the box on the map, then Run 3D here." },
   { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "plan", title: "Inspect a building", body: "Switch to the 2D plan view and click a building for its depths and the street beside it." },
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
