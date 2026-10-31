@@ -56,8 +56,8 @@ export function Card({ title, right, children }: { title: string; right?: ReactN
     <section {...(lock ? { inert: "" } : {})} style={{ position: "relative", display: "flex", flexDirection: "column", flex: "none", background: "var(--surface)",
       border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", overflow: "hidden" }}>
       <Band title={title} right={lock ? (
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12 }}>
-          <Lock size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />{lock}
+        <span title={lock} style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+          <Lock size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{lock}</span>
         </span>
       ) : right} />{children}
       {lock && <div aria-hidden="true" style={{ position: "absolute", inset: "37px 0 0 0", background: "color-mix(in srgb, var(--surface) 45%, transparent)" }} />}

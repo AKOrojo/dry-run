@@ -323,10 +323,12 @@ export type ScenarioProps = {
 /** What the Simulate bar shows (board 8): before (cached or live), running, or done. */
 export type SimBar =
   | { state: "checking" }
+  | { state: "incomplete"; reason: string }
+  | { state: "waking" }
   | { state: "cached" }
   | { state: "live"; estS: number | null }
   | { state: "running"; elapsedS: number; estS: number | null; fraction: number; simT: number; tEnd: number; measured: boolean;
-      frames: [number, number] | null; queued: boolean; starting: boolean }
+      frames: [number, number] | null; queued: boolean; joined: boolean; starting: boolean }
   | { state: "done"; tookS: number | null };
 
 function StormCard(p: ScenarioProps) {
@@ -451,7 +453,7 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
       <div ref={box} data-tour="simulate" role="status" aria-live="polite" style={simCard}>
         <div data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Spinner {...icon15} color="var(--depth-3)" />
-          <span style={{ fontWeight: 600 }}>{sim.starting ? "Starting the solver…" : sim.queued ? "Waiting for the same run" : "Simulating live"}</span>
+          <span style={{ fontWeight: 600 }}>{sim.starting ? "Starting the solver…" : sim.queued ? (sim.joined ? "Waiting for the same run" : "Queued for the solver…") : "Simulating live"}</span>
           <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{clock(sim.elapsedS)}{est}</span>
         </div>
         <span role="progressbar" aria-label="Simulation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sim.fraction * 100)}
@@ -479,12 +481,15 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
           <span data-tour="sim-status" style={{ fontSize: 12, color: "var(--ink-muted)", whiteSpace: "nowrap" }}>{sim.tookS == null ? "Opened from cache" : `Simulated · ${minSec(sim.tookS)}`}</span>
         ) : (
           <span data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, lineHeight: "16px" }}>
-            {sim.state === "cached" ? <CheckCircle {...icon15} color="var(--depth-3)" /> : <Clock {...icon15} color="var(--ink-muted)" />}
+            {sim.state === "cached" ? <CheckCircle {...icon15} color="var(--depth-3)" /> : sim.state !== "incomplete" && <Clock {...icon15} color="var(--ink-muted)" />}
             {sim.state === "cached" && <span><b>Cached.</b> Opens instantly.</span>}
             {sim.state === "live" && <span><b>Runs live,</b>{sim.estS != null ? ` about ${minSec(sim.estS)}.` : " time unknown."} Cached runs open instantly.</span>}
             {sim.state === "checking" && <span style={{ color: "var(--ink-muted)" }}>Checking the cache…</span>}
+            {sim.state === "waking" && <span style={{ color: "var(--ink-muted)" }}>Waking the server… (first request after a quiet spell can take up to 30 s)</span>}
+            {sim.state === "incomplete" && <span style={{ color: "var(--ink-muted)" }}>{sim.reason}</span>}
           </span>
         )}
+        {sim.state === "live" && <span style={{ flexBasis: "100%", order: 3, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>Settings lock until it finishes; Stop unlocks them.</span>}
         <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           {(sim.state === "done" || canClear) && (
             <button type="button" onClick={onClear} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Broom size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Clear simulation</button>
@@ -545,6 +550,10 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   }, [closeup]);
   const { t_s } = useClock();
   const locked = scenario.busy || scenario.sim.state === "running";
+  // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
+  const sim = scenario.sim;
+  const left = sim.state === "running" && sim.estS != null && sim.estS > 0 ? sim.estS - sim.elapsedS : null;
+  const lockLabel = sim.state === "running" ? `Locked while simulating${left != null && left > 0 ? ` · ${minSec(left)} left` : ""}` : "Locked";
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
     <aside style={{ display: "flex", flexDirection: "column", background: "var(--ground)", borderLeft: "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
@@ -555,15 +564,15 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
         {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
-            <CardLock.Provider value={locked ? "Locked while simulating" : null}><StormCard {...scenario} /></CardLock.Provider>
-            <CardLock.Provider value={locked ? "Locked" : null}>
+            <CardLock.Provider value={locked ? lockLabel : null}><StormCard {...scenario} /></CardLock.Provider>
+            <CardLock.Provider value={locked ? lockLabel : null}>
               <div data-tour="rain" style={{ display: "flex", flexDirection: "column" }}><RainAreaCard hasInflows={!!aoi?.layers?.inflows} /></div>
             </CardLock.Provider>
             <RainPreviewCard />
-            <CardLock.Provider value={locked ? "Locked" : null}>
+            <CardLock.Provider value={locked ? lockLabel : null}>
               {scenario.coastal && <LevelCard level={scenario.level} onLevel={scenario.onLevel} aoiId={aoi?.aoi_id} />}
             </CardLock.Provider>
-            <CardLock.Provider value={locked ? "Locked" : null}>
+            <CardLock.Provider value={locked ? lockLabel : null}>
               {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
             <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />

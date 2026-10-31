@@ -146,10 +146,12 @@ export const cancelSim = (jobId: string, token: string) =>
 export type SimProgress = {
   phase: "queued" | "solving" | "saving" | "cancelling"; sim_t_s: number; t_end_s: number; fraction: number;
   elapsed_s: number; eta_s: number | null; measured: boolean;
+  /** This stream joined a job another request had already started (asked of Eng D; absent means a job of its own). */
+  joined?: boolean;
 };
 export type SimEvent =
   | { kind: "started"; data: { job_id: string; cancel_token: string; run_id: string; cached: boolean; est_s: number | null; t_end_s: number;
-      output_interval_s: number; frames_total: number } }
+      output_interval_s: number; frames_total: number; joined?: boolean } }
   | { kind: "progress"; data: SimProgress }
   | { kind: "done"; data: { manifest: RunManifest } }
   | { kind: "cancelled"; data: { reason: string } }
