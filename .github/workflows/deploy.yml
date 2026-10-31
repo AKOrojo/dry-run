@@ -1,12 +1,16 @@
 name: deploy
 
-# Deploys main to Cloud Run after ci passes on the same push. Pull requests, including fork
+# HOW PROD IS DEPLOYED TODAY: Eng D runs infra/scripts/deploy.sh from a clean checkout of origin/main once ci on that
+# commit reads "completed success". This workflow is manual-only (workflow_dispatch) until the cause below is fixed.
+# Why push runs never deployed: the "production" environment requires a reviewer's approval. A run waiting for it
+# holds the "deploy" concurrency group, so every later push run sat "pending" with no jobs and was superseded.
+# Dropping the required reviewer (or approving each run) and restoring `on: push: branches: [main]` brings auto-deploy back.
+
+# When dispatched: deploys main to Cloud Run after ci passes. Pull requests, including fork
 # PRs, can never reach the deploy job. Authenticates through Workload Identity Federation, so
 # no service-account key is stored in GitHub. Needs repo *variables* (not secrets), printed by
 # infra/scripts/wif.sh: GCP_PROJECT_ID, GCP_REGION, GCP_WIF_PROVIDER, GCP_DEPLOY_SA.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

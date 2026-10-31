@@ -40,6 +40,9 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 
 Built with Muse Spark Open. Data attributions: `ATTRIBUTION.md`.
 
+Production deploys: Eng D runs `infra/scripts/deploy.sh` from a clean checkout of `main` after `ci` passes on that
+commit. The GitHub `deploy` workflow is manual-only (see the note at the top of `.github/workflows/deploy.yml`).
+
 ## Data card: Lagos AOI (`lagos-lekki-v1`)
 
 **Area.** Lekki–Ajah corridor, W 3.470 S 6.420 E 3.620 N 6.510 (EPSG:4326), a 540 × 324 grid of 1 arc-second
