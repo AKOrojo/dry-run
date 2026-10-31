@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { API, getPointInfo, getPointSeries } from "./api";
 import { decodePng } from "./patch3d";
+import { areaCache } from "./areaCache";
 
 export type LL = [number, number];
 
@@ -14,7 +15,7 @@ export type VelocityManifest = {
   nx: number; ny: number; block_m: number; bounds_wgs84: [number, number, number, number]; vmax_m_s: number; scale_m_s: number; peak_speed_m_s: number;
   wet_threshold_m: number; frames: { i: number; t_s: number }[]; method?: string;
 };
-const jsonCache = new Map<string, Promise<unknown>>();
+const jsonCache = areaCache<string, Promise<unknown>>();
 function cachedJson<T>(url: string): Promise<T | null> {
   let p = jsonCache.get(url);
   if (!p) {
@@ -27,7 +28,7 @@ function cachedJson<T>(url: string): Promise<T | null> {
 export const getVelocityManifest = (runId: string) => cachedJson<VelocityManifest>(`${API}/api/runs/${runId}/derived/velocity.json`);
 /** One decoded velocity frame: u east, v north (m/s), speed (m/s), wet mask. Row 0 is the north edge. */
 export type VelocityFrame = { nx: number; ny: number; u: Float32Array; v: Float32Array; speed: Float32Array; wet: Uint8Array };
-const frameCache = new Map<string, Promise<VelocityFrame>>();
+const frameCache = areaCache<string, Promise<VelocityFrame>>();
 export function getVelocityFrame(runId: string, i: number, m: VelocityManifest): Promise<VelocityFrame> {
   const key = `${runId}|${i}`;
   let p = frameCache.get(key);
@@ -118,7 +119,7 @@ export function metres(a: LL, b: LL): number {
   return Math.hypot((b[0] - a[0]) * k * R * Math.cos(la), (b[1] - a[1]) * k * R);
 }
 export const along = (a: LL, b: LL, f: number): LL => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-const groundCache = new Map<string, Promise<number | null>>();
+const groundCache = areaCache<string, Promise<number | null>>();
 function groundAt(aoiId: string, p: LL): Promise<number | null> {
   const key = `${aoiId}|${p[0].toFixed(5)}|${p[1].toFixed(5)}`;
   let g = groundCache.get(key);

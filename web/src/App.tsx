@@ -51,6 +51,7 @@ import { resetSim, setSim } from "./lib/simstate";
 import { beforeRun, GIVE_UP_MS, WAKING_MS } from "./lib/simbar";
 import type { EstWait } from "./lib/simbar";
 import { adoptDrainage, drainageSpec, resetDrainage, useDrainage } from "./lib/drainage";
+import { clearAreaCaches } from "./lib/areaCache";
 
 // Autoplay starts after a run loads, unless the user asked for reduced motion.
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -247,6 +248,7 @@ export default function App() {
     ["run", "t", "aoi"].forEach((k) => u.searchParams.delete(k));
     u.searchParams.set("aoi", id);
     window.history.replaceState(null, "", u.toString());
+    clearAreaCaches();
     stop(); setLinkNote(null); setEst(null); setSimHours(undefined); setLastSim(null); setPick({}); setRun(undefined); setSimErr(null); setLevel(null); clock.set({ t_s: 0, max_s: 0, playing: false }); getAOI(id).then(setAoi); };
 
   const copyLink = async () => {

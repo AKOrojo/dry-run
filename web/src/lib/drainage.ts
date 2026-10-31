@@ -8,6 +8,7 @@ import type { RunManifest } from "./api";
 import type { DrainageDefault } from "../contracts/gen/AOIManifest";
 import type { Drainage } from "../contracts/gen/ScenarioSpec";
 import type { DrainFill } from "../contracts/gen/DrainFill";
+import { areaCache } from "./areaCache";
 
 export type { DrainageDefault, Drainage, DrainFill };
 export type DrainSystem = "closed" | "open" | "mixed";
@@ -108,7 +109,7 @@ export function fillTone(pct: number | null | undefined): FillTone {
 // ---- data ----
 export type DrainKind = "open_drain" | "covered_drain" | "gutter_inferred" | "canal" | "sewer_zone" | "inlet" | "outfall";
 export type DrainFeature = { type: "Feature"; geometry: { type: string; coordinates: any }; properties: { id: string; kind: DrainKind; name?: string | null; receiving?: string | null; gated?: boolean | null; [k: string]: unknown } };
-const memo = new Map<string, Promise<any>>();
+const memo = areaCache<string, Promise<any>>();
 const once = <T,>(key: string, f: () => Promise<T>): Promise<T> => {
   let p = memo.get(key);
   if (!p) { p = f().catch((e) => { memo.delete(key); throw e; }); memo.set(key, p); }

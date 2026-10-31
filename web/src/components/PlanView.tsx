@@ -11,13 +11,14 @@ import { clock, useClock } from "../lib/clock";
 import { fmtT } from "./ds";
 import { Band, Card, FIG, mono, raisedButton } from "./rev5";
 import { DepthChart } from "./Dock";
+import { areaCache } from "../lib/areaCache";
 
 type Ring = [number, number][];
 type BuildingInfo = { id: string; ring: Ring; height_m: number | null; source: string | null; lon: number; lat: number };
 const WET_M = 0.15, IMPASSABLE_M = 0.3, SEVERE_M = 0.5;
 
 // ---- data ----
-const indexCache = new Map<string, Promise<Map<string, BuildingInfo>>>();
+const indexCache = areaCache<string, Promise<Map<string, BuildingInfo>>>();
 /** id -> footprint, height and centroid, from the AOI's buildings GeoJSON (the file the map already loads). */
 export function buildingIndex(url: string) {
   let p = indexCache.get(url);
@@ -47,7 +48,7 @@ export const inRing = (lon: number, lat: number, ring: Ring) => {
   }
   return inside;
 };
-const placesCache = new Map<string, Promise<{ name: string; ring: Ring }[]>>();
+const placesCache = areaCache<string, Promise<{ name: string; ring: Ring }[]>>();
 export const placesOf = (aoiId: string) => {
   let p = placesCache.get(aoiId);
   if (!p) {
@@ -58,7 +59,7 @@ export const placesOf = (aoiId: string) => {
   }
   return p;
 };
-const depthsCache = new Map<string, Promise<Map<string, number>>>();
+const depthsCache = areaCache<string, Promise<Map<string, number>>>();
 const buildingDepths = (url: string) => {
   let p = depthsCache.get(url);
   if (!p) {

@@ -42,7 +42,7 @@ import { useWeatherSource } from "../lib/weather";
 const CloseUpMap = lazyNamed(() => import("./CloseUp"), "CloseUpMap");
 import { GpuBoxMap } from "./GpuBoxMap";
 import { DomainMap, domainBbox, outsideDomain } from "./DomainMap";
-import { useCloseUp } from "../lib/patch3d";
+import { listPatches, setCloseUp, useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
 
 type CamMode = "orbit" | "free" | "fly";
@@ -628,6 +628,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const weather = useWeatherSource(run);
   const viewState = useView();
   const closeUp = useCloseUp();
+  // The close-up and flow/hazard map parts mount only when they can show something, so their chunks stay off first paint.
+  const doneRun = run?.status === "done" ? run.run_id : undefined;
+  // Which 3D close-ups this run has (the Layers row and the map chips both need it, with or without the map part).
+  useEffect(() => {
+    let off = false;
+    setCloseUp({ runId: doneRun ?? null, patches: [], active: null });
+    if (doneRun) listPatches(doneRun).then((r) => { if (!off) setCloseUp({ patches: r }); });
+    return () => { off = true; };
+  }, [doneRun]);
   const runId = run?.run_id;
   const tSRef = useRef(tS);
   tSRef.current = tS;
@@ -1397,7 +1406,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             onClear={() => { clearFlyRoute(); setRouteReady(false); }} onClose={() => setRouteReady(false)} />
         )}
 
-        <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={run?.status === "done" ? run.run_id : undefined} runsBase={runsBase} buildingsUrl={buildingsUrl} />
+        {doneRun && (lay.closeups.on || closeUp.active || closeUp.local) && <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={doneRun} runsBase={runsBase} buildingsUrl={buildingsUrl} />}
         <GpuBoxMap viewer={viewer} scene={scene} anchors={anchors} hidden={!!closeUp.active} runKey={runId} />
         <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />
         {rainStorm && <RainMap viewer={viewer} scene={scene} anchors={anchors} basemap={lay.basemap} opacity={lay.rain.opacity} hasRun={!!runId} storm={rainStorm} />}
@@ -1432,12 +1441,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               <span>0</span><span>{Math.round(rs.preview.vmax_mm / 2)}</span><span>{Math.round(rs.preview.vmax_mm)} mm</span></span>
           </div>
         )}
-          <FlowLegend runId={run?.status === "done" ? run.run_id : undefined} />
+          {doneRun && (lay.flow.on || lay.hazard.on) && <FlowLegend runId={doneRun} />}
           {!closeUp.active && <DrainsLegend aoi={aoi} run={run} runsBase={runsBase} />}
         </div>
         </div>
         <DrainsMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} runsBase={runsBase} hidden={!!closeUp.active} />
-        <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />
+        {(lay.profile.on || (doneRun && (lay.flow.on || lay.hazard.on || lay.loads.on))) && <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />}
 
         {place && (
           <div style={{ position: "absolute", ...(phone ? { left: 12, right: 12, bottom: aboveChip + 30 } : { left: "50%", bottom: 74, transform: "translateX(-50%)", minWidth: 520 }), display: "flex", flexDirection: "column", background: "var(--surface-raised)",

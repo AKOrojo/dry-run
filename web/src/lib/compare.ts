@@ -1,6 +1,7 @@
 // Compare-mode data: per-place stats for two runs, "what changes" from the timeseries, and the
 // Difference map (B minus A depth per frame, drawn in the browser from the runs' depth frames).
 import { API, RunManifest, runFileUrl } from "./api";
+import { areaCache } from "./areaCache";
 
 export type PlaceRow = { place: string; a: number; b: number };
 
@@ -47,7 +48,7 @@ function parseNpy(buf: ArrayBuffer): { data: Float32Array; ny: number; nx: numbe
   else out.set(new Float32Array(buf.slice(off, off + 4 * n)));
   return { data: out, ny, nx };
 }
-const cache = new Map<string, Promise<any>>();
+const cache = areaCache<string, Promise<any>>();
 const memo = <T,>(key: string, f: () => Promise<T>): Promise<T> => {
   let p = cache.get(key);
   if (!p) { p = f().catch((e) => { cache.delete(key); throw e; }); cache.set(key, p); if (cache.size > 200) cache.delete(cache.keys().next().value as string); }

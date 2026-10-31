@@ -2,6 +2,7 @@
 // (pattern of lib/waypoints.ts). The map layer, the sidebar cards and the dock all read this store.
 import { useSyncExternalStore } from "react";
 import { API } from "./api";
+import { areaCache } from "./areaCache";
 
 export type PatchRow = {
   patch_id: string; status: string; center: [number, number]; size_m: number; cell_m: number;
@@ -112,7 +113,7 @@ async function decodeCanvas(buf: ArrayBuffer): Promise<{ w: number; h: number; r
   g.drawImage(bmp, 0, 0);
   return { w: c.width, h: c.height, rgba: new Uint8Array(g.getImageData(0, 0, c.width, c.height).data.buffer) };
 }
-const pngCache = new Map<string, Promise<{ w: number; h: number; rgba: Uint8Array }>>();
+const pngCache = areaCache<string, Promise<{ w: number; h: number; rgba: Uint8Array }>>();
 /** Exact RGBA of a PNG, cached by url (non-premultiplied: velocity frames keep data under alpha 0). */
 export function decodePng(url: string) {
   let p = pngCache.get(url);

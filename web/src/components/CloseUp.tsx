@@ -14,7 +14,7 @@ import { clock, useClock } from "../lib/clock";
 import { layers, setLayer, useLayers } from "../lib/layers";
 import { compassOf } from "../lib/rain";
 import {
-  PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, listPatches, loadPatch, closeup, setCloseUp, setShow, useCloseUp, volumeCaveat,
+  PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, loadPatch, closeup, setCloseUp, setShow, useCloseUp, volumeCaveat,
 } from "../lib/patch3d";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
@@ -29,7 +29,7 @@ const FORCE_NEAR_S = 30;
 /** Ground heights at lon/lat points: the terrain mesh, most detailed (0 on the ellipsoid or on failure). */
 async function sampleGround(v: Cesium.Viewer, pts: [number, number][]): Promise<number[]> {
   const t0 = performance.now();
-  while (v.terrainProvider instanceof Cesium.EllipsoidTerrainProvider && performance.now() - t0 < 4000) await sleep(200);
+  while (!v.isDestroyed() && v.terrainProvider instanceof Cesium.EllipsoidTerrainProvider && performance.now() - t0 < 4000) await sleep(200);
   if (v.isDestroyed() || v.terrainProvider instanceof Cesium.EllipsoidTerrainProvider) return pts.map(() => 0);
   const cartos = pts.map(([lo, la]) => Cesium.Cartographic.fromDegrees(lo, la));
   try { await Cesium.sampleTerrainMostDetailed(v.terrainProvider, cartos); }
@@ -113,14 +113,6 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
   const local = cu.local;
   const row = local ? local.data.row : patches.find((p) => p.patch_id === active);
   const fi = data ? frameIndex(data.manifest, t_s) : 0;
-
-  // ----- which patches this run has -----
-  useEffect(() => {
-    let off = false;
-    setCloseUp({ runId: runId ?? null, patches: [], active: null });
-    if (runId) listPatches(runId).then((r) => { if (!off) setCloseUp({ patches: r }); });
-    return () => { off = true; };
-  }, [runId]);
 
   // ----- dashed outlines on the map (always for the open one) -----
   useEffect(() => {

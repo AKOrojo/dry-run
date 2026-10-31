@@ -7,6 +7,8 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
 import { setAerial, setAerialNote, setBasemap, useLayers } from "../lib/layers";
 import { ApiError, getGoogleTilesKey } from "../lib/api";
+import { areaCache } from "../lib/areaCache";
+import { CESIUM_CHECKED } from "../lib/cesiumPin";
 
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 // Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
@@ -21,12 +23,36 @@ const buildingColor = (depth: number) => {
   DEPTH_EDGES.forEach((edge, i) => { if (depth >= edge) bin = i; });
   return cssColor(`--depth-${bin + 1}`);
 };
-const footprints = new Map<string, Promise<unknown>>();
+const footprints = areaCache<string, Promise<unknown>>();
 
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(response.statusText);
   return response.json();
+}
+
+/** A destroyed Cesium object keeps all its fields. Closures from earlier renders (a memoised callback keeps its whole
+ *  render scope, and that scope's viewer) can keep it reachable, and with it every tile, primitive and texture: about
+ *  55 MB per area switch. Drop the fields so at most an empty shell stays; isDestroyed() keeps answering true. */
+function releaseDestroyed(o: object) {
+  const d = o as { isDestroyed?: () => boolean } & Record<string, unknown>;
+  if (!d.isDestroyed?.()) return;
+  for (const k of Object.keys(d)) if (k !== "isDestroyed") { try { delete d[k]; } catch { /* non-configurable */ } }
+}
+
+// The workarounds below reach into Cesium internals checked on one version; on any other they are skipped.
+const VERSION = (Cesium as unknown as { VERSION?: string }).VERSION;  // exported at runtime, missing from the d.ts
+const internalsChecked = VERSION === CESIUM_CHECKED;
+if (!internalsChecked) console.warn("leak workarounds skipped: Cesium " + VERSION);
+
+// Cesium's request heap drops the request past its cap without clearing that slot, so one stale request (and the tile
+// tree its priority callback closes over) outlives a destroyed tileset. Clear the slots past the heap's length.
+function clearStaleRequests() {
+  if (!internalsChecked) return;
+  const heap = (Cesium.RequestScheduler as unknown as { requestHeap?: { length: number; internalArray: unknown[] } }).requestHeap;
+  if (!heap) return;
+  const slots = heap.internalArray;
+  for (let i = heap.length; i < slots.length; i++) slots[i] = undefined;
 }
 
 // Resolves once the viewer's terrain provider is usable (immediately for the ellipsoid).
@@ -154,10 +180,33 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     ctl.lookEventTypes = [{ eventType: E.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT }];
     ctl.minimumZoomDistance = 150;
     ctl.maximumZoomDistance = 25000;
+    // Cesium catches its own render exceptions (error panel, rendering stops), so they never reach window.onerror.
+    const offRenderError = v.scene.renderError.addEventListener((_scene: Cesium.Scene, err: unknown) => {
+      console.error(`Cesium render error (area ${aoi.aoi_id}, basemap ${layerRef.current.basemap}):`, err);
+      if (import.meta.env.DEV) { const w = window as unknown as { __renderErrors?: number }; w.__renderErrors = (w.__renderErrors ?? 0) + 1; }
+    });
     viewer.current = v;
     if (import.meta.env.DEV) (window as unknown as { __viewer?: Cesium.Viewer }).__viewer = v;
     onViewer?.(v);
-    return () => { layer.current = undefined; viewer.current = undefined; onViewer?.(undefined); if (!v.isDestroyed()) v.destroy(); };
+    return () => {
+      offRenderError();
+      layer.current = undefined; viewer.current = undefined; onViewer?.(undefined);
+      const scene = v.scene;
+      const { frameState: frame, context } = scene as unknown as { frameState: Record<string, unknown>; context: object };  // 1.146 layout
+      if (!v.isDestroyed()) v.destroy();
+      releaseDestroyed(scene); releaseDestroyed(v);
+      // Cesium module-level scratch objects keep the last frame state (model draw commands) and the last glTF texture
+      // job (its WebGL context). Emptied, they no longer hold the photoreal tile tree or this context's shader cache.
+      if (internalsChecked) {
+        for (const k of Object.keys(frame)) delete frame[k];
+        releaseDestroyed(context);
+      }
+      clearStaleRequests();
+      if (import.meta.env.DEV) {
+        const w = window as unknown as { __viewer?: Cesium.Viewer };
+        if (w.__viewer === v) w.__viewer = undefined;
+      }
+    };
   }, [aoi.aoi_id, token]);
 
   useEffect(() => {
@@ -525,8 +574,15 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
         g.showGroundAtmosphere = true;
         g.maximumScreenSpaceError = 1.5;
         if (v.imageryLayers.length) v.imageryLayers.get(0).show = layerRef.current.imagery.on;
-        if (tiles) v.scene.primitives.remove(tiles);
+        if (tiles) v.scene.primitives.remove(tiles);  // destroys it
       }
+      // The tileset (destroyed by remove, or with the viewer) keeps its tiles until its fields go; see releaseDestroyed.
+      if (tiles && !tiles.isDestroyed()) tiles.destroy();
+      // Only once the viewer is gone: a live scene keeps the destroyed tileset in its height-callback bookkeeping for a
+      // few frames, and reading a released field there stops rendering (basemap toggle, then a ground-clamped removal).
+      if (tiles && v.isDestroyed()) releaseDestroyed(tiles);
+      clearStaleRequests();
+      if (import.meta.env.DEV) { const w = window as unknown as { __tiles?: Cesium.Cesium3DTileset }; if (w.__tiles === tiles) w.__tiles = undefined; }
       recolour();
     };
   }, [layerState.basemap, aoi.aoi_id, token]);
@@ -551,7 +607,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     if (!v || !frameUrl || frames?.length) return;
     let cancelled = false;
     Cesium.SingleTileImageryProvider.fromUrl(frameUrl, { rectangle: rect }).then((p) => {
-      if (cancelled) return;
+      if (cancelled || v.isDestroyed()) return;
       const next = v.imageryLayers.addImageryProvider(p);
       next.alpha = 1.0;
       if (layer.current) v.imageryLayers.remove(layer.current, true);
