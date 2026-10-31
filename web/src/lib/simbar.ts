@@ -28,3 +28,12 @@ export function beforeRun(ready: boolean, mode: RainMode, est: SimEstimate | "fa
   // No answer yet: say the server is waking, then stop waiting and let Simulate run with the time unknown.
   return wait === "gaveUp" ? { state: "live", estS: null } : wait === "waking" ? { state: "waking" } : { state: "checking" };
 }
+
+/** The lock countdown follows the server's eta, which refines in jumps (46 → 29 s). Ease it: never rise, and fall at
+ *  most EASE_RATE seconds per second towards the eta. */
+export const EASE_RATE = 1.5;
+export function easeLeft(shown: number | null, target: number | null, dtS: number): number | null {
+  if (target == null) return shown;
+  if (shown == null) return target;
+  return Math.max(0, Math.max(Math.min(target, shown), shown - EASE_RATE * Math.max(0, dtS)));
+}

@@ -23,6 +23,7 @@ import { useLockout } from "../lib/lockout";
 import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 import { DrainageCard } from "./Drainage";
+import { easeLeft } from "../lib/simbar";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
@@ -440,6 +441,16 @@ function SimulateButton({ disabled, onClick }: { disabled: boolean; onClick: () 
   );
 }
 
+/** The eta-based "N s left", eased (lib/simbar easeLeft) so a refined eta doesn't make it jump; resets between runs. */
+function useEasedLeft(target: number | null, running: boolean) {
+  const st = useRef<{ shown: number | null; at: number }>({ shown: null, at: 0 });
+  if (!running) { st.current = { shown: null, at: 0 }; return null; }
+  const now = performance.now();
+  const dt = st.current.shown == null ? 0 : (now - st.current.at) / 1000;
+  st.current = { shown: easeLeft(st.current.shown, target, dt), at: now };
+  return st.current.shown;
+}
+
 function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear }: Pick<ScenarioProps, "sim" | "busy" | "canRun" | "canClear" | "onSimulate" | "onStop" | "onClear">) {
   const box = useRef<HTMLDivElement>(null);
   const running = sim.state === "running";
@@ -552,7 +563,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
   const sim = scenario.sim;
-  const left = sim.state === "running" && sim.estS != null && sim.estS > 0 ? sim.estS - sim.elapsedS : null;
+  const left = useEasedLeft(sim.state === "running" && sim.estS != null && sim.estS > 0 ? sim.estS - sim.elapsedS : null, sim.state === "running");
   const lockLabel = sim.state === "running" ? `Locked while simulating${left != null && left > 0 ? ` · ${minSec(left)} left` : ""}` : "Locked";
   const passM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
   return (
