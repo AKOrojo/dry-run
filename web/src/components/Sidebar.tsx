@@ -613,9 +613,11 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     const ro = new ResizeObserver(measure);
     ro.observe(sc);
     measure();
-    const mo = new MutationObserver(measure);
+    // Any DOM change in the panel may mount or swap a footer: re-measure at most once a frame.
+    let frame = 0;
+    const mo = new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); });
     mo.observe(sc, { childList: true, subtree: true });
-    return () => { ro.disconnect(); mo.disconnect(); };
+    return () => { ro.disconnect(); mo.disconnect(); cancelAnimationFrame(frame); };
   }, [phone, tab]);
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
