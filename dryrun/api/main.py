@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from dryrun import storage
+from dryrun import speed, storage
 from dryrun.api import ratelimit  # noqa: E402
 from dryrun.api.errors import error_body  # noqa: E402
 from dryrun.api.ratelimit import limit  # noqa: E402
@@ -46,7 +46,6 @@ from dryrun.contracts import (
 from dryrun.routing.evac import route as compute_route
 from dryrun.sim import BACKEND as SIM_BACKEND
 from dryrun.sim import exposure, interventions
-from dryrun.sim.engine import run_scenario
 
 ADMIN_TOKEN = "" if os.getenv("DRYRUN_ADMIN_TOKEN", "").strip() == "unset" else os.getenv("DRYRUN_ADMIN_TOKEN", "")
 log = logging.getLogger("dryrun.api")
@@ -319,7 +318,7 @@ def simulate(spec: ScenarioSpec, request: Request):
     # Sync endpoint -> FastAPI runs it in a threadpool. Fine at demo scale (seconds/run).
     limit(request, "simulate", per_hour=60)  # cached runs are cheap; uncached cost CPU
     _check_aoi(spec.aoi_id)  # before run_id(), which hashes the AOI manifest
-    return run_scenario(spec)
+    return speed.run_and_observe(spec)  # run_scenario, timing fed to the estimate
 
 
 @app.get("/api/runs/{run_id}", response_model=RunManifest)

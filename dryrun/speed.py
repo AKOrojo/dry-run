@@ -23,14 +23,18 @@ over its last HOST_RUNS solves. The first solve of an AOI in a process costs FIR
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
+import time
 from collections import deque
 from functools import lru_cache
 
 import numpy as np
 
 from dryrun.contracts import AOIManifest, DrainUpgrade, ScenarioSpec, TideLevel
+
+log = logging.getLogger("dryrun.speed")
 
 # effective rain mm -> ns per cell per simulated second, prod Cloud Run rev 00058
 CALIBRATION: dict[str, list[tuple[float, float]]] = {
@@ -199,6 +203,30 @@ def observe(aoi: AOIManifest, spec: ScenarioSpec, elapsed_s: float, cells: int |
         _seen_runs.append(run_id)
         _ratios.append(min(max(elapsed_s / model, lo), hi))
         _solved.add(aoi.aoi_id)
+
+
+def observe_run(spec: ScenarioSpec, m, wall_s: float) -> None:
+    """observe() for a finished RunManifest. A manifest that came back from the cache (wall time shorter than its
+    elapsed_s) was solved elsewhere: skipped. Never raises."""
+    if getattr(m, "backend", None) != "solver" or not m.elapsed_s or wall_s < m.elapsed_s - 0.5:
+        return
+    try:
+        from dryrun import storage
+
+        observe(storage.load_aoi(spec.aoi_id), spec, m.elapsed_s, m.stats.domain_cells if m.stats else None)
+    except Exception:  # noqa: BLE001 - feedback must never fail a run
+        log.exception("speed.observe failed")
+
+
+def run_and_observe(spec: ScenarioSpec):
+    """engine.run_scenario, then observe_run on a background thread, so the caller never waits on the feedback.
+    For solves outside the simulate stream (POST /api/simulate, the agent's run_simulation)."""
+    from dryrun.sim.engine import run_scenario
+
+    t0 = time.monotonic()
+    m = run_scenario(spec)
+    threading.Thread(target=observe_run, args=(spec, m, time.monotonic() - t0), daemon=True).start()
+    return m
 
 
 def reset() -> None:

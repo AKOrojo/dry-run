@@ -160,20 +160,8 @@ def estimate(spec: ScenarioSpec, request: Request):
     return estimate_for(spec)
 
 
-def _observe(spec: ScenarioSpec, m, wall_s: float) -> None:
-    """Tell Eng A's speed model how long this solve took on this instance (it corrects later estimates). A manifest
-    that came back from the cache (shorter wall time than its elapsed_s) was solved elsewhere: skip it."""
-    if m.backend != "solver" or not m.elapsed_s or wall_s < m.elapsed_s - 0.5:
-        return
-    try:
-        from dryrun import speed
-
-        speed.observe(storage.load_aoi(spec.aoi_id), spec, m.elapsed_s, m.stats.domain_cells if m.stats else None)
-    except Exception:  # noqa: BLE001 - feedback must never fail a run
-        log.exception("speed.observe failed")
-
-
 def _work(job: jobs.Job, spec: ScenarioSpec) -> None:
+    from dryrun import speed
     from dryrun.sim.engine import run_scenario
 
     token = jobs.bind(job)
@@ -184,7 +172,7 @@ def _work(job: jobs.Job, spec: ScenarioSpec) -> None:
             jobs.finish(job, error=jobs.Cancelled(job.run_id))
         elif m.status == RunStatus.done:
             jobs.finish(job, manifest=m)
-            _observe(spec, m, time.monotonic() - t0)  # after finish: viewers never wait on it
+            speed.observe_run(spec, m, time.monotonic() - t0)  # after finish: viewers never wait on it
         else:
             jobs.finish(job, error=RuntimeError(m.error or f"run {m.status.value}"))
     except BaseException as exc:  # noqa: BLE001 - every outcome must release the watchers

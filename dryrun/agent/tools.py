@@ -15,10 +15,10 @@ import json
 import logging
 import re
 
-from dryrun import presets, storage
+from dryrun import presets, speed, storage
 from dryrun.contracts import COMPARE_FIELDS, CompareResult, RainCell, RouteRequest, RunStats, ScenarioSpec, StormTrack
 from dryrun.routing.evac import route
-from dryrun.sim.engine import area_stats, run_scenario, validate
+from dryrun.sim.engine import area_stats, validate
 from dryrun.sim.solver import DEFAULT_TIDE_M
 
 log = logging.getLogger(__name__)
@@ -238,7 +238,7 @@ def dispatch(name: str, args_json: str, session: Session | None = None) -> dict:
             if session.runs >= MAX_RUNS_PER_SESSION:
                 return {"error": f"run budget of {MAX_RUNS_PER_SESSION} reached; answer with existing runs"}
             session.runs += 1
-        m = run_scenario(spec)
+        m = speed.run_and_observe(spec)  # run_scenario, timing fed to the estimate
         out = {"run_id": m.run_id, "status": m.status.value, "backend": m.backend,
                "stats": m.stats.model_dump(mode="json") if m.stats else None, "error": m.error}
         warnings = []

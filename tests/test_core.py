@@ -795,17 +795,42 @@ def test_simulate_observe_skips_cached(monkeypatch):
     from types import SimpleNamespace
 
     from dryrun import speed
-    from dryrun.api import simulate_routes
 
     seen = []
     monkeypatch.setattr(speed, "observe", lambda aoi, spec, elapsed, cells=None: seen.append((elapsed, cells)))
     spec = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=120, duration_h=3))
     m = SimpleNamespace(backend="solver", elapsed_s=30.0, stats=SimpleNamespace(domain_cells=100))
-    simulate_routes._observe(spec, m, wall_s=0.2)  # cached
-    simulate_routes._observe(spec, SimpleNamespace(backend="fake", elapsed_s=1.0, stats=None), wall_s=1.0)
+    speed.observe_run(spec, m, wall_s=0.2)  # cached
+    speed.observe_run(spec, SimpleNamespace(backend="fake", elapsed_s=1.0, stats=None), wall_s=1.0)
     assert seen == []
-    simulate_routes._observe(spec, m, wall_s=30.3)
+    speed.observe_run(spec, m, wall_s=30.3)
     assert seen == [(30.0, 100)]
+
+
+def test_every_solve_path_observes(monkeypatch):
+    """POST /api/simulate and the agent's run_simulation feed the speed model too (not only the stream)."""
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from dryrun import speed
+    from dryrun.agent import tools
+    from dryrun.api.main import app
+
+    seen, done = [], threading.Event()
+    monkeypatch.setattr(speed, "observe_run", lambda spec, m, wall_s: (seen.append(m.run_id), done.set()))
+    spec = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=17, duration_h=1))
+    m = speed.run_and_observe(spec)
+    assert m.status.value == "done" and done.wait(5) and seen == [m.run_id]
+
+    calls = []
+    real = speed.run_and_observe
+    monkeypatch.setattr(speed, "run_and_observe", lambda sp: (calls.append(sp.aoi_id), real(sp))[1])
+    body = {"aoi_id": fixtures.AOI_ID, "storm": {"total_mm": 18, "duration_h": 1}}
+    assert TestClient(app).post("/api/simulate", json=body).status_code == 200
+    assert tools.dispatch("run_simulation", json.dumps(body))["status"] == "done"
+    assert calls == [fixtures.AOI_ID, fixtures.AOI_ID]
+
 
 def test_rain_area_domain():
     from pydantic import ValidationError
