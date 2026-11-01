@@ -67,7 +67,7 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 /* Touch targets in the sheets: every control at least 40 px tall (the cards are the desktop cards). */
 /* The compact layer slider keeps its 12 px box: its .dr-hit child is the 40 px target. */
 .dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"]:not(:has(> .dr-hit)), input:not([type="radio"])),
-.dr-app.bp-phone .dr-sheet-body li[title], .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
+.dr-app.bp-phone .dr-sheet-body li.dr-row, .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
 .dr-app.bp-tablet .dr-drawer :is(button, select, [role="combobox"]) { min-height: 40px; }
 
 /* The small layer slider and the map's place chips keep their look; their hit area grows to 40 px. */

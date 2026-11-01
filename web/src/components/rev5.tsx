@@ -3,6 +3,7 @@ import { createContext, useContext, type CSSProperties, type ReactNode } from "r
 import { Barricade, Drop, CloudSlash, Lock, TrafficCone, Waves } from "@phosphor-icons/react";
 import { Slider } from "./controls/Slider";
 import { NumberField } from "./controls/NumberField";
+import { Tooltip } from "./controls/Tooltip";
 
 export const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 export const mono = "var(--font-mono)";
@@ -58,9 +59,9 @@ export function Card({ title, right, children }: { title: string; right?: ReactN
     <section {...(lock ? { inert: "" } : {})} style={{ position: "relative", display: "flex", flexDirection: "column", flex: "none", background: "var(--surface)",
       border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)", overflow: "hidden" }}>
       <Band title={title} right={lock ? (
-        <span title={lock} style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+        <Tooltip text={lock}><span style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
           <Lock size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} /><span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{lock}</span>
-        </span>
+        </span></Tooltip>
       ) : right} />{children}
       {lock && <div aria-hidden="true" style={{ position: "absolute", inset: "37px 0 0 0", background: "color-mix(in srgb, var(--surface) 45%, transparent)" }} />}
     </section>

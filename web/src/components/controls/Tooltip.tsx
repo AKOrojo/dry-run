@@ -31,6 +31,11 @@ export function TipBubble({ id, text, anchor }: { id?: string; text: string; anc
   );
 }
 
+/** Same as Tooltip, but renders the child bare when there is no text (an optional `title`). */
+export function Tip({ text, children }: { text?: string | null; children: ReactElement }) {
+  return text ? <Tooltip text={text}>{children}</Tooltip> : children;
+}
+
 /** Wraps one focusable element: `<Tooltip text="Full screen · F"><button …/></Tooltip>`. */
 export function Tooltip({ text, children }: { text: string; children: ReactElement }) {
   const id = useId();

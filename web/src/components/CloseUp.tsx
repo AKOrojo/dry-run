@@ -16,6 +16,7 @@ import { compassOf } from "../lib/rain";
 import {
   PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, loadPatch, closeup, setCloseUp, setShow, useCloseUp, volumeCaveat,
 } from "../lib/patch3d";
+import { Tooltip } from "./controls/Tooltip";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -269,10 +270,10 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
               <div style={pill} data-declutter-phone={3}><span style={{ fontWeight: 600 }}>{p.label ?? "3D close-up"}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>{p.size_m} m box · {p.cell_m} m cells</span></div>
             ) : (
-              <button type="button" data-tour="closeup" data-declutter-phone={2} title="Open the 3D close-up" onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
+              <Tooltip text="Open the 3D close-up"><button type="button" data-tour="closeup" data-declutter-phone={2} onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
                 style={{ ...pill, flexDirection: "row", alignItems: "center", gap: 6, pointerEvents: "auto", cursor: "pointer", ...raisedButton, borderRadius: "var(--radius-md)", height: 26, padding: "0 9px 0 7px", fontSize: 12, fontWeight: 600 }}>
                 <Cube size={14} weight="bold" />3D close-up · {p.size_m} m box
-              </button>
+              </button></Tooltip>
             )}
           </Anchored>
         );

@@ -2,6 +2,7 @@
 // Same markup and ft-* classes; styles come from styles/bundle.css. TimelineBar adds scrubbing.
 import { useRef } from "react";
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEventHandler, PointerEvent, ReactNode } from "react";
+import { Tip } from "./controls/Tooltip";
 
 const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(" ");
 
@@ -37,7 +38,7 @@ export interface ProvenanceBadgeProps {
   children?: ReactNode;
 }
 export function ProvenanceBadge({ kind = "simulated", title, className, children }: ProvenanceBadgeProps) {
-  return <span className={cx("ft-badge", `ft-badge-${kind}`, className)} title={title}>{children || BADGE[kind]}</span>;
+  return <Tip text={title}><span className={cx("ft-badge", `ft-badge-${kind}`, className)}>{children || BADGE[kind]}</span></Tip>;
 }
 
 export interface ClaimItemProps {

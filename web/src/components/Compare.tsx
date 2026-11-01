@@ -12,6 +12,7 @@ import { Band, Card, FIG, mono } from "./rev5";
 import { Select } from "./controls/Select";
 import { describeIv } from "./Sidebar";
 import { Globe } from "./Globe";
+import { Tooltip } from "./controls/Tooltip";
 
 export type CompareView = "A" | "B" | "Swipe" | "Side by side" | "Difference";
 
@@ -211,7 +212,7 @@ export function ByPlace({ rows }: { rows: PlaceRow[] | null }) {
   return (
     <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px 8px", minWidth: 0, overflow: "hidden" }}>
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap", overflow: "hidden" }}>
-        <span style={{ fontWeight: 600 }}>By place</span><span style={{ color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis" }} title="Road km impassable inside each place, run maximum">road km, run max</span>
+        <span style={{ fontWeight: 600 }}>By place</span><Tooltip text="Road km impassable inside each place, run maximum"><span style={{ color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>road km, run max</span></Tooltip>
       </figcaption>
       {rows == null ? <p style={{ margin: "auto", color: "var(--ink-muted)", fontSize: 12 }}>Loading places…</p>
         : !shown.length ? <p style={{ margin: "auto", color: "var(--ink-muted)", fontSize: 12 }}>This area has no named places.</p> : (
@@ -223,7 +224,7 @@ export function ByPlace({ rows }: { rows: PlaceRow[] | null }) {
             const ch = r.a > 0 ? Math.min(1, Math.abs(r.b - r.a) / r.a) : r.b > 0 ? 1 : 0;
             const better = r.b <= r.a;
             return (
-              <tr key={r.place} title={`${r.place}: ${pctChange(r.a, r.b)?.text ?? "no change"}`}>
+              <Tooltip key={r.place} text={`${r.place}: ${pctChange(r.a, r.b)?.text ?? "no change"}`}><tr>
                 <td style={{ padding: "2px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.place}</td>
                 <td style={{ textAlign: "right", color: "var(--ink-muted)", ...FIG }}>{r.a.toFixed(1)}</td>
                 <td style={{ textAlign: "right", fontWeight: 600, ...FIG }}>{r.b.toFixed(1)}</td>
@@ -232,7 +233,7 @@ export function ByPlace({ rows }: { rows: PlaceRow[] | null }) {
                     <span style={{ display: "block", height: 6, width: `${100 * ch}%`, background: better ? "var(--verified)" : "var(--hazard)", borderRadius: "var(--radius-pill)" }} />
                   </span>
                 </td>
-              </tr>
+              </tr></Tooltip>
             );
           })}</tbody>
         </table>
