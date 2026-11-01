@@ -21,6 +21,8 @@ const WaterWent = lazyNamed(() => import("./Drainage"), "WaterWent");
 import { drainStats, FULL_PCT } from "../lib/drainage";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { TextField } from "./controls/TextField";
+import { Menu } from "./controls/Menu";
+import type { MenuEntry } from "./controls/Menu";
 import { Tooltip, Tip } from "./controls/Tooltip";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
@@ -158,7 +160,6 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, .
 } & Omit<React.ComponentProps<typeof Chart>, "series" | "width">) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
-  const [open, setOpen] = useState(false);
   const ch = ab ? 84 : 104;  // the A / B line takes the difference
   useEffect(() => {
     const el = ref.current;
@@ -174,19 +175,13 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, .
         {!ab && <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>}
         {menu ? (
           <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
-            <button type="button" aria-label="Choose chart" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
-              onBlur={(e) => { if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node)) setOpen(false); }}
-              style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}><DotsThreeVertical size={14} weight="bold" /></button>
-            {open && (
-              <span role="menu" style={{ position: "absolute", right: 0, top: 22, zIndex: 5, display: "flex", flexDirection: "column", padding: 4, background: "var(--surface-raised)",
-                border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)" }}>
-                {menu.map((m) => (
-                  <button key={m.label} type="button" role="menuitemradio" aria-checked={m.on} onClick={() => { m.onPick(); setOpen(false); }}
-                    style={{ height: 28, padding: "0 10px", textAlign: "left", whiteSpace: "nowrap", background: m.on ? "var(--ground)" : "transparent", border: 0, borderRadius: 3,
-                      color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: m.on ? 600 : 400, cursor: "pointer" }}>{m.label}</button>
-                ))}
-              </span>
-            )}
+            <Menu label="Choose chart" items={menu.map((m): MenuEntry => ({ kind: "radio", label: m.label, checked: m.on, onSelect: m.onPick }))}
+              trigger={(p) => (
+                <button {...p} type="button" aria-label="Choose chart"
+                  style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
+                  <DotsThreeVertical size={14} weight="bold" />
+                </button>
+              )} />
           </span>
         ) : <span style={{ display: "flex", alignSelf: "center", color: "var(--ink-muted)" }}><DotsThreeVertical size={14} weight="bold" /></span>}
       </figcaption>
