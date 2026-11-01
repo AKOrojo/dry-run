@@ -11,13 +11,21 @@ data/_scratch/prod_timings.json): Lagos 50/120/200 mm and the tide lock, Texas r
 Queens hero (sewers full). Those ran 1.4-2.7x slower than the rev 00046 fit predicted; points not re-measured (the
 0 mm floors, Queens 67 mm) are the rev 00046 values times the measured ratio for their AOI. Repeat runs of one
 spec on prod vary by tens of percent, so SPREAD stays wide. An out-of-sample check (4 fresh specs, rev 00061,
-data/_scratch/prod_timings_oos.json) ran 24-38 % under that fit, so SCALE is the geometric mean of actual / estimate
-over all 11 prod runs (0.88): est/actual - 1 is then -12 % on the 7 calibration runs and +15 to +42 % on the 4 checks.
+data/_scratch/prod_timings_oos.json) ran 24-38 % under that fit. Three idle reruns of one Queens v1 spec on rev 00089
+(2026-11-01, Eng D) ran 21-25 % over it. Over those 13 idle prod runs actual / estimate has a geometric mean of 1.036,
+so SCALE went from 0.88 to 0.91.
+
+The residuals cluster by host and day (Oct 30 x1.10, the Oct 30 checks x0.68-0.84, Nov 1 x1.21-1.25), not by AOI or storm:
+Cloud Run hosts differ (numba warm-up took 9 s to 534 s on the same image). So each process also corrects itself from its
+own finished solves (observe, called by the simulate route): host_factor is the shrunk geometric mean of actual / model
+over its last HOST_RUNS solves. The first solve of an AOI in a process costs FIRST_SOLVE more (layers load, caches fill).
 """
 
 from __future__ import annotations
 
 import math
+import threading
+from collections import deque
 from functools import lru_cache
 
 import numpy as np
@@ -41,13 +49,22 @@ OVERHEAD_S = 0.0  # the calibration is on total elapsed_s, which already include
 OTHER_INTERVENTION = 0.85  # an intervention that removes water (drains, green, ponds): ~15 % less time (rev 00046)
 TIDE_HIGH = 1.54  # a held level above the default makes deeper water: the Lagos tide lock, 14.45 vs 9.39 ns
 EXTRAPOLATE_MAX = 1.5  # above the table, follow its last slope, at most this times its last value
-SCALE = 0.88  # all 11 prod runs (7 calibration + 4 out-of-sample): geometric mean of actual / estimate
+SCALE = 0.91  # 13 idle prod runs (7 calibration, 4 out-of-sample, 2 Nov 1 reruns): 0.88 x their geometric mean 1.036
 FAKE_S = 1.0
 # Open-drain routing costs this x (channel nodes / simulated cells) on top of the surface solve: Lagos v3, 120 mm / 3 h,
 # 41.6k nodes on 175k cells, 32.2 s against 21.7 s locally (+48 %). Closed sewer zones cost nothing measurable
 # (Queens v1 Ida hour 12.2 s against 12.3 s).
 DRAIN_CHANNEL_COST = 2.0
 SPREAD = 0.4  # +-: rev 00046 to 00058 moved the same specs by 1.4-2.7x; one prod sample per spec
+FIRST_SOLVE = 1.19  # Queens v1 on a warm instance, its first Queens solve: 37.0 s against 31.4 / 30.6 s after (Nov 1)
+HOST_RUNS = 8  # host_factor looks at this process's last 8 solves
+HOST_PRIOR = 2.0  # ... shrunk toward 1 as if 2 more solves had matched the model exactly
+HOST_RATIO = (0.5, 2.5)  # one observation's actual / model is clamped to this (a run disturbed by a deploy: 2.06)
+
+_lock = threading.Lock()
+_ratios: deque[float] = deque(maxlen=HOST_RUNS)
+_solved: set[str] = set()
+_seen_runs: deque[str] = deque(maxlen=64)  # a run_id counts once (a second caller waits out the solve, then reads it)
 
 
 def effective_rain_mm(spec: ScenarioSpec, base_drain_mm_h: float = 0.0, mean_rain_mm: float | None = None) -> float:
@@ -149,14 +166,54 @@ def drainage_factor(aoi: AOIManifest, spec: ScenarioSpec, cells: int) -> float:
         return 1.0
 
 
+def _model_s(aoi: AOIManifest, spec: ScenarioSpec, cells: int | None) -> float:
+    """The fitted prod seconds, before this host's correction."""
+    n = cells if cells is not None else domain_cells(aoi, spec)
+    drain, rain = _aoi_inputs(aoi, spec)
+    per = ns_per_cell_s(aoi, spec, drain, rain) * drainage_factor(aoi, spec, n)
+    first = FIRST_SOLVE if aoi.aoi_id not in _solved else 1.0
+    return OVERHEAD_S + SCALE * first * per * 1e-9 * n * spec.sim_hours * 3600
+
+
+def host_factor() -> float:
+    """How much slower (>1) or faster this process has run than the model, from its recent solves."""
+    with _lock:
+        logs = [math.log(r) for r in _ratios]
+    return math.exp(sum(logs) / (len(logs) + HOST_PRIOR)) if logs else 1.0
+
+
+def observe(aoi: AOIManifest, spec: ScenarioSpec, elapsed_s: float, cells: int | None = None) -> None:
+    """A solve finished in this process: feed its elapsed_s back into host_factor. Call it before the next solve of
+    the same AOI starts, so the first-solve allowance still applies to this one."""
+    if not elapsed_s or elapsed_s <= 0:
+        return
+    try:
+        model = _model_s(aoi, spec, cells)
+    except Exception:  # noqa: BLE001 - feedback must never fail a run
+        return
+    lo, hi = HOST_RATIO
+    run_id = spec.run_id()
+    with _lock:
+        if run_id in _seen_runs:
+            return
+        _seen_runs.append(run_id)
+        _ratios.append(min(max(elapsed_s / model, lo), hi))
+        _solved.add(aoi.aoi_id)
+
+
+def reset() -> None:
+    """Forget this process's solves (tests)."""
+    with _lock:
+        _ratios.clear()
+        _solved.clear()
+        _seen_runs.clear()
+
+
 def estimate_s(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> float:
     """Expected wall seconds on prod. cells: the simulated domain (defaults to the whole grid)."""
     if backend == "fake":
         return FAKE_S
-    n = cells if cells is not None else domain_cells(aoi, spec)
-    drain, rain = _aoi_inputs(aoi, spec)
-    per = ns_per_cell_s(aoi, spec, drain, rain) * drainage_factor(aoi, spec, n)
-    return round(OVERHEAD_S + SCALE * per * 1e-9 * n * spec.sim_hours * 3600, 1)
+    return round(_model_s(aoi, spec, cells) * host_factor(), 1)
 
 
 def estimate(aoi: AOIManifest, spec: ScenarioSpec, backend: str = "solver", cells: int | None = None) -> dict:

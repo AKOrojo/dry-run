@@ -756,6 +756,57 @@ def test_speed_estimate():
     assert 23.5 < speed.ns_per_cell_s(queens, huge) <= speed.EXTRAPOLATE_MAX * 23.5
 
 
+
+def test_speed_host_factor():
+    """Each process corrects the fit from its own solves; the first solve of an AOI carries an allowance."""
+    import math
+
+    from dryrun import speed
+
+    aoi = storage.load_aoi(fixtures.AOI_ID)
+    spec = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=120, duration_h=3))
+    speed.reset()
+    try:
+        first = speed.estimate_s(aoi, spec)
+        model = speed._model_s(aoi, spec, None)  # still a first solve: nothing observed yet
+        speed.observe(aoi, spec, 1.25 * model)
+        steady = model / speed.FIRST_SOLVE
+        assert abs(speed.host_factor() - math.exp(math.log(1.25) / (1 + speed.HOST_PRIOR))) < 1e-9
+        assert abs(speed.estimate_s(aoi, spec) - steady * speed.host_factor()) < 0.1
+        assert speed.estimate_s(aoi, spec) < first  # the allowance is gone, the slow host only partly counts
+        speed.observe(aoi, spec, 2 * model)  # the same run_id again (a second caller): counted once
+        assert len(speed._ratios) == 1
+        spec = spec.model_copy(update={"storm": Storm(total_mm=120.01, duration_h=3)})
+        speed.observe(aoi, spec, 100 * steady)  # a disturbed run counts at most HOST_RATIO[1]
+        assert speed.host_factor() <= math.exp((math.log(1.25) + math.log(speed.HOST_RATIO[1])) / (2 + speed.HOST_PRIOR))
+        speed.observe(aoi, spec.model_copy(update={"label": "x"}), 0)  # no timing: ignored
+        assert len(speed._ratios) == 2
+        for i in range(speed.HOST_RUNS):  # a run of on-model solves washes the old ones out
+            spec = spec.model_copy(update={"storm": Storm(total_mm=121 + i, duration_h=3)})
+            speed.observe(aoi, spec, speed._model_s(aoi, spec, None))
+        assert abs(speed.host_factor() - 1) < 1e-9
+        assert speed.estimate_s(aoi, spec, backend="fake") == speed.FAKE_S
+    finally:
+        speed.reset()
+
+
+def test_simulate_observe_skips_cached(monkeypatch):
+    """Only a solve that ran here feeds the speed model; a manifest from the cache was timed somewhere else."""
+    from types import SimpleNamespace
+
+    from dryrun import speed
+    from dryrun.api import simulate_routes
+
+    seen = []
+    monkeypatch.setattr(speed, "observe", lambda aoi, spec, elapsed, cells=None: seen.append((elapsed, cells)))
+    spec = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=120, duration_h=3))
+    m = SimpleNamespace(backend="solver", elapsed_s=30.0, stats=SimpleNamespace(domain_cells=100))
+    simulate_routes._observe(spec, m, wall_s=0.2)  # cached
+    simulate_routes._observe(spec, SimpleNamespace(backend="fake", elapsed_s=1.0, stats=None), wall_s=1.0)
+    assert seen == []
+    simulate_routes._observe(spec, m, wall_s=30.3)
+    assert seen == [(30.0, 100)]
+
 def test_rain_area_domain():
     from pydantic import ValidationError
 
