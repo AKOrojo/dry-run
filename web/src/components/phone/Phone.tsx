@@ -63,6 +63,8 @@ export function TabBar({ active, onTab, agentRuns = 0 }: { active: PhoneTab | nu
   );
 }
 
+const HALF_BODY = 260;
+
 /** A bottom sheet over the map. Drag the handle between half and full height, or down past half to close. */
 export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = false, tab, fullOnly = false, children }: {
   /** A phone on its side: no half snap, the sheet opens at full height; drag down closes it. */ fullOnly?: boolean;
@@ -82,8 +84,20 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
     ro.observe(parent);
     return () => ro.disconnect();
   }, []);
+  // The header's height (title, plus the Timeline sheet's player) sets how much of a half sheet is body.
+  const header = useRef<HTMLDivElement>(null);
+  const [headH, setHeadH] = useState(0);
+  useLayoutEffect(() => {
+    const el = header.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const snap: Snap = fullOnly ? "full" : snapProp;
-  const full = Math.max(0, room - 8), half = fullOnly ? full : Math.round(room / 2);
+  // On a short phone half the room leaves a slot (an iPhone SE: 33 px above the Simulate footer), so the half sheet
+  // keeps at least HALF_BODY of body: the sticky footer and about three controls above it.
+  const full = Math.max(0, room - 8), half = fullOnly ? full : Math.min(full, Math.max(Math.round(room / 2), headH + HALF_BODY));
   const target = snap === "full" ? full : half;
   const down = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
@@ -116,7 +130,7 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
       hidden={hidden} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: room ? h : "50%", zIndex: 4, display: hidden ? "none" : "flex", flexDirection: "column",
         background: "var(--ground)", borderTop: "1px solid var(--hairline)", borderRadius: "8px 8px 0 0", boxShadow: "var(--shadow-float)", overflow: "hidden",
         transition: drag ? "none" : "height 0.2s ease-out" }}>
-      <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
+      <div ref={header} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
         style={{ position: "relative", flex: "none", touchAction: "none", cursor: "grab", background: "var(--surface)", borderBottom: "1px solid var(--hairline)" }}>
         {/* The handle's target is the top 40 px of the header; the title sits under its lower half. */}
         <button type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); } }}
