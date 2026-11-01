@@ -65,3 +65,51 @@ export async function firstDryAfter(times: number[], t: number, dryAt: (f: numbe
 export const fmtKm = (km: number) => `${km.toFixed(1)} km`;
 /** Walking time at 4 km/h, rounded to whole minutes: about 11 min. */
 export const fmtEta = (min: number) => `about ${Math.max(1, Math.round(min))} min`;
+
+/** Same polyline (to about a metre): the dry route did not have to leave the usual one. */
+export function samePath(a: Spot[] | undefined, b: Spot[] | undefined): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((p, i) => Math.abs(p[0] - b[i][0]) < 1e-5 && Math.abs(p[1] - b[i][1]) < 1e-5);
+}
+
+/** The card's "To" line: the shelter's name says "shelter" once. */
+export const shelterName = (name: string | null | undefined) => (!name ? "Nearest shelter" : /shelter/i.test(name) ? name : `${name} (shelter)`);
+
+const R = 6378137;
+const segM = (a: Spot, b: Spot) => {
+  const lat = ((a[1] + b[1]) / 2) * Math.PI / 180;
+  return Math.hypot((b[0] - a[0]) * Math.PI / 180 * Math.cos(lat) * R, (b[1] - a[1]) * Math.PI / 180 * R);
+};
+
+/** Points every `stepM` along a polyline (at least `min`, at most `max`), ends included. */
+export function samplePath(path: Spot[], stepM: number, min: number, max: number): Spot[] {
+  if (path.length < 2) return path.slice();
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + segM(path[i - 1], path[i]));
+  const len = cum[cum.length - 1], n = Math.min(max, Math.max(min, Math.ceil(len / stepM) + 1));
+  const out: Spot[] = [];
+  for (let k = 0, i = 1; k < n; k++) {
+    const d = (len * k) / (n - 1);
+    while (i < path.length - 1 && cum[i] < d) i++;
+    const f = cum[i] > cum[i - 1] ? (d - cum[i - 1]) / (cum[i] - cum[i - 1]) : 0;
+    out.push([path[i - 1][0] + (path[i][0] - path[i - 1][0]) * f, path[i - 1][1] + (path[i][1] - path[i - 1][1]) * f]);
+  }
+  return out;
+}
+
+/** One mark per stretch of consecutive wet samples, at its middle sample. */
+export function wetRuns(samples: Spot[], wet: boolean[]): Spot[] {
+  const out: Spot[] = [];
+  for (let i = 0; i < samples.length; i++) {
+    if (!wet[i]) continue;
+    let j = i;
+    while (j + 1 < samples.length && wet[j + 1]) j++;
+    out.push(samples[Math.floor((i + j) / 2)]);
+    i = j;
+  }
+  return out;
+}
+
+/** The card's error line: the API's "more than N m from any road" in plain words, anything else as a short failure. */
+export const routeError = (msg: string) => (/from any road/i.test(msg) ? "This spot is too far from a road. Pick one on or near a street."
+  : "The route could not be worked out. Try again, or pick another start.");

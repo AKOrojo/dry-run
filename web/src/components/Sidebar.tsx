@@ -18,7 +18,7 @@ import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { clock as playhead, useClock } from "../lib/clock";
-import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, useSafeRoute } from "../lib/saferoute";
+import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, shelterName, useSafeRoute } from "../lib/saferoute";
 import { useTouch } from "../lib/breakpoint";
 import { Card, CardLock, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
@@ -298,7 +298,7 @@ function SafeRouteCard({ passM }: { passM: number }) {
     <Card title="Safe route">
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px" }}>
         {r && dry && <>
-          {row("To", r.destination_name ? `${r.destination_name} (shelter)` : "Nearest shelter")}
+          {row("To", shelterName(r.destination_name))}
           {row("Distance", r.length_km != null ? fmtKm(r.length_km) : "n/a")}
           {row("Time", r.eta_min != null ? `${fmtEta(r.eta_min)} on foot` : "n/a")}
           {row("Roads avoided", `${r.edges_removed} impassable at ${fmtT(s.t ?? 0)}`)}
