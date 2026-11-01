@@ -10,6 +10,8 @@ import { ApiError, getGoogleTilesKey } from "../lib/api";
 import { areaCache } from "../lib/areaCache";
 import { CESIUM_CHECKED } from "../lib/cesiumPin";
 import { registerScene, requestRenderSoon, watchMotion } from "../lib/render";
+import { Notice } from "./Notice";
+import { Button } from "./controls/Button";
 
 // Photoreal tile detail: Cesium's default at rest, coarser while the camera moves, back REST_MS after it stops.
 const TILES_REST_SSE = 16, TILES_MOVING_SSE = 24, REST_MS = 300;
@@ -67,7 +69,7 @@ function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
   });
 }
 
-export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer }: {
+export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer, onRestart }: {
   aoi: AOIManifest; frameUrl?: string; frames?: { t_s: number; url: string }[]; tS?: number;
   /** Compare swipe: frames drawn right of `split` (0..1 of the width); `frames` are then drawn left of it. */
   framesB?: { t_s: number; url: string }[]; split?: number;
@@ -75,6 +77,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   buildingDepthsUrl?: string; onBuildingsStatus?: (status: string) => void;
   /** Called with the Cesium viewer once created (and with undefined when it is destroyed). */
   onViewer?: (viewer: Cesium.Viewer | undefined) => void;
+  /** "Restart map" after the map stopped drawing: the parent mounts a new Globe (a new viewer, every layer added again). */
+  onRestart?: () => void;
 }) {
   // Token comes from /api/config at runtime (dev: VITE_CESIUM_ION_TOKEN overrides).
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN || ionToken;
@@ -83,6 +87,9 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   // referer-setting proxy (VITE_ION_SERVER, e.g. /ion/ proxied by vite.live.config.ts).
   if (import.meta.env.DEV && import.meta.env.VITE_ION_SERVER) Cesium.Ion.defaultServer = new URL(import.meta.env.VITE_ION_SERVER, window.location.href).href;
   const el = useRef<HTMLDivElement>(null);
+  const [stopped, setStopped] = useState<"error" | "lost" | null>(null);
+  const onRestartRef = useRef(onRestart);
+  onRestartRef.current = onRestart;
   const viewer = useRef<Cesium.Viewer>();
   /** Google 2D imagery is the base layer right now (so switching back to Bing must swap it out). */
   const googleShown = useRef(false);
@@ -188,11 +195,20 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     ctl.lookEventTypes = [{ eventType: E.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT }];
     ctl.minimumZoomDistance = 150;
     ctl.maximumZoomDistance = 25000;
-    // Cesium catches its own render exceptions (error panel, rendering stops), so they never reach window.onerror.
-    const offRenderError = v.scene.renderError.addEventListener((_scene: Cesium.Scene, err: unknown) => {
-      console.error(`Cesium render error (area ${aoi.aoi_id}, basemap ${layerRef.current.basemap}):`, err);
+    // Rendering stops on any exception in the render loop: a scene render error or a throw in a pre/postRender listener,
+    // which Scene.render does not catch. Both reach the widget's showErrorPanel; ours logs the stack (in production too, so
+    // the next one says where it came from) and shows "The map stopped drawing" instead of Cesium's panel.
+    v.cesiumWidget.showErrorPanel = (_title: string, _message: string | undefined, err: unknown) => {
+      console.error(`Cesium render error (area ${aoi.aoi_id}, basemap ${layerRef.current.basemap}): ${errorText(err)}`);
       if (import.meta.env.DEV) { const w = window as unknown as { __renderErrors?: number }; w.__renderErrors = (w.__renderErrors ?? 0) + 1; }
-    });
+      setStopped("error");
+    };
+    // A lost WebGL context (GPU reset, memory pressure): nothing draws until a new viewer is made. preventDefault lets the
+    // browser restore it; the map then restarts by itself.
+    const lost = (e: Event) => { e.preventDefault(); console.error(`WebGL context lost (area ${aoi.aoi_id})`); setStopped("lost"); };
+    const restored = () => { console.error(`WebGL context restored (area ${aoi.aoi_id}): restarting the map`); onRestartRef.current?.(); };
+    v.canvas.addEventListener("webglcontextlost", lost);
+    v.canvas.addEventListener("webglcontextrestored", restored);
     const unregister = registerScene(v.scene, v.imageryLayers);
     // One more frame once the camera rests: overlays that sample the view on a throttle (scale bar, flow-arrow zoom,
     // drain inlets) then see its final pose.
@@ -205,7 +221,9 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     if (import.meta.env.DEV) (window as unknown as { __viewer?: Cesium.Viewer }).__viewer = v;
     onViewer?.(v);
     return () => {
-      offRenderError(); offMotion(); unregister();
+      offMotion(); unregister();
+      v.canvas.removeEventListener("webglcontextlost", lost);
+      v.canvas.removeEventListener("webglcontextrestored", restored);
       node.removeEventListener("pointermove", requestRenderSoon);
       node.removeEventListener("pointerup", requestRenderSoon);
       layer.current = undefined; viewer.current = undefined; onViewer?.(undefined);
@@ -650,6 +668,26 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <div ref={el} style={{ position: "absolute", inset: 0 }} />
+      {stopped && <MapStopped lost={stopped === "lost"} onRestart={() => onRestart?.()} />}
+    </div>
+  );
+}
+
+/** The error and its stack as one line of text for the console (an Error's own toString drops the stack). */
+export const errorText = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ""}` : String(err));
+
+/** Shown over the map when it stopped drawing: what happened and a way back. */
+function MapStopped({ lost, onRestart }: { lost: boolean; onRestart: () => void }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      background: "color-mix(in srgb, var(--ground) 70%, transparent)", zIndex: 5 }}>
+      <div style={{ width: "min(380px, 100%)", display: "flex", flexDirection: "column", gap: 10, padding: 14, background: "var(--surface)",
+        border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
+        <Notice message="The map stopped drawing." detail={lost
+          ? "The graphics card reset (often when another tab or app uses it heavily). Restart the map to draw it again; the run and your view settings stay."
+          : "Something went wrong while drawing the map. Restart it to draw again; the run and your view settings stay."} />
+        <div><Button variant="raised" onClick={onRestart} style={{ height: 30, padding: "0 12px", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 600 }}>Restart map</Button></div>
+      </div>
     </div>
   );
 }

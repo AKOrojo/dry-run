@@ -644,6 +644,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [mode, setMode] = useState<CamMode>("orbit");
   const modeRef = useRef<CamMode>("orbit");
   modeRef.current = mode;
+  // Bumped by "Restart map": a new Globe and viewer after the map stopped drawing.
+  const [mapGen, setMapGen] = useState(0);
   const [freeSpeed, setFreeSpeed] = useState(1);
   const route = useFlyRoute();
   const evac = useEvacLine();
@@ -1290,9 +1292,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
   return (
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
-      {aoi && <Globe aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
+      {aoi && <Globe key={mapGen} aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
-        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} />}
+        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} onRestart={() => setMapGen((g) => g + 1)} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {underlay}
         {lay.places.on && places.map((p) => {
