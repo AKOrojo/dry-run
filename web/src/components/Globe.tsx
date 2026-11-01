@@ -78,7 +78,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   /** Called with the Cesium viewer once created (and with undefined when it is destroyed). */
   onViewer?: (viewer: Cesium.Viewer | undefined) => void;
   /** "Restart map" after the map stopped drawing: the parent mounts a new Globe (a new viewer, every layer added again). */
-  onRestart?: () => void;
+  onRestart: () => void;
 }) {
   // Token comes from /api/config at runtime (dev: VITE_CESIUM_ION_TOKEN overrides).
   const token = import.meta.env.VITE_CESIUM_ION_TOKEN || ionToken;
@@ -206,7 +206,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     // A lost WebGL context (GPU reset, memory pressure): nothing draws until a new viewer is made. preventDefault lets the
     // browser restore it; the map then restarts by itself.
     const lost = (e: Event) => { e.preventDefault(); console.error(`WebGL context lost (area ${aoi.aoi_id})`); setStopped("lost"); };
-    const restored = () => { console.error(`WebGL context restored (area ${aoi.aoi_id}): restarting the map`); onRestartRef.current?.(); };
+    const restored = () => { console.error(`WebGL context restored (area ${aoi.aoi_id}): restarting the map`); onRestartRef.current(); };
     v.canvas.addEventListener("webglcontextlost", lost);
     v.canvas.addEventListener("webglcontextrestored", restored);
     const unregister = registerScene(v.scene, v.imageryLayers);
@@ -668,7 +668,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <div ref={el} style={{ position: "absolute", inset: 0 }} />
-      {stopped && <MapStopped lost={stopped === "lost"} onRestart={() => onRestart?.()} />}
+      {stopped && <MapStopped lost={stopped === "lost"} onRestart={onRestart} />}
     </div>
   );
 }
