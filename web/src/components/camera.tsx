@@ -15,6 +15,7 @@ export const FLY_MAX_AGL = 3000;
 const PITCH_MIN = rad(-90), PITCH_MAX = rad(10);
 const FLY_PITCH = rad(-25);
 const FLY_PITCH_LO = PITCH_MIN - FLY_PITCH, FLY_PITCH_HI = PITCH_MAX - FLY_PITCH;
+const SNAP_M = 0.01, SNAP_RAD = rad(0.01);
 
 const isTyping = (t: EventTarget | null) => {
   const n = t as HTMLElement | null;
@@ -222,14 +223,21 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       const s0 = Math.min(v.s, Math.max(0, path.len - 60));
       const a = at(s0), b = at(s0 + 60);
       const target = Math.atan2((b[0] - a[0]) * Math.cos(rad(p[1])), b[1] - a[1]);
-      if (Number.isNaN(v.head)) v.head = target;
-      else v.head += Cesium.Math.negativePiToPi(target - v.head) * Math.min(1, dt * 2.5);
+      // The easings snap once within 0.01° / 1 cm, so a paused flight comes to rest exactly.
+      const dh = Cesium.Math.negativePiToPi(target - v.head);
+      if (Number.isNaN(v.head) || Math.abs(dh) < SNAP_RAD) v.head = target;
+      else v.head += dh * Math.min(1, dt * 2.5);
       const g = groundAt(s, rad(p[0]), rad(p[1]));
-      if (g !== undefined) v.gS = Number.isNaN(v.gS) ? g : v.gS + (g - v.gS) * Math.min(1, dt * 3);
-      viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(p[0], p[1], (Number.isNaN(v.gS) ? 0 : v.gS) + v.hAgl),
-        orientation: { heading: v.head + v.yaw, pitch: clamp(FLY_PITCH + v.pitch, PITCH_MIN, PITCH_MAX), roll: 0 },
-      });
+      if (g !== undefined) v.gS = Number.isNaN(v.gS) || Math.abs(g - v.gS) < SNAP_M ? g : v.gS + (g - v.gS) * Math.min(1, dt * 3);
+      const dest = Cesium.Cartesian3.fromDegrees(p[0], p[1], (Number.isNaN(v.gS) ? 0 : v.gS) + v.hAgl);
+      const heading = v.head + v.yaw, pitch = clamp(FLY_PITCH + v.pitch, PITCH_MIN, PITCH_MAX);
+      const c = viewer.camera;
+      // Setting the same pose again still changes it by float noise, and the on-demand renderer draws on any camera
+      // change: a paused flight would keep drawing every frame. Leave the camera alone when nothing moved.
+      if (Cesium.Cartesian3.distance(c.positionWC, dest) >= SNAP_M || Math.abs(Cesium.Math.negativePiToPi(c.heading - heading)) >= SNAP_RAD
+        || Math.abs(c.pitch - pitch) >= SNAP_RAD) {
+        c.setView({ destination: dest, orientation: { heading, pitch, roll: 0 } });
+      }
       if (ended || now - lastHud > 100) { lastHud = now; sync(); }
     };
     s.preRender.addEventListener(pre);
