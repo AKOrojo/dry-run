@@ -39,7 +39,7 @@ describe("chartCsv", () => {
 
 describe("chartFilename", () => {
   it("names the area, the chart slug and the run id", () => {
-    expect(chartFilename("lagos-lekki-v3", "Drain network running full", "run-2f9a")).toBe("dryrun-lagos-lekki-v3-drain-network-running-full-run-2f9a.png");
+    expect(chartFilename("lagos-lekki-v3", "Drain network running full", "r_cf97d373df9a960d")).toBe("dryrun-lagos-lekki-v3-drain-network-running-full-r_cf97d373df9a960d.png");
   });
 
   it("says baseline when there is no run", () => {

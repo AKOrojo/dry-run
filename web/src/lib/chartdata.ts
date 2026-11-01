@@ -8,11 +8,12 @@ export function chartTable({ title, unit, times, series, ghost, digits, time }: 
   title: string; unit: string; times: number[]; series: number[]; ghost?: number[]; digits: number; time: (s: number) => string;
 }): ChartTable {
   const num = (v: number | undefined) => (v != null && Number.isFinite(v) ? v.toFixed(digits) : "");
+  const at = (i: number) => (times[i] != null ? time(times[i]) : "");
   const compared = !!ghost && ghost.length > 1;
   const header = compared ? ["Time", `A (${unit})`, `B (${unit})`] : ["Time", `${title} (${unit})`];
   const rows = series.map((v, i) => (compared
-    ? [time(times[i]), num(ghost?.[i]), num(v)]
-    : [time(times[i]), num(v)]));
+    ? [at(i), num(ghost?.[i]), num(v)]
+    : [at(i), num(v)]));
   return { header, rows };
 }
 
@@ -27,9 +28,9 @@ export function chartCsv(t: ChartTable): string {
 /** Lower case, anything that is not a letter or digit becomes one dash, no dashes at the ends. */
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-/** `dryrun-<area>-<chart>-<run or baseline>.png`. */
+/** `dryrun-<area>-<chart>-<run or baseline>.png`; the run id is kept as it is (only unsafe characters become dashes). */
 export function chartFilename(aoi: string, chart: string, run?: string): string {
-  return `dryrun-${slug(aoi)}-${slug(chart)}-${run ? slug(run) : "baseline"}.png`;
+  return `dryrun-${slug(aoi)}-${slug(chart)}-${run ? run.replace(/[^\w-]+/g, "-") : "baseline"}.png`;
 }
 
 /** Replaces each var(--name) (with an optional fallback) by lookup(name); nested ones resolve on the next pass. */

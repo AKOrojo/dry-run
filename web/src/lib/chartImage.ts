@@ -8,7 +8,8 @@ export async function chartPng({ svg, title, area }: { svg: SVGSVGElement; title
   const W = svg.width.baseVal.value, H = svg.height.baseVal.value;
   const copy = svg.cloneNode(true) as SVGSVGElement;
   copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  const markup = resolveVars(new XMLSerializer().serializeToString(copy), lookup);
+  // Values go inside attributes: a font list's double quotes would end the attribute, single quotes are the same CSS.
+  const markup = resolveVars(new XMLSerializer().serializeToString(copy), (name) => lookup(name).replace(/"/g, "'"));
   const pad = 16, head = 52, scale = 2;
   const cw = W + 2 * pad, ch = head + H + pad;
   const canvas = document.createElement("canvas");
