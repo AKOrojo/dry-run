@@ -79,10 +79,12 @@ export function watchMotion(scene: Cesium.Scene, start: () => void, rest: () => 
   let held = 0, stillMs = 0;
   const down = () => { held++; };
   const up = () => { held = Math.max(0, held - 1); stillMs = 0; };
+  const lost = () => { held = 0; stillMs = 0; };  // focus left mid-drag: the up never comes
   const wheel = () => { stillMs = 0; };
   el.addEventListener("pointerdown", down);
   window.addEventListener("pointerup", up);
   window.addEventListener("pointercancel", up);
+  window.addEventListener("blur", lost);
   el.addEventListener("wheel", wheel, { passive: true });
   const pose = () => ({ pos: Cesium.Cartesian3.clone(cam.positionWC), dir: Cesium.Cartesian3.clone(cam.directionWC) });
   const same = (a: ReturnType<typeof pose>, b: ReturnType<typeof pose>) =>
@@ -106,7 +108,7 @@ export function watchMotion(scene: Cesium.Scene, start: () => void, rest: () => 
   return () => {
     off(); clearInterval(poll); poll = undefined;
     el.removeEventListener("pointerdown", down); window.removeEventListener("pointerup", up);
-    window.removeEventListener("pointercancel", up); el.removeEventListener("wheel", wheel);
+    window.removeEventListener("pointercancel", up); window.removeEventListener("blur", lost); el.removeEventListener("wheel", wheel);
   };
 }
 
