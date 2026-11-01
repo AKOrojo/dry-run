@@ -39,7 +39,8 @@ async def render(request: Request, base_run_id: str = Form(...), alt_run_id: str
                             provider=provider)
     except ValidationError as exc:
         raise HTTPException(422, "invalid render request: " + "; ".join(e["msg"] for e in exc.errors())) from None
-    limit(request, "render_cached", per_hour=600)  # before any storage lookup
+    # Auth and limits run off the event loop: a presented key can wait on the shared lockout store (authguard).
+    await run_in_threadpool(limit, request, "render_cached", per_hour=600)  # before any storage lookup
     photo = None
     if file is not None:
         if req.provider != "meta":  # an upload is stored and person-blurred with SAM: the paid path only
@@ -65,11 +66,12 @@ async def render(request: Request, base_run_id: str = Form(...), alt_run_id: str
     if hit is not None:
         return JSONResponse(hit.model_dump(mode="json"))
     if req.provider == "meta":  # three Muse Image calls: judge or team key, per-IP and daily caps
-        require_paid_access(request)
-        limit(request, "render", per_hour=int(os.getenv("DRYRUN_RENDER_PER_HOUR", "20")))
-        limit_global("render", per_day=int(os.getenv("DRYRUN_RENDER_PER_DAY", "100")), request=request)
+        await run_in_threadpool(require_paid_access, request)
+        await run_in_threadpool(limit, request, "render", per_hour=int(os.getenv("DRYRUN_RENDER_PER_HOUR", "20")))
+        await run_in_threadpool(limit_global, "render", per_day=int(os.getenv("DRYRUN_RENDER_PER_DAY", "100")),
+                                request=request)
     else:
-        limit(request, "render_fake", per_hour=120)
+        await run_in_threadpool(limit, request, "render_fake", per_hour=120)
     try:
         res = await run_in_threadpool(R.make, req, photo)
     except ValueError as exc:

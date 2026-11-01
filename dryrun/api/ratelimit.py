@@ -49,14 +49,15 @@ def _verdict(request) -> str:
         v = "none"
     else:
         ip = client_ip(request)
-        authguard.check(ip)
-        if team and _matches(team, _TEAM):
-            v = "team"
-        elif judge and _matches(judge, _JUDGE):
-            v = "judge"
-        else:
-            authguard.record_failure(ip)
-            v = "wrong"
+        with authguard.guarded(ip):
+            authguard.check(ip)
+            if team and _matches(team, _TEAM):
+                v = "team"
+            elif judge and _matches(judge, _JUDGE):
+                v = "judge"
+            else:
+                authguard.record_failure(ip)
+                v = "wrong"
     setattr(state if state is not None else request, "_dryrun_auth", v)
     return v
 

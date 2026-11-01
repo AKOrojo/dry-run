@@ -10,8 +10,10 @@ from __future__ import annotations
 import io
 import json
 import os
+import random
 import re
 import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -102,9 +104,14 @@ def read_json(kind: str, rel: str) -> dict | None:
         raise
 
 
+class Contended(RuntimeError):
+    """update_json gave up because other writers kept winning (or GCS throttled the object)."""
+
+
 def update_json(kind: str, rel: str, fn, attempts: int = 8) -> dict:
     """Atomic read-modify-write of a small JSON object: fn(current or None) -> new. In GCS the write is conditional on
-    the generation read (0 = must not exist), so concurrent instances retry instead of overwriting each other."""
+    the generation read (0 = must not exist), so concurrent instances retry instead of overwriting each other.
+    Raises Contended when every attempt lost; fn may run more than once, so it must not have side effects."""
     rel = _safe_rel(rel)
     local, bucket, prefix = _where(kind)
     if MODE == "local":
@@ -114,10 +121,12 @@ def update_json(kind: str, rel: str, fn, attempts: int = 8) -> dict:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(new))
             return new
-    from google.api_core.exceptions import NotFound, PreconditionFailed
+    from google.api_core.exceptions import NotFound, PreconditionFailed, TooManyRequests
 
     b = _gcs().bucket(bucket)
-    for _ in range(attempts):
+    for i in range(attempts):
+        if i:  # jittered backoff: GCS allows about one write per second to one object
+            time.sleep(min(2.0, 0.05 * 2 ** i) * (0.5 + random.random()))
         blob = b.blob(prefix + rel)
         try:
             blob.reload()
@@ -131,9 +140,9 @@ def update_json(kind: str, rel: str, fn, attempts: int = 8) -> dict:
         try:
             out.upload_from_string(json.dumps(new), content_type="application/json", if_generation_match=gen)
             return new
-        except PreconditionFailed:
-            continue  # another instance wrote in between: re-read and re-apply
-    raise RuntimeError(f"update_json: {rel} stayed contended after {attempts} attempts")
+        except (PreconditionFailed, TooManyRequests):
+            continue  # another instance wrote in between, or the object is write-throttled: re-read and re-apply
+    raise Contended(f"update_json: {rel} stayed contended after {attempts} attempts")
 
 
 def list_rel(kind: str, prefix_rel: str) -> list[str]:

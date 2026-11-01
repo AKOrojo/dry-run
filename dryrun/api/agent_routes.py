@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StringConstraints
+from starlette.concurrency import run_in_threadpool
 
 from dryrun.api.ratelimit import limit, limit_global, require_paid_access
 
@@ -93,11 +94,10 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 async def observe(request: Request, file: UploadFile = File(...), lon: float = Form(...),
                   lat: float = Form(...), run_id: str | None = Form(None),
                   t_s: int | None = Form(None), source: str = Form("citizen_photo")):
-    require_paid_access(request)
-    limit(request, "observe", per_hour=20)  # SAM 3.1 + Spark vision cost money
+    # Off the event loop: the key check can wait on the shared lockout store (authguard).
+    await run_in_threadpool(require_paid_access, request)
+    await run_in_threadpool(limit, request, "observe", per_hour=20)  # SAM 3.1 + Spark vision cost money
     import re
-
-    from starlette.concurrency import run_in_threadpool
 
     from dryrun.meta import observe
 

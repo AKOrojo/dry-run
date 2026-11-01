@@ -183,7 +183,7 @@ def _event(kind: str, data: dict) -> str:
 
 @router.post("/stream")
 async def stream(spec: ScenarioSpec, request: Request):
-    limit(request, "simulate", per_hour=60)  # the same budget as POST /api/simulate
+    await asyncio.to_thread(limit, request, "simulate", per_hour=60)  # off the loop: a key check can wait on authguard
     await asyncio.to_thread(_validate, spec)
     est = await asyncio.to_thread(estimate_for, spec)
     job_id, cancel_token = uuid.uuid4().hex[:12], secrets.token_urlsafe(16)

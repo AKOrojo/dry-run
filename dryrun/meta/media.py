@@ -124,9 +124,10 @@ async def relay_voice(client_ws) -> None:
             "x-team-token": start.get("team_token", ""),
         })
         try:
-            ratelimit.require_paid_access(headers)
-            ratelimit.limit(headers, "voice", per_hour=20)
-            ratelimit.limit_global("voice", per_day=200, request=headers)
+            # Off the event loop: a key check can wait on the shared lockout store (authguard).
+            await asyncio.to_thread(ratelimit.require_paid_access, headers)
+            await asyncio.to_thread(ratelimit.limit, headers, "voice", per_hour=20)
+            await asyncio.to_thread(ratelimit.limit_global, "voice", per_day=200, request=headers)
         except HTTPException as exc:
             await error(exc.detail)
             close_code = 1008

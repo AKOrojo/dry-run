@@ -1,10 +1,14 @@
 """Brute-force lockout for the judge key and the team token (dryrun.api.authguard)."""
+import collections
+import concurrent.futures as cf
 import logging
 import os
+import time
 
 os.environ.setdefault("DRYRUN_STORAGE", "local")
 
 import pytest  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from dryrun import storage  # noqa: E402
@@ -135,3 +139,143 @@ def test_admin_view(client, monkeypatch):
     st = client.get("/api/admin/auth", headers={"X-Team-Token": "team-key-right", "X-Forwarded-For": "8.8.8.8"}).json()
     assert len(st["locked_ips"]) == 1 and st["global_locked"] is False
     assert "5.5.5.5" not in str(st)  # hashed
+
+
+def _slow_compare(monkeypatch):
+    """Hold every key comparison open briefly so parallel requests really overlap."""
+    real = ratelimit._matches
+
+    def slow(given, token):
+        time.sleep(0.05)
+        return real(given, token)
+
+    monkeypatch.setattr(ratelimit, "_matches", slow)
+
+
+def test_parallel_burst_gets_at_most_five_comparisons(client, monkeypatch, caplog):
+    _slow_compare(monkeypatch)
+    with caplog.at_level(logging.WARNING), cf.ThreadPoolExecutor(20) as ex:
+        codes = collections.Counter(ex.map(lambda i: get(client, f"guess-{i}").status_code, range(20)))
+    assert codes[403] == authguard.MAX_FAILS and codes[429] == 20 - authguard.MAX_FAILS
+    r = get(client, "judge-key-right")
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) <= authguard.BASE_LOCK_S + 1  # one strike only
+    assert caplog.text.count("auth lockout: ip=5.5.5.5") == 1
+
+
+def test_failures_while_locked_add_no_strike(client, monkeypatch):
+    clock = Clock(monkeypatch)
+    for _ in range(5):
+        get(client, "nope")
+    for _ in range(10):  # wrong keys another instance compared just before the lock landed
+        with pytest.raises(HTTPException) as e:
+            authguard.record_failure("5.5.5.5")
+        assert e.value.status_code == 429
+    clock.t += authguard.BASE_LOCK_S + 1
+    for _ in range(5):
+        get(client, "nope")
+    r = get(client, "judge-key-right")
+    assert int(r.headers["Retry-After"]) <= 2 * authguard.BASE_LOCK_S + 1  # strike 2, not strike 12
+
+
+@pytest.mark.parametrize("n", [10, 30])
+def test_parallel_right_keys_are_never_refused(client, monkeypatch, n):
+    _slow_compare(monkeypatch)
+    writes = []
+    real = storage.update_json
+    monkeypatch.setattr(storage, "update_json", lambda *a, **k: writes.append(a[1]) or real(*a, **k))
+    with cf.ThreadPoolExecutor(n) as ex:
+        judge = list(ex.map(lambda i: get(client, "judge-key-right").status_code, range(n)))
+        team = list(ex.map(lambda i: get(client, team="team-key-right").status_code, range(n)))
+    assert judge == [200] * n and team == [200] * n
+    assert writes == []  # a right key only reads the guard state
+
+
+def test_mixed_burst_refuses_right_keys_only_once_locked(client, monkeypatch):
+    _slow_compare(monkeypatch)
+    keys = ["judge-key-right", "nope"] * 6
+    with cf.ThreadPoolExecutor(len(keys)) as ex:
+        codes = list(ex.map(lambda k: get(client, k).status_code, keys))
+    assert codes.count(403) <= authguard.MAX_FAILS
+    assert get(client, "judge-key-right", ip="6.6.6.6").status_code == 200
+
+
+def test_contended_store_refuses_wrong_key_as_busy(client, monkeypatch):
+    def contended(*a, **k):
+        raise storage.Contended("busy")
+
+    monkeypatch.setattr(storage, "update_json", contended)
+    r = get(client, "nope")
+    assert r.status_code == 429 and r.headers["X-Auth-Lockout"] == "busy"
+    assert "wrong keys" not in r.text and int(r.headers["Retry-After"]) == authguard.BUSY_RETRY_S
+    assert get(client, "judge-key-right").status_code == 200  # a right key needs no write
+
+
+def test_guard_wait_is_bounded_and_says_busy(monkeypatch):
+    monkeypatch.setattr(authguard, "GUARD_WAIT_S", 0.05)
+    with authguard.guarded("9.9.9.9"):
+        with pytest.raises(HTTPException) as e, authguard.guarded("9.9.9.9"):
+            pass
+    assert e.value.status_code == 429 and e.value.headers["X-Auth-Lockout"] == "busy"
+    with authguard.guarded("9.9.9.9"):  # released again
+        pass
+
+
+def test_guard_never_blocks_the_event_loop(monkeypatch):
+    import asyncio
+    import threading
+
+    held, release = threading.Event(), threading.Event()
+
+    def holder():
+        with authguard.guarded("9.9.9.8"):
+            held.set()
+            release.wait(5)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    held.wait(5)
+
+    async def on_loop():
+        t0 = time.monotonic()
+        with pytest.raises(HTTPException), authguard.guarded("9.9.9.8"):
+            pass
+        return time.monotonic() - t0
+
+    try:
+        assert asyncio.run(on_loop()) < 0.05  # refused at once, not after GUARD_WAIT_S
+    finally:
+        release.set()
+        t.join()
+
+
+def test_parallel_right_keys_with_a_slow_store_are_not_busy(client, monkeypatch):
+    real = storage.read_json
+
+    def slow(*a, **k):
+        time.sleep(0.15)  # GCS-like round trip
+        return real(*a, **k)
+
+    monkeypatch.setattr(storage, "read_json", slow)
+    with cf.ThreadPoolExecutor(30) as ex:
+        codes = list(ex.map(lambda i: get(client, "judge-key-right", ip="4.4.4.4").status_code, range(30)))
+    assert codes == [200] * 30
+
+
+def test_no_async_def_calls_the_auth_checks_on_the_event_loop():
+    """A direct call from an async def would block the loop on the lockout store (and on guarded())."""
+    import ast
+    import pathlib
+
+    names = {"require_paid_access", "limit", "limit_global", "_is_team", "_verdict", "check", "record_failure"}
+    bad = []
+    for path in pathlib.Path("dryrun").rglob("*.py"):
+        for fn in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(fn, ast.AsyncFunctionDef):
+                continue
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Call):
+                    f = node.func
+                    name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+                    if name in names:
+                        bad.append(f"{path}:{node.lineno} {name}")
+    assert bad == []
