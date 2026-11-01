@@ -140,6 +140,10 @@ def test_observe(monkeypatch, sam_text, photo, wet):
     else:
         assert result.est_depth_m is None and result.model_notes == "no flood water detected"
         assert all(path != "/chat/completions" for path, _ in calls)
+        # A photo without flood water writes nothing: no photo, mask or record in storage.
+        assert not any(p.is_file() for p in storage.LOCAL_DATA.rglob("*"))
+        assert not any(p.is_file() for p in storage.LOCAL_RUNS.rglob("*"))
+        return
     prefix = f"observations/{result.obs_id}"
     assert not Image.open(io.BytesIO(storage.read_upload(f"{prefix}/photo.jpg"))).getexif()
     mask = Image.open(io.BytesIO(storage.read_upload(f"{prefix}/mask.png")))

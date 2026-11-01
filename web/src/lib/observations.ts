@@ -76,7 +76,7 @@ export function retryAtText(retryAfterS: number | undefined, now: Date = new Dat
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }
 
-export const NO_WATER: UploadProblem = { title: "No water found in this photo.", next: "Try one that shows the water against something of known height: a kerb, a car wheel, a door step.", another: true };
+export const NO_WATER: UploadProblem = { title: "No water found in this photo.", next: "Nothing was saved. Try one that shows the water against something of known height: a kerb, a car wheel, a door step.", another: true };
 
 /** The server answers a photo without flood water with an observation that has no depth (not an error): it is kept off the map. */
 export const noWater = (o: Pick<Observation, "est_depth_m" | "water_fraction">) => o.est_depth_m == null && o.water_fraction <= 0.01;
