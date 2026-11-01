@@ -27,7 +27,7 @@ const WaterBudgetCard = lazyNamed(() => import("./components/Compare"), "WaterBu
 const WhatChanges = lazyNamed(() => import("./components/Compare"), "WhatChanges");
 import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
-import { Dock } from "./components/Dock";
+import { ChartArea, Dock } from "./components/Dock";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { cachedBaseRun, isBase } from "./lib/areas";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
@@ -440,6 +440,7 @@ export default function App() {
   }, [comparing, here, cmp]);
   const aRun = here.find((r) => r.run_id === cmp.a), bRun = here.find((r) => r.run_id === cmp.b);
   const pair = comparing && aRun && bRun && aRun !== bRun ? { a: aRun, b: bRun } : undefined;
+  const chartArea = { aoi: aoi?.aoi_id ?? "map", name: aoi?.name ?? "", run: pair ? (pair.b.status === "done" ? pair.b.run_id : undefined) : runId };
   useEffect(() => { if (pair) clock.set({ max_s: pair.b.frames.at(-1)?.t_s ?? 0 }); }, [pair?.b.run_id]);
   useEffect(() => { if (pair) adoptRun(pair.b); }, [pair?.b.run_id]);
   // Side by side: A on the left map, B on the right one. A single run view shows that run; the others show B's buildings.
@@ -537,6 +538,7 @@ export default function App() {
   const narrow = bp !== "desktop";
 
   return (
+    <ChartArea.Provider value={chartArea}>
     <div className={`dr-app body bp-${bp}${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}${drawer ? " drawer-open" : ""}${bp === "phone" && sheet ? " sheet-open" : ""}`}>
       <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} aoiName={aoi?.name} defaultAoi={defaultAoi} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
         mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
@@ -609,5 +611,6 @@ export default function App() {
       </div>
       {tour && <Tour onClose={() => setTour(false)} layout={bp} onStep={tourStep} />}
     </div>
+    </ChartArea.Provider>
   );
 }

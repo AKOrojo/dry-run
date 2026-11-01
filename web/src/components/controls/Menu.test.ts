@@ -11,13 +11,15 @@ const list: MenuEntry[] = [
   { kind: "check", label: "Coordinates", disabled: true, onSelect: noop },
   { kind: "item", label: "Clear route", onSelect: noop },
 ];
-// Navigable rows are 1, 3 and 5.
+// Focusable rows are 1, 3, 4 and 5 (the disabled one included); separators and captions are skipped.
 
 describe("nextIndex", () => {
-  it("moves Down and Up over separators, captions and disabled items", () => {
+  it("moves Down and Up over separators and captions, and onto disabled items", () => {
     expect(nextIndex("ArrowDown", 1, list)).toBe(3);
-    expect(nextIndex("ArrowDown", 3, list)).toBe(5);
-    expect(nextIndex("ArrowUp", 5, list)).toBe(3);
+    expect(nextIndex("ArrowDown", 3, list)).toBe(4);
+    expect(nextIndex("ArrowDown", 4, list)).toBe(5);
+    expect(nextIndex("ArrowUp", 5, list)).toBe(4);
+    expect(nextIndex("ArrowUp", 4, list)).toBe(3);
     expect(nextIndex("ArrowUp", 3, list)).toBe(1);
   });
 
@@ -31,15 +33,20 @@ describe("nextIndex", () => {
     expect(nextIndex("ArrowUp", -1, list)).toBe(5);
   });
 
-  it("Home and End go to the first and last navigable item", () => {
+  it("Home and End go to the first and last item, disabled or not", () => {
     expect(nextIndex("Home", 5, list)).toBe(1);
     expect(nextIndex("End", 1, list)).toBe(5);
+    expect(nextIndex("End", 1, list.slice(0, 4))).toBe(3);
   });
 
   it("returns -1 for other keys and for a menu with nothing to move to", () => {
     expect(nextIndex("a", 1, list)).toBe(-1);
     expect(nextIndex("ArrowDown", 0, [{ kind: "separator" }, { kind: "caption", label: "x" }])).toBe(-1);
-    expect(nextIndex("Home", 0, [{ kind: "item", label: "Off", disabled: true, onSelect: noop }])).toBe(-1);
+    expect(nextIndex("Home", 0, [])).toBe(-1);
+  });
+
+  it("lands on a menu of only disabled items, so their reason can be read", () => {
+    expect(nextIndex("Home", -1, [{ kind: "item", label: "Off", disabled: true, onSelect: noop }])).toBe(0);
   });
 });
 
@@ -50,8 +57,8 @@ describe("typeahead", () => {
     expect(typeahead("sh", list, 5)).toBe(1);
   });
 
-  it("skips disabled items and captions", () => {
-    expect(typeahead("coord", list, 1)).toBe(-1);
+  it("reaches disabled items too, and still skips captions", () => {
+    expect(typeahead("coord", list, 1)).toBe(4);
     expect(typeahead("imag", list, 0)).toBe(-1);
   });
 

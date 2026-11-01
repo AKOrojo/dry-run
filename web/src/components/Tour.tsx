@@ -23,7 +23,7 @@ const ALL_STEPS = [
   { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live, and how long until it starts when another run is ahead; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
-  { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen." },
+  { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { id: "marks", title: "Mark places and moments", body: "Right-click the map, or press Shift+F10 on it, to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
   { id: "flow", title: "Read flow and hazard", body: "Turn on flow arrows, the AIDR hazard rating and loads on buildings, or draw a line to see depth along it." },
@@ -55,7 +55,7 @@ const PHONE_STEPS: Step[] = [
   { ...ALL_STEPS.find((x) => x.id === "camera")!, ...TOUCH_TEXT.camera },
   { id: "plan", title: "Inspect a building", body: "Tap 3D to switch to the 2D plan view, then tap a building for its depths and the street beside it." },
   { id: "legend", title: "What the colours mean", body: "The legend button opens the legends of the layers that are on." },
-  { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint." },
+  { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Sources and credits are linked at the end." },
   ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
   { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
@@ -63,7 +63,7 @@ const PHONE_STEPS: Step[] = [
 ];
 const TABLET_TEXT: Record<string, Partial<Step>> = {
   viewshare: { title: "The side panel and the menu", body: "This button opens Layers, Inspect, Scenario, Sources and Timeline as a panel over the map; tap outside it to close. The ⋮ menu shares a link, saves the map image and changes the view or theme." },
-  timeline: { body: "Play or drag the timeline. The key events and the third chart are in the side panel's Timeline tab." },
+  timeline: { body: "Play or drag the timeline. The key events and the third chart are in the side panel's Timeline tab. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
 };
 function stepsFor(layout: Breakpoint, touch: boolean): Step[] {
   if (layout === "phone") return PHONE_STEPS;

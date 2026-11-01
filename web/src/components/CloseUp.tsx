@@ -416,7 +416,7 @@ export function CloseUpDock() {
   const idxAt = (t: number) => Math.round((t - t0) / step);
   const xTicks = [0, (n - 1) / 2, n - 1].map((i) => ({ i, label: fmtT(t0 + i * step) }));
   const span = { from: 0, to: Math.min(n - 1, data.spinup_s / step), label: "Settling" };
-  const common = { playI: fi, tTotal: tN - t0, xTicks, span };
+  const common = { playI: fi, tTotal: tN - t0, xTicks, span, times: m.frames.map((f) => f.t_s) };
   const v3 = m.checks.water_volume_3d_m3, v2 = m.checks.water_volume_2d_m3;
   const kfmt = (v: number) => `${+(v / 1000).toFixed(1)}k`;
   const settled = Math.max(0, Math.min(n - 1, idxAt(t0 + data.spinup_s)));
@@ -437,11 +437,11 @@ export function CloseUpDock() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-            <ChartFigure title="Water in the box" unit="m³" now={v3?.[fi] != null ? Math.round(v3[fi]).toLocaleString("en-GB") : "–"} series={v3} ghost={v2 && v2.length === v3?.length ? v2 : undefined}
+            <ChartFigure title="Water in the box" unit="m³" digits={0} now={v3?.[fi] != null ? Math.round(v3[fi]).toLocaleString("en-GB") : "–"} series={v3} ghost={v2 && v2.length === v3?.length ? v2 : undefined}
               color="var(--depth-3)" gid="cv" yFmt={kfmt} aria={`Water volume in the box over the ten minutes; ${v3?.[fi] != null ? Math.round(v3[fi]) : "no"} cubic metres at the playhead`} {...common} />
-            <ChartFigure title="Deepest water" unit="m" now={data.series.maxDepth[fi].toFixed(2)} series={data.series.maxDepth} color="var(--depth-3)" gid="cd" ymaxMin={0.5}
+            <ChartFigure title="Deepest water" unit="m" digits={2} now={data.series.maxDepth[fi].toFixed(2)} series={data.series.maxDepth} color="var(--depth-3)" gid="cd" ymaxMin={0.5}
               aria={`Deepest water in the box; ${data.series.maxDepth[fi].toFixed(2)} metres at the playhead`} {...common} />
-            <ChartFigure last title="Fastest flow" unit="m/s" now={data.series.maxSpeed[fi].toFixed(1)} series={data.series.maxSpeed} color="var(--ink)" gid="cf" ymaxMin={1}
+            <ChartFigure last title="Fastest flow" unit="m/s" digits={1} now={data.series.maxSpeed[fi].toFixed(1)} series={data.series.maxSpeed} color="var(--ink)" gid="cf" ymaxMin={1}
               aria={`Fastest surface flow in the box; ${data.series.maxSpeed[fi].toFixed(1)} metres per second at the playhead`} {...common} />
           </div>
           <div style={{ padding: "0 14px 8px", color: "var(--ink-muted)", fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
