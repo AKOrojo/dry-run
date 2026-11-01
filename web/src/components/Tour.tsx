@@ -35,6 +35,7 @@ const ALL_STEPS = [
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
+  { id: "voice", anchor: "agent", title: "Say it instead of typing", body: "In Agent, press the mic in the goal box and speak; pause or press it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ] as const;
 type Step = { id: string; title: string; body: string; /** The element to ring, when it is not [data-tour=id]. */ anchor?: string };
 
@@ -64,6 +65,7 @@ const PHONE_STEPS: Step[] = [
   ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
   { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
   { ...ALL_STEPS.find((x) => x.id === "agent")!, anchor: "tab-agent" },
+  { ...ALL_STEPS.find((x) => x.id === "voice")!, anchor: "tab-agent", body: "In Agent, tap the mic in the goal box and speak; pause or tap it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ];
 const TABLET_TEXT: Record<string, Partial<Step>> = {
   viewshare: { title: "The side panel and the menu", body: "This button opens Layers, Inspect, Scenario, Sources and Timeline as a panel over the map; tap outside it to close. The ⋮ menu shares a link, saves the map image and changes the view or theme." },

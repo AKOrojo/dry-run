@@ -13,6 +13,7 @@ import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
 import { TextField } from "./controls/TextField";
 import { Button } from "./controls/Button";
+import { VoiceButton } from "./agent/Voice";
 
 // Server error codes (dryrun/api/errors.py) that the fake agent sidesteps.
 const FAKE_HELPS = ["llm_auth", "llm_not_configured", "llm_unavailable"];
@@ -52,6 +53,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   useEffect(() => { if (wait > 0) { const t = setTimeout(() => setWait(wait - 1), 1000); return () => clearTimeout(t); } }, [wait]);
   useEffect(() => { if (!busy) return; const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, [busy]);
   const [key, setKey] = useState(getJudgeKey);
+  const [voiceProblem, setVoiceProblem] = useState<{ text: string; key: boolean } | null>(null);
   const keyRef = useRef<HTMLInputElement>(null);
   const lock = useLockout();
   const keyProvider = provider !== "fake" && provider !== "replay";  // Replay and Fake never send a key: never locked
@@ -69,6 +71,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
       box?.querySelector("button")?.scrollIntoView({ block: "nearest" });  // its 40 px touch target outgrows the box
     });
   }, [needsKey]);
+  useEffect(() => { if (voiceProblem?.key) keyRef.current?.focus(); }, [voiceProblem]);
   const [replays, setReplays] = useState<Replay[]>([]);
   useEffect(() => { getReplays().then(setReplays, () => setReplays([])); }, []);
   const replay = provider === "replay" ? replays.find((r) => r.question === q) : undefined;
@@ -129,16 +132,22 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
         <Card title="Ask the planner" right={<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-muted)" }}>
           {mode === "live" && <><Dot color="var(--verified)" />{MODEL_NAME[liveProv] ?? liveProv}</>}</span>}>
           <Pad gap={12}>
-            <TextField multiline aria-label="Goal" value={q} onChange={(e) => setQ(e.target.value)} rows={4} placeholder="Describe what you want the planner to find out."
-              maxLength={QUESTION_MAX} aria-describedby={nearMax ? "goal-count" : undefined}
-              style={{ fontSize: 14, lineHeight: "20px" }} />
+            <div data-tour="voice" style={{ position: "relative" }}>
+              <TextField multiline aria-label="Goal" value={q} onChange={(e) => setQ(e.target.value.slice(0, QUESTION_MAX))} rows={4} placeholder="Describe what you want the planner to find out, or press the mic and say it."
+                maxLength={QUESTION_MAX} aria-describedby={nearMax ? "goal-count" : undefined}
+                style={{ fontSize: 14, lineHeight: "20px", paddingBottom: 48 }} />
+              <div style={{ position: "absolute", right: 8, bottom: 8 }}>
+                <VoiceButton text={q} onText={(t) => setQ(t.slice(0, QUESTION_MAX))} onProblem={setVoiceProblem} />
+              </div>
+            </div>
+            {voiceProblem && <span role="status" style={{ ...hintText, marginTop: -6, color: "var(--ink)" }}>{voiceProblem.text}</span>}
             {nearMax && <span id="goal-count" style={{ ...hintText, marginTop: -6 }}>
               <span style={FIG}>{q.length}</span> of <span style={FIG}>{QUESTION_MAX}</span> characters{q.length >= QUESTION_MAX ? ", the most a question can have." : "."}</span>}
             <Field label="Model" hint="Live answers need the judge key. Replay and Fake are open to everyone.">
               <Segmented<Mode> active={mode} onChange={(m) => setProvider(m === "live" ? liveProv : m)}
                 options={[{ value: "live", label: "Live" }, { value: "replay", label: "Replay" }, { value: "fake", label: "Fake" }]} />
             </Field>
-            {needsKey && keyField}
+            {(needsKey || voiceProblem?.key) && keyField}
             <Field label="Try">
               {SUGGESTIONS.map((s) => (
                 <button key={s} type="button" onClick={() => setQ(s)} style={{ ...inputBox, display: "flex", gap: 8, alignItems: "flex-start", padding: "8px 10px", textAlign: "left", fontSize: 14, lineHeight: "20px" }}>
