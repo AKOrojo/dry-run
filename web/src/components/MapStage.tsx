@@ -585,6 +585,14 @@ function declutter(root: HTMLElement, phone = false) {
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
   const obstacles = kept.slice();
+  // On a desktop the close-up and GPU-box chips give way to the controls, the legends and the credits; one still shown
+  // then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
+  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0)) return;
+    if (under(r, obstacles)) el.style.visibility = "hidden";
+    else kept.push(r);
+  });
   for (const b of boxes) {
     const isPlace = "place" in b.el.dataset;
     const capped = phone && isPlace && places >= PHONE_PLACES;
@@ -597,12 +605,6 @@ function declutter(root: HTMLElement, phone = false) {
     if ((phone || b.el.dataset.off) && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
     if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
-  // On a desktop the close-up and GPU-box chips keep their places among the labels but still give way to the controls,
-  // the legends and the credits.
-  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && under(r, obstacles)) el.style.visibility = "hidden";
-  });
   // A place's dot under a control or the credits goes, with its chip.
   root.querySelectorAll<HTMLElement>("[data-place]").forEach((chip) => {
     const btn = chip.parentElement!, dot = btn.firstElementChild!.getBoundingClientRect();

@@ -14,6 +14,8 @@ import { describeIv } from "./Sidebar";
 import { Globe } from "./Globe";
 import { Tooltip } from "./controls/Tooltip";
 import { Button as CtlButton } from "./controls/Button";
+import { ChartPicker } from "./Dock";
+import type { ChartPick } from "./Dock";
 
 export type CompareView = "A" | "B" | "Swipe" | "Side by side" | "Difference";
 
@@ -208,12 +210,13 @@ export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }
 }
 
 // ---- dock slots ----
-export function ByPlace({ rows }: { rows: PlaceRow[] | null }) {
+export function ByPlace({ rows, menu }: { rows: PlaceRow[] | null; /** The dock slot's "Choose chart" picks, when it has fewer than three. */ menu?: ChartPick[] }) {
   const shown = rows?.slice(0, 6) ?? [];
   return (
     <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px 8px", minWidth: 0, overflow: "hidden" }}>
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap", overflow: "hidden" }}>
         <span style={{ fontWeight: 600 }}>By place</span><Tooltip text="Road km impassable inside each place, run maximum"><span style={{ color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis" }}>road km, run max</span></Tooltip>
+        {menu && <span style={{ marginLeft: "auto", display: "flex", alignSelf: "center", flex: "none" }}><ChartPicker menu={menu} /></span>}
       </figcaption>
       {rows == null ? <p style={{ margin: "auto", color: "var(--ink-muted)", fontSize: 12 }}>Loading places…</p>
         : !shown.length ? <p style={{ margin: "auto", color: "var(--ink-muted)", fontSize: 12 }}>This area has no named places.</p> : (
