@@ -327,7 +327,7 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
           {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><Button variant="segment" pressed={hud.speed === n} type="button" onClick={() => onSpeed(n)} style={{ height: 20, cursor: "pointer" }}>{SPEED_NAME[n]}</Button></UiTooltip>)}
         </div>
         Flood
-        <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }}>
+        <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2 }}>
           {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
           {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><Button variant="segment" pressed={link === l.key} type="button" disabled={!canLink} onClick={() => onLink(l.key)} style={{ height: 20, cursor: "pointer" }}>{l.label}</Button></UiTip>)}
         </div></UiTip>

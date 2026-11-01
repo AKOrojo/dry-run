@@ -147,7 +147,7 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds, bottom = 26, 
     try { await navigator.clipboard.writeText(s); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* clipboard blocked */ }
   };
   const iconBtn = { display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, padding: 0, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" } as const;
-  const seg = (on: boolean) => ({ height: 20, padding: "0 7px", border: 0, borderRadius: 3, fontFamily: "inherit", fontSize: 11, cursor: "pointer",
+  const seg = (on: boolean) => ({ height: 20, padding: "0 7px", border: 0, borderRadius: 3, fontFamily: "inherit", fontSize: 11, lineHeight: "normal", cursor: "pointer",
     ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }) as const;
 
   return (
