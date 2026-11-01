@@ -257,13 +257,13 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
             fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: "16px", fontWeight: 500, whiteSpace: "nowrap" }}>{fmtT(nowS)}</span>
           <div style={{ position: "absolute", left: 0, right: 0, top: 22, height: 4, background: "var(--ground)", borderRadius: "var(--radius-pill)", boxShadow: "var(--inset-shadow)" }} />
           <div style={{ position: "absolute", left: 0, width: `${ph}%`, top: 23, height: 2, background: "var(--ink)", borderRadius: "var(--radius-pill)", marginLeft: 1 }} />
-          <Tooltip text="Flooded area per frame"><div aria-label="Flooded area per frame" style={{ position: "absolute", left: 0, right: 0, top: 31, height: 4, borderRadius: "var(--radius-pill)", background: `linear-gradient(90deg, ${stops})` }} /></Tooltip>
-          <Tooltip text={`Rain falling, T+00:00 to ${fmtT(rainStopS)}`}><div aria-label={`Rain falling, T+00:00 to ${fmtT(rainStopS)}`} style={{ position: "absolute", left: 0, width: `${pct(rainStopS)}%`, top: 29, height: 5, borderBottom: "1px dashed var(--ink-muted)", opacity: 0.6 }} /></Tooltip>
+          <Tooltip text="Flooded area per frame"><div style={{ position: "absolute", left: 0, right: 0, top: 31, height: 4, borderRadius: "var(--radius-pill)", background: `linear-gradient(90deg, ${stops})` }} /></Tooltip>
+          <Tooltip text={`Rain falling, T+00:00 to ${fmtT(rainStopS)}`}><div style={{ position: "absolute", left: 0, width: `${pct(rainStopS)}%`, top: 29, height: 5, borderBottom: "1px dashed var(--ink-muted)", opacity: 0.6 }} /></Tooltip>
           <span style={{ position: "absolute", left: `${ph}%`, top: 17, width: 14, height: 14, marginLeft: -7, borderRadius: "50%", background: "var(--ground)", border: "3px solid var(--danfo)",
             boxShadow: "0 0 0 4px color-mix(in srgb, var(--danfo) 22%, transparent), 0 2px 4px var(--elev-drop)" }} />
           <div style={{ position: "absolute", left: 0, right: 0, top: 38 }}>
             {events.filter((e) => e.kind !== "standing" && e.kind !== "peak").map((e) => (
-              <Tip key={e.id} text={e.label}><span aria-label={e.label} style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span></Tip>
+              <Tip key={e.id} text={e.label}><span style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span></Tip>
             ))}
           </div>
           <div style={{ position: "absolute", left: 0, right: 0, top: 54 }}>

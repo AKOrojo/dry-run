@@ -42,19 +42,30 @@ export function Tooltip({ text, children }: { text: string; children: ReactEleme
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
-  const hide = () => { clearTimeout(timer.current); setAnchor(null); };
+  const hide = () => { clearTimeout(timer.current); timer.current = undefined; setAnchor(null); };
+  const later = (el: HTMLElement) => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { timer.current = undefined; setAnchor(el.getBoundingClientRect()); }, TOOLTIP_DELAY_MS);
+  };
+  // Over a nested element with its own tooltip (a row's remove button), only the inner one shows, as with native titles.
+  const nested = (e: PointerEvent<HTMLElement>) => (e.target as Element).closest("[data-tip]") !== e.currentTarget;
   const p = children.props as Record<string, ((e: never) => void) | undefined>;
   const call = (name: string, e: unknown) => (p[name] as ((e: unknown) => void) | undefined)?.(e);
   return (
     <>
       {cloneElement(children, {
         "aria-describedby": anchor ? id : undefined,
+        "data-tip": "",
         onPointerEnter: (e: PointerEvent<HTMLElement>) => {
           call("onPointerEnter", e);
+          if (e.pointerType === "touch" || nested(e)) return;
+          later(e.currentTarget);
+        },
+        onPointerOver: (e: PointerEvent<HTMLElement>) => {
+          call("onPointerOver", e);
           if (e.pointerType === "touch") return;
-          const el = e.currentTarget;
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => setAnchor(el.getBoundingClientRect()), TOOLTIP_DELAY_MS);
+          if (nested(e)) hide();
+          else if (!anchor && !timer.current) later(e.currentTarget);
         },
         onPointerLeave: (e: PointerEvent<HTMLElement>) => { call("onPointerLeave", e); hide(); },
         onPointerDown: (e: PointerEvent<HTMLElement>) => { call("onPointerDown", e); hide(); },
