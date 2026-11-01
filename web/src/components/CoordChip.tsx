@@ -8,6 +8,7 @@ import { Anchored } from "./Anchored";
 import type { Anchors } from "./Anchored";
 import { FIG, mono } from "./rev5";
 import { getPointInfo } from "../lib/api";
+import { TextField } from "./controls/TextField";
 
 type Fmt = "DMS" | "Decimal";
 const FMT_KEY = "dr_coord_fmt";
@@ -167,10 +168,9 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds, bottom = 26, 
             <button type="button" aria-pressed={fmt === "DMS"} onClick={() => pickFmt("DMS")} style={seg(fmt === "DMS")}>DMS</button>
             <button type="button" aria-pressed={fmt === "Decimal"} onClick={() => pickFmt("Decimal")} style={seg(fmt === "Decimal")}>Decimal</button>
           </span>
-          <input value={text} onChange={(e) => { setText(e.target.value); setErr(null); }} onKeyDown={onKey} placeholder="Go to lat, lon…" aria-label="Go to latitude, longitude" aria-invalid={!!err}
+          <TextField value={text} onChange={(e) => { setText(e.target.value); setErr(null); }} onKeyDown={onKey} placeholder="Go to lat, lon…" aria-label="Go to latitude, longitude" aria-invalid={!!err}
             spellCheck={false} autoComplete="off"
-            style={{ width: 150, flex: "0 1 150px", minWidth: 60, height: 24, padding: "0 8px", background: "var(--ground)", color: "var(--ink)", border: `1px solid ${err ? "var(--hazard)" : "var(--control-edge)"}`,
-              borderRadius: "var(--radius-md)", fontFamily: "inherit", fontSize: 11, outline: "none" }} />
+            mono style={{ width: 150, flex: "0 1 150px", minWidth: 60, height: 24, padding: "0 8px", fontSize: 11 }} />
           <button type="button" aria-label={copied ? "Copied" : "Copy coordinates"} title={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
             {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
           </button>

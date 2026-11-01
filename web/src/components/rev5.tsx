@@ -2,6 +2,7 @@
 import { createContext, useContext, type CSSProperties, type ReactNode } from "react";
 import { Barricade, Drop, CloudSlash, Lock, TrafficCone, Waves } from "@phosphor-icons/react";
 import { Slider } from "./controls/Slider";
+import { NumberField } from "./controls/NumberField";
 
 export const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 export const mono = "var(--font-mono)";
@@ -121,13 +122,5 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 
 export function NumberInput({ value, unit, min, max, step = 1, label, onChange }:
   { value: number; unit: string; min: number; max: number; step?: number; label: string; onChange: (v: number) => void }) {
-  return (
-    <label style={{ display: "flex", alignItems: "center", height: 32, padding: "0 10px", background: "var(--ground)", border: "1px solid var(--control-edge)",
-      borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 2px var(--elev-drop-soft)" }}>
-      <input type="number" aria-label={label} value={value} min={min} max={max} step={step}
-        onChange={(e) => { const v = e.target.valueAsNumber; if (Number.isFinite(v)) onChange(Math.min(max, Math.max(min, v))); }}
-        style={{ ...FIG, width: "100%", minWidth: 0, padding: 0, border: 0, outline: "none", background: "transparent", color: "var(--ink)", font: "inherit", fontWeight: 600 }} />
-      <span style={{ marginLeft: "auto", color: "var(--ink-muted)" }}>{unit}</span>
-    </label>
-  );
+  return <NumberField {...{ value, unit, min, max, step, label, onChange }} />;
 }

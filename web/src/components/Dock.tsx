@@ -20,6 +20,7 @@ const SideSwitch = lazyNamed(() => import("./Drainage"), "SideSwitch");
 const WaterWent = lazyNamed(() => import("./Drainage"), "WaterWent");
 import { drainStats, FULL_PCT } from "../lib/drainage";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
+import { TextField } from "./controls/TextField";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
 type TS = NonNullable<RunManifest["timeseries"]>;
@@ -307,14 +308,13 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
             ...(runId ? {} : { opacity: 0.45, cursor: "not-allowed" }) }}>
           <Plus size={12} weight="bold" />Note</button></>} />
       {draft && (
-        <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", minHeight: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
           <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
-          <input autoFocus value={draft.text} maxLength={NOTE_MAX} placeholder="Note, then Enter" aria-label={`Note at ${fmtT(draft.t)}`}
+          <TextField autoFocus value={draft.text} maxLength={NOTE_MAX} placeholder="Note, then Enter" aria-label={`Note at ${fmtT(draft.t)}`}
             onChange={(e) => setDraft({ ...draft, text: e.target.value })}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } else if (e.key === "Escape") { e.preventDefault(); setDraft(null); } }}
             onBlur={() => setDraft(null)}
-            style={{ minWidth: 0, height: 26, padding: "0 8px", background: "var(--ground)", color: "var(--ink)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
-              boxShadow: "var(--inset-shadow)", font: "inherit", fontSize: 12 }} />
+            style={{ minWidth: 0, height: 26, padding: "0 8px", fontSize: 12 }} />
           <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(draft.t)}</span>
         </div>
       )}

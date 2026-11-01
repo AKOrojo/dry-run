@@ -31,6 +31,7 @@ import { easeLeft } from "../lib/simbar";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
+import { TextField } from "./controls/TextField";
 const GpuCard = lazyNamed(() => import("./GpuCard"), "GpuCard");
 
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
@@ -129,9 +130,8 @@ function AerialSourceRow() {
       {lay.aerialNote && <span role="status" style={{ color: needKey ? "var(--ink)" : "var(--ink-muted)" }}>{lay.aerialNote}</span>}
       {needKey && (
         <form onSubmit={(e) => { e.preventDefault(); if (key.trim() && !lock) { setJudgeKey(key.trim()); setAerial("google"); } }} style={{ display: "flex", gap: 6 }}>
-          <input ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
-            style={{ flex: 1, minWidth: 0, height: 28, padding: "0 8px", background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
-              boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit", fontSize: 12 }} />
+          <TextField ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
+            style={{ flex: 1, height: 28, padding: "0 8px", fontSize: 12 }} />
           <button type="submit" disabled={!key.trim() || !!lock} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
             background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500,
             cursor: lock ? "default" : "pointer", opacity: lock ? 0.6 : 1 }}>Use Google</button>
@@ -156,7 +156,7 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <div key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+          <div key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
             <Switch fill on={on} onChange={(v) => setLayer(r.key, { on: v })} label={<><span aria-hidden="true" style={{ display: "flex", flex: "none", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></>} />
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>

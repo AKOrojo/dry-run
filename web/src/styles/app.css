@@ -30,14 +30,6 @@ body { background: var(--ground); }
 .dr-field { display: flex; flex-direction: column; gap: var(--space-1); }
 .dr-field-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
 .dr-field-label { color: var(--ink-muted); }
-.dr-field select, .dr-field input[type="text"], .dr-field input[type="password"], .dr-field textarea {
-  box-sizing: border-box; width: 100%; background: var(--ground); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 22px;
-  border: var(--stroke-control) solid var(--control-edge); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); }
-.dr-field textarea { resize: vertical; }
-.dr-field ::placeholder { color: var(--ink-muted); }
-.dr-field select:focus-visible, .dr-field input:focus-visible, .dr-field textarea:focus-visible {
-  outline: var(--stroke-focus) solid var(--focus-ring); outline-offset: 2px; }
-
 /* Notice */
 .dr-notice { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--surface-raised);
   border-left: var(--stroke-control) solid var(--hazard); border-radius: var(--radius-md); color: var(--ink); }
@@ -76,7 +68,6 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 /* The compact layer slider keeps its 12 px box: its .dr-hit child is the 40 px target. */
 .dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"]:not(:has(> .dr-hit)), input:not([type="radio"])),
 .dr-app.bp-phone .dr-sheet-body li[title], .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
-.dr-app.bp-phone .dr-sheet-body label:has(> input[type="number"]) { min-height: 40px; box-sizing: border-box; }
 .dr-app.bp-tablet .dr-drawer :is(button, select, [role="combobox"]) { min-height: 40px; }
 
 /* The small layer slider and the map's place chips keep their look; their hit area grows to 40 px. */
@@ -85,11 +76,8 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 .dr-app.bp-phone .dr-place-label > span:last-child { position: relative; }
 .dr-app.bp-phone .dr-place-label > span:last-child::after { content: ""; position: absolute; inset: -8px -6px; }
 .dr-app:is(.bp-phone, .bp-tablet) > header [role="combobox"] { min-height: 40px; }
-.dr-app.bp-tablet :is(input[type="text"], input[type="search"], input:not([type])) { min-height: 41px; }
 /* Tablet: the desktop frame, with every target at least 40 px (a finger on a 768 px screen). */
 .dr-app.bp-tablet :is(button, [role="slider"]:not(:has(> .dr-hit)), [role="combobox"], select) { min-height: 40px; min-width: 40px; }
-.dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) { min-height: 42px; box-sizing: border-box; }
-.dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) > input { align-self: stretch; }
 .dr-app.bp-tablet .dr-hit { top: -14px !important; bottom: -14px !important; height: auto !important; min-height: 0; }
 .dr-app.bp-tablet .dr-place-label { min-height: 40px; min-width: 0; }
 .dr-app.bp-tablet .dr-place-label > span:last-child { position: relative; }
@@ -100,3 +88,9 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 /* Phone on its side: keep clear of the notch. The coordinate chip's controls are touch targets too. */
 .dr-app.bp-phone { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); box-sizing: border-box; }
 .dr-app.bp-phone [data-tour="coords"] :is(button, input) { min-height: 40px; min-width: 40px; }
+
+.dr-text-field:has(:focus-visible), .dr-number-field:has(:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.dr-text-field ::placeholder { color: var(--ink-muted); }
+.dr-app:is(.bp-phone, .bp-tablet) :is(.dr-text-field, .dr-number-field) { min-height: 42px; box-sizing: border-box; }
+.dr-app:is(.bp-phone, .bp-tablet) :is(.dr-text-field, .dr-number-field) input { min-height: 0; align-self: stretch; }
+.dr-app:is(.bp-phone, .bp-tablet) :is(.dr-text-field, .dr-number-field) button { min-height: 40px; min-width: 40px; }

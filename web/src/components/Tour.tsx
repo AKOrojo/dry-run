@@ -172,7 +172,7 @@ export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" && (e.target as Element | null)?.closest('[role="slider"], [role="switch"]')) return;
+      if (e.key !== "Escape" && (e.target as Element | null)?.closest('[role="slider"], [role="switch"], input, textarea, [role="spinbutton"]')) return;
       if (e.key === "Escape") { e.preventDefault(); finish(); }
       else if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); next(); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); back(); }

@@ -11,6 +11,7 @@ import { Card, Field, Segmented, FIG, hintText } from "./rev5";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
+import { TextField } from "./controls/TextField";
 
 // Server error codes (dryrun/api/errors.py) that the fake agent sidesteps.
 const FAKE_HELPS = ["llm_auth", "llm_not_configured", "llm_unavailable"];
@@ -96,12 +97,9 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
 
   const keyField = (
     <Field label="Judge key" hint="Kept in this tab only.">
-      <label style={{ ...inputBox, display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px" }}>
-        <Key size={16} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />
-        <input ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key}
-          onChange={(e) => { setKey(e.target.value); setJudgeKey(e.target.value.trim()); }}
-          style={{ flex: 1, minWidth: 0, padding: 0, border: 0, outline: "none", background: "transparent", color: "var(--ink)", font: "inherit" }} />
-      </label>
+      <TextField ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key}
+        leadingIcon={<Key size={16} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />}
+        onChange={(e) => { setKey(e.target.value); setJudgeKey(e.target.value.trim()); }} />
       {lock && <LockoutNote lock={lock} />}
     </Field>
   );
@@ -118,9 +116,9 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
         <Card title="Ask the planner" right={<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--ink-muted)" }}>
           {mode === "live" && <><Dot color="var(--verified)" />{MODEL_NAME[liveProv] ?? liveProv}</>}</span>}>
           <Pad gap={12}>
-            <textarea aria-label="Goal" value={q} onChange={(e) => setQ(e.target.value)} rows={4} placeholder="Describe what you want the planner to find out."
+            <TextField multiline aria-label="Goal" value={q} onChange={(e) => setQ(e.target.value)} rows={4} placeholder="Describe what you want the planner to find out."
               maxLength={QUESTION_MAX} aria-describedby={nearMax ? "goal-count" : undefined}
-              style={{ ...inputBox, padding: 10, resize: "vertical", fontSize: 14, lineHeight: "20px" }} />
+              style={{ fontSize: 14, lineHeight: "20px" }} />
             {nearMax && <span id="goal-count" style={{ ...hintText, marginTop: -6 }}>
               <span style={FIG}>{q.length}</span> of <span style={FIG}>{QUESTION_MAX}</span> characters{q.length >= QUESTION_MAX ? ", the most a question can have." : "."}</span>}
             <Field label="Model" hint="Live answers need the judge key. Replay and Fake are open to everyone.">
