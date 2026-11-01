@@ -5,7 +5,10 @@ import type { FocusEvent, PointerEvent, ReactElement } from "react";
 import { createPortal } from "react-dom";
 
 export const TOOLTIP_DELAY_MS = 500;
-const GAP = 8, MARGIN = 8;
+const GAP = 8, MARGIN = 8, HIDE_ALL = "dr-hide-tooltips";
+
+/** Hides every showing tooltip (a menu opening over its trigger calls it). */
+export const hideTooltips = () => window.dispatchEvent(new Event(HIDE_ALL));
 
 /** The bubble itself, placed above `anchor` (below when there is no room), clamped to the window. */
 export function TipBubble({ id, text, anchor, decorative = false }: { id?: string; text: string; anchor: DOMRect;
@@ -49,6 +52,11 @@ export function Tooltip({ text, children }: { text: string; children: ReactEleme
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    const off = () => { clearTimeout(timer.current); timer.current = undefined; setAnchor(null); };
+    window.addEventListener(HIDE_ALL, off);
+    return () => window.removeEventListener(HIDE_ALL, off);
+  }, []);
   const hide = () => { clearTimeout(timer.current); timer.current = undefined; setAnchor(null); };
   // Escape dismisses a showing tooltip without moving focus or the pointer (WCAG 1.4.13); others still get the key.
   useEffect(() => {

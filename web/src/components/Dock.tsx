@@ -1,7 +1,7 @@
 // Dock (rev 5 dock()): timeline, three charts, key events. Everything reads the one clock.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
-import { CaretDown, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
+import { CaretDown, Camera, ChartBar, Copy, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
 import type { RunEvents, RunManifest } from "../lib/api";
 import { setFocus } from "../lib/focus";
 import { useExtras } from "../lib/extras";
@@ -13,6 +13,8 @@ import { RainNow } from "./RainNow";
 import { useWeatherSource } from "../lib/weather";
 import { useLayers } from "../lib/layers";
 import { lazyNamed } from "../lib/lazy";
+import { chartCsv, chartFilename, chartTable } from "../lib/chartdata";
+import { chartPng } from "../lib/chartImage";
 const LoadsPanel = lazyNamed(() => import("./FlowHazard"), "LoadsPanel");
 const ProfileDock = lazyNamed(() => import("./FlowHazard"), "ProfileDock");
 import { drainNote, drainSeries } from "../lib/drainage";
@@ -151,16 +153,34 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
 
 export type ChartPick = { label: string; on: boolean; onPick: () => void };
 
-export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, ...rest }: {
+/** The area and run the charts show: the saved image's title and file name. App provides it. */
+export const ChartArea = createContext<{ aoi: string; name: string; run?: string }>({ aoi: "map", name: "" });
+const hiddenText: CSSProperties = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
+const BLOCKED = "Couldn't copy. Your browser blocked the clipboard.";
+
+export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, digits = 2, times, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
   /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
   ab?: ReactNode;
   /** The ⋮ button then picks which chart this slot shows. */
   menu?: ChartPick[];
+  /** Decimals in the table and the CSV: the same as `now`. */
+  digits?: number;
+  /** The time of each sample, for the table (default: spread evenly over tTotal). */
+  times?: number[];
 } & Omit<React.ComponentProps<typeof Chart>, "series" | "width">) {
   const ref = useRef<HTMLDivElement>(null);
+  const area = useContext(ChartArea);
   const [w, setW] = useState(0);
+  const [table, setTable] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const msgTimer = useRef<ReturnType<typeof setTimeout>>();
   const ch = ab ? 84 : 104;  // the A / B line takes the difference
+  const hasData = !!series && series.length > 1;
+  const showTable = table && hasData;
+  const reason = empty ?? "No data to show yet";
+  const data = series && hasData ? chartTable({ title, unit, digits, time: fmtT, series, ghost: rest.ghost,
+    times: times ?? series.map((_, i) => (rest.tTotal * i) / (series.length - 1)) }) : null;
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -168,28 +188,69 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, .
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  useEffect(() => () => clearTimeout(msgTimer.current), []);
+  const say = (text: string, ms: number) => { clearTimeout(msgTimer.current); setMsg(text); msgTimer.current = setTimeout(() => setMsg(null), ms); };
+  const copy = async () => {
+    if (!data) return;
+    try { await navigator.clipboard.writeText(chartCsv(data)); say("Copied", 1500); } catch { say(BLOCKED, 4000); }
+  };
+  const save = async () => {
+    const svg = ref.current?.querySelector("svg");
+    if (!svg) { say("Couldn't save the image.", 4000); return; }
+    try {
+      const url = await chartPng({ svg, title, area: area.name || area.aoi });
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = chartFilename(area.aoi, title, area.run);
+      a.click();
+    } catch { say("Couldn't save the image.", 4000); }
+  };
+  const actions: MenuEntry[] = [
+    ...(menu ? [...menu.map((m): MenuEntry => ({ kind: "radio", label: m.label, checked: m.on, onSelect: m.onPick })), { kind: "separator" } as MenuEntry] : []),
+    { kind: "item", label: showTable ? "Show as chart" : "Show as table", icon: <ChartBar size={14} weight="bold" />, disabled: !hasData, reason: hasData ? undefined : reason,
+      onSelect: () => setTable((v) => !v) },
+    { kind: "item", label: "Copy values", icon: <Copy size={14} weight="bold" />, disabled: !hasData, reason: hasData ? undefined : reason, onSelect: copy },
+    { kind: "item", label: "Save chart image", icon: <Camera size={14} weight="bold" />, disabled: !hasData, reason: hasData ? undefined : reason, onSelect: save },
+  ];
   return (
-    <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, borderRight: last ? undefined : "1px solid var(--hairline)" }}>
+    <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, position: "relative", borderRight: last ? undefined : "1px solid var(--hairline)" }}>
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
         <span style={{ fontWeight: 600 }}>{title}</span><span style={{ color: "var(--ink-muted)" }}>({unit})</span>
         {!ab && <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>}
-        {menu ? (
-          <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
-            <Menu label="Choose chart" items={menu.map((m): MenuEntry => ({ kind: "radio", label: m.label, checked: m.on, onSelect: m.onPick }))}
-              trigger={(p) => (
-                <button {...p} type="button" aria-label="Choose chart"
-                  style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
-                  <DotsThreeVertical size={14} weight="bold" />
-                </button>
-              )} />
-          </span>
-        ) : <span style={{ display: "flex", alignSelf: "center", color: "var(--ink-muted)" }}><DotsThreeVertical size={14} weight="bold" /></span>}
+        <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
+          <Menu label="Chart actions" items={actions}
+            trigger={(p) => (
+              <button {...p} type="button" aria-label={menu ? "Choose chart" : "Chart actions"}
+                style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
+                <DotsThreeVertical size={14} weight="bold" />
+              </button>
+            )} />
+        </span>
       </figcaption>
       {ab}
-      <div ref={ref} style={{ height: ch, position: "relative", minWidth: 0 }}>
-        {series && series.length > 1 && w > 60 ? <Chart series={series} width={w} height={ch} {...rest} />
-          : <p style={{ margin: 0, height: ch, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", fontSize: 12 }}>{empty ?? "No data yet"}</p>}
+      <div ref={ref} style={{ height: ch, position: "relative", minWidth: 0, overflow: showTable ? "auto" : undefined }}>
+        {showTable && data && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, lineHeight: "16px", ...FIG }}>
+            <caption style={hiddenText}>{title}</caption>
+            <thead>
+              <tr>{data.header.map((h, k) => (
+                <th key={k} scope="col" style={{ position: "sticky", top: 0, background: "var(--surface)", padding: "4px 6px", fontWeight: 600, color: "var(--ink-muted)",
+                  textAlign: k ? "right" : "left", borderBottom: "1px solid var(--hairline)", whiteSpace: "nowrap" }}>{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r, i) => (
+                <tr key={i}>{r.map((c, k) => <td key={k} style={{ padding: "1px 6px", textAlign: k ? "right" : "left", whiteSpace: "nowrap" }}>{c}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div hidden={showTable}>
+          {series && series.length > 1 && w > 60 ? <Chart series={series} width={w} height={ch} {...rest} />
+            : <p style={{ margin: 0, height: ch, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", fontSize: 12 }}>{empty ?? "No data yet"}</p>}
+        </div>
       </div>
+      <span aria-live="polite" style={{ position: "absolute", top: 2, right: 14, fontSize: 12, color: "var(--ink-muted)", background: "var(--surface)", padding: "0 4px" }}>{msg}</span>
     </figure>
   );
 }
@@ -381,7 +442,7 @@ function RainDock({ storm, now, layout = "row" }: { storm: RainStorm; now?: Reac
       {layout !== "extras" && <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <Band title="Rain at the storm centre" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>
           mm/h{moving ? " · moving cell, so the centre is where the storm is at each moment" : ""}</span>} />
-        <ChartFigure last title="Rain intensity" unit="mm/h" now={`${Math.max(...series).toFixed(0)} peak`} series={series} color="var(--depth-3)" gid="rn" playI={-1} ymaxMin={Math.max(...series) * 1.2} tTotal={storm.duration_h * 3600}
+        <ChartFigure last title="Rain intensity" unit="mm/h" digits={0} now={`${Math.max(...series).toFixed(0)} peak`} series={series} color="var(--depth-3)" gid="rn" playI={-1} ymaxMin={Math.max(...series) * 1.2} tTotal={storm.duration_h * 3600}
           aria="Rain intensity at the storm centre over the storm duration" />
       </div>}
       {layout !== "two" && (now ?? <div style={{ display: "flex", flexDirection: "column", borderLeft: layout === "row" ? "1px solid var(--hairline)" : undefined, minHeight: 0 }}>
@@ -445,7 +506,7 @@ export function Dock({ storm, run, series, ghost, third, side, note, layout = "r
   const durS = ts.t_s[ts.t_s.length - 1];
   const pi = nearest(ts.t_s, t_s);
   const chartEvents = events.filter((e) => e.kind === "cut" || e.kind === "surge");
-  const common = { playI: pi, tTotal: durS };
+  const common = { playI: pi, tTotal: durS, times: ts.t_s };
   const dp = series && series.length > 1 ? series : undefined;
   // Run A on B's frame times (nearest frame), so both lines share one x axis and one playhead.
   const gts = ghost?.timeseries;
@@ -466,15 +527,15 @@ export function Dock({ storm, run, series, ghost, third, side, note, layout = "r
     : eventsOrWater);
   const narrow = layout !== "row";
   const charts = [
-          <ChartFigure key="fa" last={narrow} title="Flooded area" unit="km²" now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
+          <ChartFigure key="fa" last={narrow} title="Flooded area" unit="km²" digits={2} now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
             aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />,
-          <ChartFigure key="rk" last={layout === "two" ? true : narrow} title="Roads impassable" unit="km" now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
+          <ChartFigure key="rk" last={layout === "two" ? true : narrow} title="Roads impassable" unit="km" digits={1} now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
             aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />,
           third ?? (ds && thirdPick === "drains"
-            ? <ChartFigure last title="Drain network running full" unit="%" now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
+            ? <ChartFigure last title="Drain network running full" unit="%" digits={0} now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
                 color="var(--depth-3)" gid="dn" ymaxMin={100} threshold={[FULL_PCT, `Full ${FULL_PCT} %`]} {...common}
                 aria={`Share of the drain network running full over time; ${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} % at the playhead`} />
-            : <ChartFigure last title="Depth at selected point" unit="m" now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
+            : <ChartFigure last title="Depth at selected point" unit="m" digits={2} now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
                 color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />),
   ];
   const profile = lay.profile.on && !ghost;

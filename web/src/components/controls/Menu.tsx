@@ -8,6 +8,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "@phosphor-icons/react";
+import { hideTooltips } from "./Tooltip";
 
 export type MenuItem = {
   kind: "item" | "check" | "radio";
@@ -21,6 +22,8 @@ export type MenuItem = {
   onSelect: () => void;
   /** Stays open after the pick (the View toggles). */
   keepOpen?: boolean;
+  /** Why the item is disabled: a second muted 12 px line, which the item describes itself with. */
+  reason?: string;
 };
 export type MenuEntry = MenuItem | { kind: "separator" } | { kind: "caption"; label: string };
 
@@ -65,10 +68,11 @@ if (typeof window !== "undefined") {
   }, true);
 }
 
-const isNav = (it: MenuEntry): it is MenuItem => it.kind !== "separator" && it.kind !== "caption" && !it.disabled;
+// Disabled items are reached too (WAI-ARIA: aria-disabled, not removed from focus); activating one does nothing.
+const isNav = (it: MenuEntry): it is MenuItem => it.kind !== "separator" && it.kind !== "caption";
 
-/** The index the key moves to from `current` (-1 when nothing is active), skipping separators, captions and disabled
- *  items. Down and Up wrap; Home and End go to the first and last item. -1 when there is nothing to move to. */
+/** The index the key moves to from `current` (-1 when nothing is active), skipping separators and captions.
+ *  Down and Up wrap; Home and End go to the first and last item. -1 when there is nothing to move to. */
 export function nextIndex(key: string, current: number, items: MenuEntry[]): number {
   const n = items.length;
   const nav = items.flatMap((it, i) => (isNav(it) ? [i] : []));
@@ -120,6 +124,7 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
   const base = useId();
   const listId = `${base}-menu`;
   const itemId = (i: number) => `${base}-item-${i}`;
+  const reasonId = (i: number) => `${base}-reason-${i}`;
   const controlled = at !== undefined;
   const [openT, setOpenT] = useState(false);
   const [anchorT, setAnchorT] = useState<Anchor | null>(null);
@@ -157,7 +162,7 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
 
   const run = (i: number) => {
     const it = itemsRef.current[i];
-    if (!it || !isNav(it)) return;
+    if (!it || !isNav(it) || it.disabled) return;
     if (!it.keepOpen) close();
     it.onSelect();
   };
@@ -201,6 +206,7 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
   // Registers the popover's keys while it is open; the first item takes focus unless a key already chose one.
   useEffect(() => {
     if (!open) { activeRef.current = -1; setActive(-1); return; }
+    hideTooltips();
     if (activeRef.current < 0) move(nextIndex("Home", -1, itemsRef.current));
     const f: KeyFn = (e) => menuKeysRef.current(e);
     menuKeys = f;
@@ -271,19 +277,23 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
       {items.map((it, i) => {
         if (it.kind === "separator") return <div key={i} role="separator" style={rule} />;
         if (it.kind === "caption") return <div key={i} style={caption}>{it.label}</div>;
-        const on = i === active && isNav(it);
+        const on = i === active;
         const role = it.kind === "item" ? "menuitem" : it.kind === "check" ? "menuitemcheckbox" : "menuitemradio";
         const lead = it.icon ?? (it.kind !== "item" && it.checked ? <Check size={14} weight="bold" color="var(--ink)" /> : null);
         return (
           <div key={i} id={itemId(i)} role={role} tabIndex={-1}
             aria-checked={it.kind === "item" ? undefined : !!it.checked} aria-disabled={it.disabled || undefined}
+            aria-describedby={it.reason ? reasonId(i) : undefined}
             onClick={() => run(i)}
-            onMouseMove={() => { if (activeRef.current !== i && isNav(it)) move(i); }}
-            style={{ display: "flex", alignItems: "center", gap: 10, height: rowH, padding: "0 10px", borderRadius: 4, flex: "none", whiteSpace: "nowrap",
+            onMouseMove={() => { if (activeRef.current !== i) move(i); }}
+            style={{ display: "flex", alignItems: "center", gap: 10, minHeight: rowH, padding: it.reason ? "6px 10px" : "0 10px", borderRadius: 4, flex: "none", whiteSpace: "nowrap",
               cursor: it.disabled ? "default" : "pointer", color: it.disabled ? "var(--ink-muted)" : "var(--ink)", outline: "none",
               background: on ? "color-mix(in srgb, var(--ink) 9%, transparent)" : undefined }}>
             <span style={{ width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: "var(--ink-muted)" }}>{lead}</span>
-            <span>{it.label}</span>
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span>{it.label}</span>
+              {it.reason && <span id={reasonId(i)} style={{ fontSize: 12, lineHeight: "16px", color: "var(--ink-muted)", whiteSpace: "normal" }}>{it.reason}</span>}
+            </span>
             {it.hint && <span style={{ marginLeft: "auto", paddingLeft: 16, fontSize: 12, lineHeight: "16px", color: "var(--ink-muted)" }}>{it.hint}</span>}
           </div>
         );
