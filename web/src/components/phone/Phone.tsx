@@ -9,6 +9,7 @@ import type { RunManifest } from "../../lib/api";
 import { clock, useClock } from "../../lib/clock";
 import { fmtT } from "../ds";
 import { FIG, raisedButton } from "../rev5";
+import { Button } from "../controls/Button";
 
 export type PhoneTab = "Scenario" | "Layers" | "Inspect" | "Timeline" | "Agent";
 export type Snap = "half" | "full";
@@ -43,7 +44,7 @@ export function TabBar({ active, onTab, agentRuns = 0 }: { active: PhoneTab | nu
       {PHONE_TABS.map(({ name, Ic }) => {
         const on = name === active;
         return (
-          <button key={name} type="button" role="tab" id={tabId(name)} data-tour={`tab-${name.toLowerCase()}`} aria-selected={on} aria-controls={on ? SHEET_ID : undefined}
+          <Button variant="text" key={name} type="button" role="tab" id={tabId(name)} data-tour={`tab-${name.toLowerCase()}`} aria-selected={on} aria-controls={on ? SHEET_ID : undefined}
             tabIndex={name === focusable ? 0 : -1} onClick={() => onTab(name)}
             style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, minWidth: 0, padding: 0,
               background: "transparent", border: 0, font: "inherit", fontSize: 11, lineHeight: "14px", color: on ? "var(--ink)" : "var(--ink-muted)", fontWeight: on ? 600 : 400, cursor: "pointer" }}>
@@ -56,7 +57,7 @@ export function TabBar({ active, onTab, agentRuns = 0 }: { active: PhoneTab | nu
             </span>
             <span style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
             {on && <span aria-hidden="true" style={{ position: "absolute", bottom: 6, left: "50%", width: 20, height: 2, marginLeft: -10, borderRadius: "var(--radius-pill)", background: "var(--danfo)" }} />}
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -123,11 +124,11 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
       <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
         style={{ position: "relative", flex: "none", touchAction: "none", cursor: "grab", background: "var(--surface)", borderBottom: "1px solid var(--hairline)" }}>
         {/* The handle's target is the top 40 px of the header; the title sits under its lower half. */}
-        <button type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); } }}
+        <Button variant="icon" type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); } }}
           aria-label={fullOnly ? `Close the ${title} panel` : snap === "half" ? `Expand the ${title} panel` : `Shrink the ${title} panel`}
           style={{ position: "absolute", left: 0, right: 0, top: 0, display: "flex", height: 40, alignItems: "flex-start", justifyContent: "center", padding: "8px 0 0", background: "transparent", border: 0, cursor: "inherit", zIndex: 1 }}>
           <span aria-hidden="true" style={{ width: 36, height: 4, borderRadius: "var(--radius-pill)", background: "var(--control-edge)" }} />
-        </button>
+        </Button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 30, padding: "20px 14px 6px" }}>
           <h2 style={{ margin: 0, fontSize: 14, lineHeight: "18px", fontWeight: 600 }}>{title}</h2>
         </div>
@@ -164,10 +165,10 @@ export function MiniPlayer({ run, inline = false }: { run: RunManifest; /** Insi
     : { flex: "none", display: "flex", alignItems: "center", gap: 12, height: PLAYER_H, padding: "0 14px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", position: "relative", zIndex: 3 };
   return (
     <div data-tour="player" role="group" aria-label="Run player" style={shell}>
-      <button type="button" aria-label={playing ? "Pause" : "Play"} onClick={() => clock.set(playing ? { playing: false } : t_s >= durS ? { t_s: 0, playing: true } : { playing: true })}
+      <Button variant="raised" type="button" aria-label={playing ? "Pause" : "Play"} onClick={() => clock.set(playing ? { playing: false } : t_s >= durS ? { t_s: 0, playing: true } : { playing: true })}
         style={{ width: 40, height: 40, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "var(--radius-md)", ...raisedButton, cursor: "pointer" }}>
         {playing ? <Pause size={16} weight="fill" /> : <Play size={16} weight="bold" />}
-      </button>
+      </Button>
       <span style={{ flex: "none", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, ...FIG }}>{fmtT(t_s)}</span>
       <div ref={track} role="slider" tabIndex={0} aria-label="Time in the run" aria-valuemin={0} aria-valuemax={Math.round(durS)} aria-valuenow={Math.round(t_s)} aria-valuetext={fmtT(t_s)}
         onKeyDown={onKey} onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seek(e.clientX); }} onPointerMove={(e) => { if (e.buttons) seek(e.clientX); }}

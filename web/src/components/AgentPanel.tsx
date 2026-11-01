@@ -12,6 +12,7 @@ import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
 import { TextField } from "./controls/TextField";
+import { Button } from "./controls/Button";
 
 // Server error codes (dryrun/api/errors.py) that the fake agent sidesteps.
 const FAKE_HELPS = ["llm_auth", "llm_not_configured", "llm_unavailable"];
@@ -138,7 +139,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
         {replays.length > 0 && (
           <Card title="Recorded sessions">
             {replays.map((r) => (
-              <button key={r.question} type="button" onClick={() => { setQ(r.question); setProvider("replay"); }}
+              <Button variant="text" key={r.question} type="button" onClick={() => { setQ(r.question); setProvider("replay"); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: 0, borderBottom: "1px solid var(--hairline)", background: "transparent",
                   color: "var(--ink)", font: "inherit", textAlign: "left" }}>
                 <ClockCounterClockwise size={18} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />
@@ -147,7 +148,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
                   <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.model} · {fmtRecorded(r.recorded_at)}</span>
                 </span>
                 <Badge>Replay</Badge>
-              </button>
+              </Button>
             ))}
           </Card>
         )}

@@ -17,6 +17,7 @@ import {
   PatchData, WATER_LIFT_M, firstSettledIndex, frameIndex, loadPatch, closeup, setCloseUp, setShow, useCloseUp, volumeCaveat,
 } from "../lib/patch3d";
 import { Tooltip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -270,10 +271,10 @@ export function CloseUpMap({ viewer, scene, anchors, runId, runsBase, buildingsU
               <div style={pill} data-declutter-phone={3}><span style={{ fontWeight: 600 }}>{p.label ?? "3D close-up"}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>{p.size_m} m box · {p.cell_m} m cells</span></div>
             ) : (
-              <Tooltip text="Open the 3D close-up"><button type="button" data-tour="closeup" data-declutter-phone={2} onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
+              <Tooltip text="Open the 3D close-up"><Button variant="raised" type="button" data-tour="closeup" data-declutter-phone={2} onClick={() => setCloseUp({ active: p.patch_id, status: "loading", data: null })}
                 style={{ ...pill, flexDirection: "row", alignItems: "center", gap: 6, pointerEvents: "auto", cursor: "pointer", ...raisedButton, borderRadius: "var(--radius-md)", height: 26, padding: "0 9px 0 7px", fontSize: 12, fontWeight: 600 }}>
                 <Cube size={14} weight="bold" />3D close-up · {p.size_m} m box
-              </button></Tooltip>
+              </Button></Tooltip>
             )}
           </Anchored>
         );
@@ -321,9 +322,9 @@ const back = () => setCloseUp({ active: null });
 function BackButton() {
   return (
     <div style={{ padding: "10px 2px 4px", borderTop: "1px solid var(--hairline)", marginTop: 4 }}>
-      <button type="button" onClick={back} style={{ ...raisedButton, height: 32, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500 }}>
+      <Button variant="raised" type="button" onClick={back} style={{ ...raisedButton, height: 32, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 8, borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500 }}>
         <ArrowLeft size={14} weight="bold" />Back to the area
-      </button>
+      </Button>
     </div>
   );
 }
@@ -426,11 +427,11 @@ export function CloseUpDock() {
         <div style={{ display: "flex", flexDirection: "column" }}>
           <Band title="3D close-up" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>10 minutes around the 2D peak</span>} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px 8px 14px" }}>
-            <button type="button" aria-label="Play" aria-pressed={playing} style={{ ...sq, ...(playing ? pressed : raisedButton) }}
+            <Button variant="raised" type="button" aria-label="Play" aria-pressed={playing} style={{ ...sq, ...(playing ? pressed : raisedButton) }}
               onClick={() => { if (fi >= n - 1) clock.set({ t_s: m.frames[settled].t_s, playing: false }); setCloseUp({ playing: true }); }}>
-              {svg12(<path d="M3 1.8v8.4L10 6z" fill="currentColor" />)}</button>
-            <button type="button" aria-label="Pause" aria-pressed={!playing} style={{ ...sq, ...(!playing ? pressed : raisedButton) }} onClick={() => setCloseUp({ playing: false })}>
-              {svg12(<><rect x="2.5" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /><rect x="7" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /></>)}</button>
+              {svg12(<path d="M3 1.8v8.4L10 6z" fill="currentColor" />)}</Button>
+            <Button variant="raised" type="button" aria-label="Pause" aria-pressed={!playing} style={{ ...sq, ...(!playing ? pressed : raisedButton) }} onClick={() => setCloseUp({ playing: false })}>
+              {svg12(<><rect x="2.5" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /><rect x="7" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /></>)}</Button>
             <span style={{ ...FIG }}>Frame {fi + 1} of {n} · every {Math.round(step)} s</span>
             <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>Same clock as the area run, inside {fmtT(t0)} → {fmtT(tN)}</span>
           </div>

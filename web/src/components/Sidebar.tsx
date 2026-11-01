@@ -33,6 +33,7 @@ import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
 import { TextField } from "./controls/TextField";
 import { Tooltip, Tip } from "./controls/Tooltip";
+import { Button as CtlButton } from "./controls/Button";
 const GpuCard = lazyNamed(() => import("./GpuCard"), "GpuCard");
 
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
@@ -53,8 +54,8 @@ function Tabs({ tabs, active, onTab }: { tabs: readonly Tab[]; active: Tab; onTa
         const st: CSSProperties = on
           ? { color: "var(--ink)", fontWeight: 600, background: "var(--raised-bg)", boxShadow: "inset 0 -2px 0 var(--ink), inset 0 1px 0 var(--elev-hi)", borderRadius: "var(--radius-md) var(--radius-md) 0 0", padding: pad }
           : { color: "var(--ink-muted)", fontWeight: 400, padding: pad };
-        return <button key={n} type="button" data-tour={n === "Scenario" ? "scenario" : n === "Layers" ? "layers" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
-          style={{ height: 38, marginRight: tight ? 0 : 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", whiteSpace: "nowrap", ...st }}>{n}</button>;
+        return <CtlButton variant="text" key={n} type="button" data-tour={n === "Scenario" ? "scenario" : n === "Layers" ? "layers" : undefined} aria-current={on ? "page" : undefined} onClick={() => onTab(n)}
+          style={{ height: 38, marginRight: tight ? 0 : 4, marginTop: 6, background: "transparent", border: 0, font: "inherit", whiteSpace: "nowrap", ...st }}>{n}</CtlButton>;
       })}
     </nav>
   );
@@ -100,7 +101,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "drains", name: "Drains", thumb: DRAINS_T, note: "How full" },
 ];
 
-const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit",
+const seg = (on: boolean) => ({ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none",
   ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) });
 const KEY_NOTE = "Google imagery needs the judge key.";
 
@@ -122,8 +123,8 @@ function AerialSourceRow() {
         Aerial
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["bing", "google"] as const).map((a) => (
-            <Tooltip key={a} text={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"}><button type="button" aria-pressed={lay.aerial === a} disabled={!aerial} onClick={() => pick(a)} style={seg(lay.aerial === a)}>
-              {a === "bing" ? "Bing" : "Google"}</button></Tooltip>
+            <Tooltip key={a} text={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"}><CtlButton variant="segment" pressed={lay.aerial === a} type="button" disabled={!aerial} onClick={() => pick(a)} style={seg(lay.aerial === a)}>
+              {a === "bing" ? "Bing" : "Google"}</CtlButton></Tooltip>
           ))}
         </span>
       </div>
@@ -132,9 +133,9 @@ function AerialSourceRow() {
         <form onSubmit={(e) => { e.preventDefault(); if (key.trim() && !lock) { setJudgeKey(key.trim()); setAerial("google"); } }} style={{ display: "flex", gap: 6 }}>
           <TextField ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
             style={{ flex: 1, height: 28, padding: "0 8px", fontSize: 12 }} />
-          <button type="submit" disabled={!key.trim() || !!lock} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
+          <CtlButton variant="raised" type="submit" disabled={!key.trim() || !!lock} style={{ height: 28, padding: "0 10px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
             background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500,
-            cursor: lock ? "default" : "pointer", opacity: lock ? 0.6 : 1 }}>Use Google</button>
+            cursor: lock ? "default" : "pointer", opacity: lock ? 0.6 : 1 }}>Use Google</CtlButton>
         </form>
       )}
       {needKey && lock && <LockoutNote lock={lock} />}
@@ -167,9 +168,9 @@ function LayersCard() {
                 </>
               ) : r.key === "closeups" ? (
                 // The box may be off screen, so the row can open it too.
-                <button type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
+                <CtlButton variant="raised" type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
                   style={{ height: 24, padding: "0 9px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-                  Open</button>
+                  Open</CtlButton>
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
             </span>
           </div></Tip>
@@ -180,9 +181,9 @@ function LayersCard() {
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["photoreal", "aerial"] as const).map((m) => {
             const on = lay.basemap === m;
-            return <Tooltip key={m} text={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}><button type="button" aria-pressed={on} onClick={() => setBasemap(m)}
-              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
-              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</button></Tooltip>;
+            return <Tooltip key={m} text={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" onClick={() => setBasemap(m)}
+              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
+              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</CtlButton></Tooltip>;
           })}
         </span>
       </div>
@@ -192,9 +193,9 @@ function LayersCard() {
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["colour", "greyscale"] as const).map((m) => {
             const on = imageryMode === m;
-            return <button key={m} type="button" aria-pressed={on} disabled={lay.basemap !== "aerial"} onClick={() => setImageryMode(m)}
-              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
-              {m === "colour" ? "Colour" : "Greyscale"}</button>;
+            return <CtlButton variant="segment" pressed={on} key={m} type="button" disabled={lay.basemap !== "aerial"} onClick={() => setImageryMode(m)}
+              style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
+              {m === "colour" ? "Colour" : "Greyscale"}</CtlButton>;
           })}
         </span>
       </div>
@@ -224,8 +225,8 @@ function WaypointsCard() {
                 <WaypointDetails lon={w.lon} lat={w.lat} info={info[w.id]} />
               </span>
               <span style={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
-                <Tooltip text="Fly to"><button type="button" aria-label={`Fly to waypoint ${w.n}`} onClick={() => setFocus({ lon: w.lon, lat: w.lat })} style={ib}><Crosshair size={14} weight="bold" /></button></Tooltip>
-                <Tooltip text="Remove"><button type="button" aria-label={`Remove waypoint ${w.n}`} onClick={() => removeWaypoint(w.id)} style={ib}><X size={14} weight="bold" /></button></Tooltip>
+                <Tooltip text="Fly to"><CtlButton variant="icon" type="button" aria-label={`Fly to waypoint ${w.n}`} onClick={() => setFocus({ lon: w.lon, lat: w.lat })} style={ib}><Crosshair size={14} weight="bold" /></CtlButton></Tooltip>
+                <Tooltip text="Remove"><CtlButton variant="icon" type="button" aria-label={`Remove waypoint ${w.n}`} onClick={() => removeWaypoint(w.id)} style={ib}><X size={14} weight="bold" /></CtlButton></Tooltip>
               </span>
             </li>
           ))}
@@ -427,12 +428,10 @@ const icon15 = { size: 15, weight: "bold" as const, "aria-hidden": true, style: 
 
 function SimulateButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick}
-      style={{ ...btn, opacity: disabled ? 0.6 : 1, fontWeight: 600, color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)",
-        background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)" }}>
+    <CtlButton variant="danfo" type="button" disabled={disabled} onClick={onClick}
+      style={{ ...btn, fontWeight: 600 }}>
       <Play size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Simulate
-    </button>
+    </CtlButton>
   );
 }
 
@@ -478,7 +477,7 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
         <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)", fontSize: 12, ...FIG }}>
           <span>{sim.starting ? "" : model}</span>
           <span style={{ marginLeft: "auto" }}>
-            <button type="button" onClick={onStop} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Stop</button>
+            <CtlButton variant="raised" type="button" onClick={onStop} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Stop</CtlButton>
           </span>
         </div>
         <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>
@@ -506,7 +505,7 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
         {sim.state === "live" && <span style={{ flexBasis: "100%", order: 3, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>Settings lock until it finishes; Stop unlocks them.</span>}
         <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           {(sim.state === "done" || canClear) && (
-            <button type="button" onClick={onClear} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Broom size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Clear simulation</button>
+            <CtlButton variant="raised" type="button" onClick={onClear} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Broom size={14} weight="bold" aria-hidden="true" style={{ flex: "none" }} />Clear simulation</CtlButton>
           )}
           <SimulateButton disabled={off} onClick={onSimulate} />
         </span>
@@ -614,8 +613,8 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
       <div ref={scroller} style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
         {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
-          <button type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
-            color: "var(--ink-muted)", font: "inherit", fontSize: 13, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>Sources and credits</button>
+          <CtlButton variant="text" type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
+            color: "var(--ink-muted)", font: "inherit", fontSize: 13, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>Sources and credits</CtlButton>
         )}
         {tab === "Timeline" && timeline}
         {tab === "Inspect" && inspect}

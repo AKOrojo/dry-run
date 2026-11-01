@@ -14,6 +14,7 @@ import { assemblePatch, setCloseUp } from "../lib/patch3d";
 import type { PatchRow } from "../lib/patch3d";
 import { Card, FIG, raisedButton, Segmented } from "./rev5";
 import { Slider } from "./controls/Slider";
+import { Button } from "./controls/Button";
 
 const MEM_KEY = "dr_gpu_mb";
 const CELLS = [0.5, 1, 2, 4];
@@ -181,9 +182,9 @@ export function GpuCard({ run, aoi, buildingsUrl, onDemo }: { run?: RunManifest;
                     ))}
                   </ol>
                   {onDemo && (
-                    <button type="button" onClick={openDemo} disabled={demo.busy} style={{ ...btn, ...raisedButton, alignSelf: "flex-start", fontWeight: 600, opacity: demo.busy ? 0.6 : 1 }}>
+                    <Button variant="raised" type="button" onClick={openDemo} disabled={demo.busy} style={{ ...btn, ...raisedButton, alignSelf: "flex-start", fontWeight: 600 }}>
                       <PlayCircle {...icon} />{demo.busy ? "Opening the demo run…" : "Open the demo run"}
-                    </button>
+                    </Button>
                   )}
                   {demo.err && <p role="alert" style={{ ...muted, color: "var(--hazard)" }}>{demo.err}</p>}
                 </div>
@@ -221,22 +222,20 @@ export function GpuCard({ run, aoi, buildingsUrl, onDemo }: { run?: RunManifest;
                   <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)", fontSize: 12, ...FIG }}>
                     <span>{clock(elapsed)} · {eta != null ? `about ${dur(eta)} left` : "estimating"}</span>
                     <span style={{ marginLeft: "auto" }}>
-                      <button type="button" onClick={abortSolve} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop {...icon} />Stop</button>
+                      <Button variant="raised" type="button" onClick={abortSolve} style={{ ...btn, ...raisedButton, fontWeight: 500 }}><Stop {...icon} />Stop</Button>
                     </span>
                   </div>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <button type="button" disabled={!canRun} onClick={start}
-                    style={{ ...btn, opacity: canRun ? 1 : 0.6, fontWeight: 600, color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)",
-                      background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)",
-                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)" }}>
+                  <Button variant="danfo" type="button" disabled={!canRun} onClick={start}
+                    style={{ ...btn, fontWeight: 600 }}>
                     <Cube {...icon} />Run 3D here
-                  </button>
-                  <button type="button" disabled={!runId} aria-pressed={box.picking} onClick={() => setGpuBox({ picking: !box.picking })}
-                    style={{ ...btn, ...raisedButton, fontWeight: 500, opacity: runId ? 1 : 0.6 }}>
+                  </Button>
+                  <Button variant="raised" type="button" disabled={!runId} aria-pressed={box.picking} onClick={() => setGpuBox({ picking: !box.picking })}
+                    style={{ ...btn, ...raisedButton, fontWeight: 500 }}>
                     <Crosshair {...icon} />{box.picking ? "Click the map" : "Pick the box on the map"}
-                  </button>
+                  </Button>
                 </div>
               )}
             </>

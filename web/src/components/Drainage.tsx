@@ -18,6 +18,7 @@ import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, Field, FIG, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 import { Tooltip, Tip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 const hint: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
 const MM_PER_IN = 25.4;
@@ -543,10 +544,10 @@ const m3 = (v: number) => { const r = v >= 10000 ? 1000 : v >= 100 ? 10 : 1; ret
 export function SideSwitch({ to, onClick }: { to: "events" | "water"; onClick: () => void }) {
   const label = to === "events" ? "Key events" : "Where the water went";
   return (
-    <Tooltip text={label}><button type="button" aria-label={label} onClick={onClick}
+    <Tooltip text={label}><Button variant="raised" type="button" aria-label={label} onClick={onClick}
       style={{ marginLeft: to === "events" ? "auto" : 0, width: 26, height: 26, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, ...raisedButton, borderRadius: "var(--radius-md)", cursor: "pointer" }}>
       {to === "events" ? <ListBullets size={14} weight="bold" /> : <Drop size={14} weight="bold" />}
-    </button></Tooltip>
+    </Button></Tooltip>
   );
 }
 

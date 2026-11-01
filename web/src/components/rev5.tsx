@@ -4,6 +4,7 @@ import { Barricade, Drop, CloudSlash, Lock, TrafficCone, Waves } from "@phosphor
 import { Slider } from "./controls/Slider";
 import { NumberField } from "./controls/NumberField";
 import { Tooltip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 export const FIG: CSSProperties = { fontVariantNumeric: "tabular-nums" };
 export const mono = "var(--font-mono)";
@@ -69,8 +70,8 @@ export function Card({ title, right, children }: { title: string; right?: ReactN
 }
 
 export function TextAction({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
-  return <button type="button" onClick={onClick} style={{ marginLeft: "auto", padding: "3px 6px", background: "transparent", border: 0,
-    borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500 }}>{children}</button>;
+  return <Button variant="text" type="button" onClick={onClick} style={{ marginLeft: "auto", padding: "3px 6px", background: "transparent", border: 0,
+    borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500 }}>{children}</Button>;
 }
 
 export const srOnly: CSSProperties = { position: "absolute", opacity: 0, width: 1, height: 1, margin: 0, pointerEvents: "none" };
@@ -98,11 +99,11 @@ export function Segmented<T extends string>({ options, active, onChange, size = 
       {options.map((o) => {
         const on = o.value === active;
         return (
-          <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
+          <Button variant="segment" pressed={on} key={o.value} type="button" onClick={() => onChange(o.value)}
             style={{ flex: 1, height: 26, padding: "0 8px", border: 0, borderRadius: 3, font: "inherit", fontSize: size, whiteSpace: "nowrap",
               ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
             {o.label}
-          </button>
+          </Button>
         );
       })}
     </div>

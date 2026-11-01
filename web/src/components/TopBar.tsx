@@ -15,6 +15,7 @@ import type { Breakpoint } from "../lib/breakpoint";
 import { Tooltip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
+import { Button } from "./controls/Button";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
 const PATTERN_TEXT = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" } as const;
@@ -25,14 +26,14 @@ function ModeTab({ name, Ic, active, badge, onClick, h = 28 }: { name: Mode; Ic:
     ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", border: "1px solid var(--hairline)", fontWeight: 600 }
     : { background: "transparent", color: "var(--ink-muted)", border: "1px solid transparent" };
   return (
-    <button type="button" data-tour={name === "Agent" ? "agent" : name === "Compare" ? "compare" : undefined} aria-current={active ? "page" : undefined} onClick={onClick}
+    <Button variant="text" type="button" data-tour={name === "Agent" ? "agent" : name === "Compare" ? "compare" : undefined} aria-current={active ? "page" : undefined} onClick={onClick}
       style={{ height: h, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", borderRadius: 3, font: "inherit", ...st }}>
       <Ic size={15} weight="bold" style={{ flex: "none" }} />{name}
       {!!badge && (
         <span style={{ minWidth: 18, height: 18, padding: "0 5px", display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--hazard)",
           color: "var(--on-hazard)", borderRadius: "var(--radius-pill)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 1px 2px var(--elev-drop)", fontSize: 11, fontWeight: 600, ...FIG }}>{badge}</span>
       )}
-    </button>
+    </Button>
   );
 }
 
@@ -41,10 +42,10 @@ const iconBtn: CSSProperties = { width: 40, height: 40, flex: "none", display: "
 
 // The header's menus (board 11 Menu): View, Share, and the ⋮ overflow on a phone or tablet.
 const headerTrigger = (name: string, Ic: Icon) => (p: MenuTriggerProps) => (
-  <button {...p} type="button" style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0,
+  <Button variant="text" {...p} type="button" style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0,
     color: p["aria-expanded"] ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
     <Ic size={15} weight="bold" />{name}<CaretDown size={12} weight="bold" />
-  </button>
+  </Button>
 );
 
 function ViewMenu({ theme, onTheme, onTour }: { theme: Theme; onTheme: (t: Theme) => void; onTour: () => void }) {
@@ -130,10 +131,10 @@ function OverflowMenu({ layout, mode, onMode, agentRuns, storm, theme, onTheme, 
     <>
       <Menu label="More" items={items} trigger={(p) => (
         <Tooltip text="More">
-          <button {...p} type="button" data-tour="menu" aria-label="More"
+          <Button variant="icon" {...p} type="button" data-tour="menu" aria-label="More"
             style={{ ...iconBtn, color: p["aria-expanded"] ? "var(--ink)" : "var(--ink-muted)" }}>
             <DotsThreeVertical size={18} weight="bold" />
-          </button>
+          </Button>
         </Tooltip>
       )} />
       {status && <span role="status" aria-live="polite" style={{ position: "fixed", top: 54, right: 12, zIndex: 20, maxWidth: "calc(100vw - 24px)", padding: "6px 10px", whiteSpace: "normal",
@@ -182,10 +183,10 @@ export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rain
             <ModeTab name="Compare" Ic={Columns} active={mode === "Compare"} onClick={() => onMode("Compare")} h={40} />
             <ModeTab name="Agent" Ic={ChatTeardropText} active={mode === "Agent"} badge={agentRuns} onClick={() => onMode("Agent")} h={40} />
           </nav>
-          <Tooltip text="Side panel"><button type="button" data-tour="viewshare" aria-label={drawerOpen ? "Hide the side panel" : "Show the side panel"} aria-expanded={drawerOpen} onClick={onDrawer}
+          <Tooltip text="Side panel"><Button variant="icon" type="button" data-tour="viewshare" aria-label={drawerOpen ? "Hide the side panel" : "Show the side panel"} aria-expanded={drawerOpen} onClick={onDrawer}
             style={{ ...iconBtn, ...(drawerOpen ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)" } : { color: "var(--ink-muted)" }) }}>
             <Layout size={18} weight="bold" />
-          </button></Tooltip>
+          </Button></Tooltip>
         </>}
         <OverflowMenu layout={layout} mode={mode} onMode={onMode} agentRuns={agentRuns} storm={storm} theme={theme} onTheme={pickTheme} onTour={onTour}
           onCopyLink={onCopyLink} onSaveImage={onSaveImage} />
@@ -212,14 +213,14 @@ export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rain
       <span data-tour="viewshare" style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <ViewMenu theme={theme} onTheme={pickTheme} onTour={onTour} /><ShareMenu onCopyLink={onCopyLink} onSaveImage={onSaveImage} />
       </span>{vr}
-      <Tooltip text="Take the tour"><button type="button" aria-label="Take the tour" onClick={onTour}
+      <Tooltip text="Take the tour"><Button variant="icon" type="button" aria-label="Take the tour" onClick={onTour}
         style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)", padding: 0 }}>
         <Question size={16} weight="bold" />
-      </button></Tooltip>
-      <button type="button" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} onClick={toggle}
+      </Button></Tooltip>
+      <Button variant="icon" type="button" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} onClick={toggle}
         style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)", padding: 0 }}>
         <Toggle size={16} weight="bold" />
-      </button>
+      </Button>
     </header>
   );
 }

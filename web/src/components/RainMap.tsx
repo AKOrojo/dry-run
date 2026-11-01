@@ -10,6 +10,7 @@ import type { LonLat } from "../lib/rain";
 import type { Storm } from "../lib/api";
 import { sim } from "../lib/simstate";
 import { Tooltip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
 const card: CSSProperties = {
@@ -240,7 +241,7 @@ export function RainMap({ viewer, scene, anchors, basemap, opacity, hasRun, stor
             </span>
           </Anchored>
           <Anchored anchors={anchors} scene={scene} lon={centre[0]} lat={centre[1]}>
-            <Tooltip text="Drag to move the storm"><button type="button" aria-label="Storm centre: drag to move" onPointerDown={(e) => drag(e, moveCentre)}
+            <Tooltip text="Drag to move the storm"><Button variant="icon" type="button" aria-label="Storm centre: drag to move" onPointerDown={(e) => drag(e, moveCentre)}
               style={{ position: "absolute", left: -11, top: -11, width: 22, height: 22, padding: 0, borderRadius: "50%", cursor: "grab", pointerEvents: "auto", touchAction: "none",
                 background: "var(--danfo)", border: "3px solid var(--ground)", boxShadow: "0 0 0 2px var(--danfo), var(--shadow-float)" }} /></Tooltip>
           </Anchored>
@@ -269,7 +270,7 @@ function clampTo(p: LonLat, b: [number, number, number, number] | null): LonLat 
 function RingHandle({ anchors, scene, at, label, onDown }: { anchors: React.MutableRefObject<Anchors>; scene: Cesium.Scene; at: LonLat; label: string; onDown: (e: RPointerEvent<HTMLElement>) => void }) {
   return (
     <Anchored anchors={anchors} scene={scene} lon={at[0]} lat={at[1]}>
-      <Tooltip text="Drag to resize"><button type="button" aria-label="Storm radius: drag to resize" onPointerDown={onDown}
+      <Tooltip text="Drag to resize"><Button variant="icon" type="button" aria-label="Storm radius: drag to resize" onPointerDown={onDown}
         style={{ position: "absolute", left: -8, top: -8, width: 16, height: 16, padding: 0, borderRadius: "50%", cursor: "ew-resize", pointerEvents: "auto", touchAction: "none",
           background: "var(--ground)", border: "2px solid var(--danfo)", boxShadow: "var(--shadow-float)" }} /></Tooltip>
       <span style={{ ...card, position: "absolute", left: 14, top: 10, fontSize: 11, lineHeight: "14px", fontWeight: 600, ...FIG }}>{label}</span>
@@ -300,11 +301,11 @@ function TipHandle({ anchors, scene, at, heading, onDown }: { anchors: React.Mut
     return () => { anchors.current.delete(update); };
   }, [scene, anchors, at[0], at[1], heading]);
   return (
-    <Tooltip text="Drag to steer"><button ref={el} type="button" aria-label="Storm heading: drag to steer" onPointerDown={onDown}
+    <Tooltip text="Drag to steer"><Button variant="icon" ref={el} type="button" aria-label="Storm heading: drag to steer" onPointerDown={onDown}
       style={{ position: "absolute", left: 0, top: 0, width: 26, height: 26, padding: 0, background: "transparent", border: 0, cursor: "grab", pointerEvents: "auto", touchAction: "none", willChange: "transform" }}>
       <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true" style={{ display: "block", filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.5))" }}>
         <path d="M13 2 L22 22 L13 17 L4 22 Z" fill="var(--danfo)" stroke="var(--ground)" strokeWidth="1.5" strokeLinejoin="round" />
       </svg>
-    </button></Tooltip>
+    </Button></Tooltip>
   );
 }
