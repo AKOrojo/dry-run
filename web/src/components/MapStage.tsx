@@ -29,6 +29,7 @@ import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
 import { firstDryAfter, fmtEta, fmtKm, nearestFrame, safeRoute, setSafeRoute, startSafeRoute, useSafeRoute } from "../lib/saferoute";
 import type { Spot } from "../lib/saferoute";
+import type { RouteResult } from "../contracts/gen/RouteResult";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { lazyNamed } from "../lib/lazy";
@@ -1079,7 +1080,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const srTimes = useMemo(() => (frames ?? []).map((f) => f.t_s), [frames]);
   const srTimesKey = srTimes.join(",");
   const srFrame = nearestFrame(srTimes, tS);
-  const srPassM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
+  const srCache = useRef(new Map<string, Promise<RouteResult>>());
+  const srPassM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : IMPASSABLE_M;
   useEffect(() => {
     if (!srOrigin || !runId || !doneRun) return;
     const ctl = new AbortController();
@@ -1091,7 +1093,17 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   useEffect(() => {
     if (!srOrigin || !runId || !doneRun || srFrame == null) return;
     const ctl = new AbortController(), t = srFrame;
-    const at = (f: number) => postRoute({ run_id: runId, t_s: f, origin: srOrigin, destination: null }, ctl.signal);
+    // One request per run, start and frame: playback and scrubbing come back to the same frames.
+    const at = (f: number) => {
+      const k = `${runId}|${srOrigin.join(",")}|${f}`;
+      let p = srCache.current.get(k);
+      if (!p) {
+        p = postRoute({ run_id: runId, t_s: f, origin: srOrigin, destination: null });
+        p.catch(() => srCache.current.delete(k));
+        srCache.current.set(k, p);
+      }
+      return p.then((r) => { if (ctl.signal.aborted) throw new DOMException("aborted", "AbortError"); return r; });
+    };
     const timer = setTimeout(() => {
       setSafeRoute({ loading: true, error: null });
       at(t)
