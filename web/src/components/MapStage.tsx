@@ -50,6 +50,7 @@ import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 import { Button } from "./controls/Button";
+import { labelWidth, thinTicks } from "../lib/ticks";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -341,11 +342,13 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   const km = nice >= 1000;
   const f = (n: number) => String(km ? n / 1000 : n);
   const unit = km ? " km" : " m";
+  // The middle label goes when the labels would run together (the same rule as the chart axes); the ends always show.
+  const mid = thinTicks([0, px / 2, px], ["0", f(nice / 2), `${f(nice)}${unit}`].map((t) => labelWidth(t, 11)), px, ["middle", "middle", "middle"]).includes(1);
   return (
     <div aria-label={`Scale ${f(nice)}${unit}`} style={{ position: "relative", width: px, height: 28, marginRight: 10, color: "var(--ink)", fontSize: 11, ...FIG,
       textShadow: "0 0 3px var(--ground), 0 0 1px var(--ground)" }}>
       <span style={{ position: "absolute", left: 0, top: 0, transform: "translateX(-50%)" }}>0</span>
-      <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>
+      {mid && <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>}
       <span style={{ position: "absolute", right: 0, top: 0, transform: "translateX(50%)", whiteSpace: "nowrap" }}>{f(nice)}{unit}</span>
       <svg width={px} height="10" viewBox={`0 0 ${px} 10`} style={{ position: "absolute", left: 0, bottom: 0, overflow: "visible" }} aria-hidden="true">
         <path d={`M1 1v8 M${px - 1} 1v8 M1 6h${px - 2}`} stroke="var(--ground)" strokeWidth="4" strokeLinecap="round" fill="none" />
