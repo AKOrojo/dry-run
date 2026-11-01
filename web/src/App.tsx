@@ -516,6 +516,9 @@ export default function App() {
     if (bp === "phone") { if (sheet !== phoneOf(t)) setSnap("half"); setSheet(phoneOf(t)); }
     else if (bp === "tablet") setDrawer(true);
   };
+  // The "3D city unavailable" chip's Details opens Layers (the sheet on a phone, the drawer on a tablet).
+  const basemapFocus = useLayers().basemapFocus;
+  useEffect(() => { if (basemapFocus) openSide("Layers"); }, [basemapFocus]);  // eslint-disable-line react-hooks/exhaustive-deps
   /** The tour opens the sheet or drawer its step points into, and closes it for steps on the map or the header. */
   const tourStep = (id: string) => {
     const where: Record<string, PhoneTab> = { scenario: "Scenario", rain: "Scenario", "rain-domain": "Scenario", drainage: "Scenario", simulate: "Scenario", "sim-status": "Scenario",

@@ -204,7 +204,7 @@ function LayersCard() {
           </div></Tip>
         );
       })}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
+      <div data-basemap-row="" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
         Base map
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["photoreal", "aerial"] as const).map((m) => {
@@ -602,6 +602,22 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     setTab(now);
   }, [comparing, agentMode]);
   useEffect(() => { if (inspectFocus) setTab("Inspect"); }, [inspectFocus]);
+  // The map chip's Details: Layers, scrolled to the Base map row with its pressed choice focused.
+  const basemapFocus = useLayers().basemapFocus;
+  useEffect(() => {
+    if (!basemapFocus) return;
+    setTab("Layers");
+    // The Layers card may mount a few frames later (a lazy chunk, the phone sheet opening): look for the row for up to ~1 s.
+    let tries = 0, raf = 0;
+    const find = () => {
+      const row = document.querySelector<HTMLElement>("[data-basemap-row]");
+      const btn = row?.querySelector<HTMLElement>('button[aria-pressed="true"]');
+      if (row && btn) { row.scrollIntoView({ block: "center" }); btn.focus(); return; }
+      if (++tries < 60) raf = requestAnimationFrame(find);
+    };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [basemapFocus]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
