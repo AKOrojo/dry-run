@@ -20,7 +20,7 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div role="alert" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "var(--ground)", ...this.props.style }}>
+      <div role="alert" className="dr-fallback" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "var(--ground)", ...this.props.style }}>
         <div style={{ width: "100%", maxWidth: 360 }}>
           <Card title={`The ${this.props.name} stopped`}>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 14 }}>

@@ -71,6 +71,8 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 .dr-app.bp-phone .dr-main { position: relative; display: block; flex: 1 1 auto; min-height: 0; }
 .dr-app.bp-phone .dr-map { position: absolute; inset: 0; }
 .dr-app.bp-phone .dr-badges { top: 112px; left: 12px; }
+/* A crashed map's card sits at the top of the map, clear of an open sheet, so Reload stays in view. */
+.dr-app.bp-phone .dr-map .dr-fallback { align-items: flex-start !important; }
 /* Touch targets in the sheets: every control at least 40 px tall (the cards are the desktop cards). */
 .dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"], input:not([type="range"]):not([type="checkbox"]):not([type="radio"])),
 .dr-app.bp-phone .dr-sheet-body li[title], .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
