@@ -10,7 +10,7 @@ import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
 import { PhotorealChip } from "./PhotorealChip";
-import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
+import { API, getBuildingDepths, getPointInfo, getPointSeries, postRoute, SERIES_DEBOUNCE_MS } from "../lib/api";
 import type { AOIManifest, PointInfo, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
 import { setFocus, useFocus } from "../lib/focus";
@@ -27,6 +27,8 @@ import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
 import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
+import { firstDryAfter, fmtEta, fmtKm, nearestFrame, safeRoute, setSafeRoute, startSafeRoute, useSafeRoute } from "../lib/saferoute";
+import type { Spot } from "../lib/saferoute";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { lazyNamed } from "../lib/lazy";
@@ -78,6 +80,9 @@ export type MapStageProps = {
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
 const LONG_PRESS_MS = 550;
+const SAFE_ROUTE_DEBOUNCE_MS = 250;
+/** Points sampled along the usual route to mark the ones under water (the road cuts are not in the API). */
+const SAFE_BLOCK_SAMPLES = 12;
 const MIN_PITCH = Cesium.Math.toRadians(-90);
 const WET_M = 0.15;
 const IMPASSABLE_M = 0.3;
@@ -642,6 +647,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [freeSpeed, setFreeSpeed] = useState(1);
   const route = useFlyRoute();
   const evac = useEvacLine();
+  const sr = useSafeRoute();
   const [drawing, setDrawing] = useState(false);
   const [drawPts, setDrawPts] = useState<LonLat[]>([]);
   const drawRef = useRef({ drawing: false, pts: [] as LonLat[] });
@@ -846,6 +852,11 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       const moved = Math.hypot(x - down.x, y - down.y) > 4;
       down = null;
       if (moved) return;
+      if (safeRoute.get().picking) {
+        const p = pick(x, y);
+        if (p && inAoi(p.lon, p.lat)) startSafeRoute([p.lon, p.lat]);
+        return;
+      }
       if (viewRef.current === "Plan" && onBuildingRef.current) {
         const hit = s.pick(new Cesium.Cartesian2(x, y));
         if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
@@ -1061,6 +1072,80 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     }
     return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
   }, [viewer, drawing, drawPts, route]);
+
+  // Safe route (board 12): the usual route at the dry start of the run; the route for the frame nearest the playhead, with
+  // the first dry frame after it when none is dry; then the usual-route points that are under water at that frame.
+  const srOrigin = sr.origin, srRoute = sr.route, srUsual = sr.usual, srBlocked = sr.blocked;
+  const srTimes = useMemo(() => (frames ?? []).map((f) => f.t_s), [frames]);
+  const srTimesKey = srTimes.join(",");
+  const srFrame = nearestFrame(srTimes, tS);
+  const srPassM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : 0.3;
+  useEffect(() => {
+    if (!srOrigin || !runId || !doneRun) return;
+    const ctl = new AbortController();
+    setSafeRoute({ usual: null });
+    postRoute({ run_id: runId, t_s: 0, origin: srOrigin, destination: null }, ctl.signal)
+      .then((usual) => { if (!ctl.signal.aborted) setSafeRoute({ usual }); }, () => { /* the playhead route reports errors */ });
+    return () => ctl.abort();
+  }, [srOrigin, runId, doneRun]);
+  useEffect(() => {
+    if (!srOrigin || !runId || !doneRun || srFrame == null) return;
+    const ctl = new AbortController(), t = srFrame;
+    const at = (f: number) => postRoute({ run_id: runId, t_s: f, origin: srOrigin, destination: null }, ctl.signal);
+    const timer = setTimeout(() => {
+      setSafeRoute({ loading: true, error: null });
+      at(t)
+        .then(async (route) => {
+          const clearT = route.reachable ? null : await firstDryAfter(srTimes, t, (f) => at(f).then((x) => x.reachable), ctl.signal);
+          if (!ctl.signal.aborted) setSafeRoute({ t, route, clearT, loading: false });
+        })
+        .catch((e: unknown) => {
+          if (!ctl.signal.aborted) setSafeRoute({ t, route: null, clearT: null, loading: false, error: e instanceof Error ? e.message : "The route failed." });
+        });
+    }, SAFE_ROUTE_DEBOUNCE_MS);
+    return () => { clearTimeout(timer); ctl.abort(); };
+  }, [srOrigin, runId, doneRun, srFrame, srTimesKey]);
+  useEffect(() => {
+    const path = srUsual?.path;
+    if (!runId || !doneRun || !srRoute || !path?.length || !srRoute.edges_removed) return;
+    const ctl = new AbortController(), t = srRoute.t_s;
+    const samples = Array.from({ length: SAFE_BLOCK_SAMPLES }, (_, i) => path[Math.round((i * (path.length - 1)) / (SAFE_BLOCK_SAMPLES - 1))]);
+    void Promise.all(samples.map(async ([lon, lat]) => {
+      const d = await fetchDepth(runId, lon, lat, t, ctl.signal);
+      return d && d.depth >= srPassM ? [lon, lat] as Spot : null;
+    })).then((hits) => { if (!ctl.signal.aborted) setSafeRoute({ blocked: hits.filter((h): h is Spot => h !== null) }); });
+    return () => ctl.abort();
+  }, [srRoute, srUsual, runId, doneRun, srPassM]);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !srOrigin) return;
+    const verified = cssColor("--verified"), hazard = cssColor("--hazard"), ground = cssColor("--ground"), ink = cssColor("--ink");
+    const label = { showBackground: true, backgroundColor: ground.withAlpha(0.86), fillColor: ink, font: "12px 'IBM Plex Sans', sans-serif",
+      pixelOffset: new Cesium.Cartesian2(0, -12), verticalOrigin: Cesium.VerticalOrigin.BOTTOM, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY };
+    const made: Cesium.Entity[] = [];
+    made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(srOrigin[0], srOrigin[1]),
+      point: { pixelSize: 16, color: ink, outlineColor: ground, outlineWidth: 3, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { ...label, text: "You picked here" } }));
+    if (srUsual?.path && srUsual.path.length >= 2) {
+      made.push(viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArray(srUsual.path.flat()), width: 3, clampToGround: true,
+        material: new Cesium.PolylineDashMaterialProperty({ color: hazard, dashLength: 12 }) } }));
+    }
+    if (srRoute?.reachable && srRoute.path && srRoute.path.length >= 2) {
+      made.push(viewer.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArray(srRoute.path.flat()), width: 5, clampToGround: true, material: verified } }));
+      const end = srRoute.path[srRoute.path.length - 1];
+      const details = ["shelter", ...(srRoute.length_km != null ? [fmtKm(srRoute.length_km)] : []), ...(srRoute.eta_min != null ? [fmtEta(srRoute.eta_min)] : [])];
+      made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(end[0], end[1]),
+        label: { ...label, text: [srRoute.destination_name ?? "Nearest shelter", details.join(" · ")].join("\n") } }));
+    }
+    const mark = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${hazard.toCssHexString()}" stroke="${ground.toCssHexString()}" stroke-width="2"/><path d="M6 6l6 6M12 6l-6 6" stroke="${ground.toCssHexString()}" stroke-width="2" stroke-linecap="round"/></svg>`;
+    const image = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mark)}`;
+    for (const [lon, lat] of srBlocked) {
+      made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        billboard: { image, width: 18, height: 18, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY } }));
+    }
+    return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
+  }, [viewer, srOrigin, srRoute, srUsual, srBlocked]);
 
   const dropWaypoint = useCallback((lon: number, lat: number) => {
     if (!inAoi(lon, lat)) return;
@@ -1349,7 +1434,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         )}
 
         <Menu label="Map" at={menu ? { x: menu.x, y: menu.y } : null} onClose={() => setMenu(null)} returnFocus={() => (viewer && !viewer.isDestroyed() ? viewer.canvas : null)}
-          items={menu ? [{ kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) }] : []} />
+          items={menu ? [
+            { kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) },
+            { kind: "item", label: "Safe route from here", disabled: !doneRun || !inAoi(menu.lon, menu.lat),
+              reason: !run ? "Simulate the area first to see a dry route." : !doneRun ? "Wait for the simulation to finish." : !inAoi(menu.lon, menu.lat) ? "Pick a spot inside the area." : undefined,
+              onSelect: () => startSafeRoute([menu.lon, menu.lat]) },
+          ] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {/* Top-left chip stack: the run's badge, then the "3D city unavailable" chip when Google's tiles failed. */}
@@ -1410,6 +1500,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             onClear={() => { clearFlyRoute(); setRouteReady(false); }} onClose={() => setRouteReady(false)} />
         )}
 
+        {srOrigin && srRoute && (
+          <div role="group" aria-label="Safe route legend" style={{ position: "absolute", left: phone ? 12 : 16, bottom: aboveChip + 30, display: "flex", flexDirection: "column", gap: 5,
+            padding: "8px 10px", background: "color-mix(in srgb, var(--ground) 86%, transparent)", backdropFilter: "blur(6px)", border: "1px solid var(--hairline)",
+            borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, pointerEvents: "auto" }}>
+            {srRoute.reachable && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, height: 4, borderRadius: 2, background: "var(--verified)" }} />Dry route at {fmtT(srRoute.t_s)}</span>}
+            {srUsual && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, borderTop: "3px dashed var(--hazard)" }} />Usual route, now cut</span>}
+            {srBlocked.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--hazard)" }} />Road impassable (over {srPassM} m)</span>}
+          </div>
+        )}
         {doneRun && (lay.closeups.on || closeUp.active || closeUp.local) && <CloseUpMap viewer={viewer} scene={scene} anchors={anchors} runId={doneRun} runsBase={runsBase} buildingsUrl={buildingsUrl} />}
         <GpuBoxMap viewer={viewer} scene={scene} anchors={anchors} hidden={!!closeUp.active} runKey={runId} />
         <DomainMap viewer={viewer} scene={scene} anchors={anchors} bbox={domainBbox(run, aoi?.grid.bounds_wgs84)} aoiBounds={aoi?.grid.bounds_wgs84} basemap={lay.basemap} hidden={!!closeUp.active} />

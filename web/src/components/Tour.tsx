@@ -24,6 +24,7 @@ const ALL_STEPS = [
   { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live, and how long until it starts when another run is ahead; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
+  { id: "saferoute", anchor: "map", title: "Find a dry route", body: "Right-click the map, or press Shift+F10 on it, and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { id: "marks", title: "Mark places and moments", body: "Right-click the map, or press Shift+F10 on it, to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
@@ -43,6 +44,7 @@ const TOUCH_TEXT: Record<string, Partial<Step>> = {
   map: { body: "Tap anywhere for the depth there and how it changes over time." },
   marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
   camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along." },
+  saferoute: { body: "Long-press the map and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
 };
 const PHONE_STEPS: Step[] = [
   ALL_STEPS[0],
@@ -54,6 +56,7 @@ const PHONE_STEPS: Step[] = [
   { id: "player", title: "Play the run", body: "With a run open, the player above the tabs plays and scrubs it. The number is the flooded area at that moment." },
   { ...ALL_STEPS.find((x) => x.id === "map")!, ...TOUCH_TEXT.map },
   { ...ALL_STEPS.find((x) => x.id === "camera")!, ...TOUCH_TEXT.camera },
+  { ...ALL_STEPS.find((x) => x.id === "saferoute")!, ...TOUCH_TEXT.saferoute },
   { id: "plan", title: "Inspect a building", body: "Tap 3D to switch to the 2D plan view, then tap a building for its depths and the street beside it." },
   { id: "legend", title: "What the colours mean", body: "The legend button opens the legends of the layers that are on." },
   { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },

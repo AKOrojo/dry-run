@@ -6,6 +6,8 @@ import { noteLockout } from "./lockout";
 import type { LockScope } from "./lockout";
 import type { DrainageDefault } from "../contracts/gen/AOIManifest";
 import type { Drainage } from "../contracts/gen/ScenarioSpec";
+import type { RouteRequest } from "../contracts/gen/RouteRequest";
+import type { RouteResult } from "../contracts/gen/RouteResult";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -190,6 +192,9 @@ export const getPresets = (aoiId: string) =>
 export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
   fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
 export const getRun = (id: string) => fetch(`${API}/api/runs/${encodeURIComponent(id)}`).then(j<RunManifest>);
+/** POST /api/route (Safe route): the dry path from `origin` at `t_s`; destination null = the nearest shelter. */
+export const postRoute = (req: RouteRequest, signal?: AbortSignal) =>
+  fetch(`${API}/api/route`, { method: "POST", headers: JSONH(), body: JSON.stringify(req), signal }).then(j<RouteResult>);
 
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
 export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
