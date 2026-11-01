@@ -585,11 +585,23 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   // Phone: the sticky Simulate footer covers the bottom of the scroller, so focus and scrollIntoView stop above it
   // (otherwise a control scrolled into view lands under the footer and a tap hits the footer).
   const foot = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const touched = useRef<Element | null>(null);
   const [footH, setFootH] = useState(0);
   useEffect(() => {
     const el = foot.current;
     if (!el) { setFootH(0); return; }
-    const ro = new ResizeObserver(() => setFootH(el.offsetHeight));
+    const ro = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      setFootH(h);
+      // The footer grows when a status line wraps (the estimate arriving after a change): the control just used
+      // stays above it instead of ending up under it.
+      const sc = scroller.current, focused = document.activeElement;
+      const t = sc && focused && sc.contains(focused) && focused !== sc ? focused : touched.current;
+      if (!sc || !t || !sc.contains(t) || el.contains(t) || t.getBoundingClientRect().bottom <= el.getBoundingClientRect().top) return;
+      sc.style.scrollPaddingBottom = `${h}px`;
+      t.scrollIntoView({ block: "nearest" });
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [phone, tab]);
@@ -602,7 +614,8 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   return (
     <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
-      <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
+      <div ref={scroller} onPointerDown={(e) => { touched.current = e.target instanceof Element ? e.target : null; }}
+        style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
         {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
           <button type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
