@@ -17,8 +17,10 @@ import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { useClock } from "../lib/clock";
 import { useTouch } from "../lib/breakpoint";
-import { Card, CardLock, Checkbox, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
+import { Card, CardLock, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
+import { Slider } from "./controls/Slider";
+import { Switch } from "./controls/Switch";
 import { Notice } from "./Notice";
 import { LockoutNote } from "./LockoutNote";
 import { useLockout } from "../lib/lockout";
@@ -154,15 +156,9 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <label key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", cursor: "pointer", color: on ? undefined : "var(--ink-muted)" }}>
-            {/* The native box sits invisibly on top of the drawn one, so clicks, keyboard focus and automation all reach it. */}
-            <span style={{ position: "relative", display: "flex", flex: "none" }}>
-              <input type="checkbox" checked={on} onChange={(e) => setLayer(r.key, { on: e.target.checked })}
-                style={{ position: "absolute", inset: 0, zIndex: 1, width: 16, height: 16, margin: 0, opacity: 0, cursor: "pointer" }} />
-              <Checkbox on={on} />
-            </span>
-            <span style={{ display: "flex", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
-            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+          <div key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, height: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+            <Switch fill on={on} onChange={(v) => setLayer(r.key, { on: v })} label={<><span aria-hidden="true" style={{ display: "flex", flex: "none", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></>} />
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {r.slider ? (
                 <>
@@ -176,7 +172,7 @@ function LayersCard() {
                   Open</button>
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
             </span>
-          </label>
+          </div>
         );
       })}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
@@ -378,7 +374,6 @@ function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onL
   const matters = km2.length > 1 && (Math.max(...km2) - Math.min(...km2)) / Math.max(Math.min(...km2), 1e-6) >= 0.02;
   const note = sens?.note ? sens.note[0].toUpperCase() + sens.note.slice(1) + "." : null;
   const v = level ?? -0.5;
-  const pct = ((v + 0.5) / 2.0) * 100;
   const active = PRESETS.find((p) => p.v === level)?.label ?? null;
   return (
     <Card title={aoiId?.startsWith("lagos") ? "Lagoon / sea level" : "Sea level"} right={<span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12 }}><Waves size={16} weight="bold" />Assumption</span>}>
@@ -387,16 +382,7 @@ function LevelCard({ level, onLevel, aoiId }: Pick<ScenarioProps, "level" | "onL
           <Segmented<string> size={11.5} active={active} onChange={(l) => onLevel(PRESETS.find((p) => p.label === l)!.v)}
             options={PRESETS.map((p) => ({ value: p.label, label: p.label }))} />
         </Field>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ position: "relative", display: "block", height: 24 }}>
-            <span style={{ position: "absolute", left: 0, right: 0, top: 10, height: 4, background: "var(--ground)", borderRadius: "var(--radius-pill)", boxShadow: "var(--inset-shadow)" }} />
-            <span style={{ position: "absolute", left: 0, width: `${pct}%`, top: 10, height: 4, background: "var(--depth-3)", borderRadius: "var(--radius-pill)" }} />
-            <span style={{ position: "absolute", left: `${pct}%`, top: 4, width: 16, height: 16, marginLeft: -8, borderRadius: "50%", background: "var(--raised-bg)", border: "1px solid var(--control-edge)", boxShadow: "var(--raised-shadow)" }} />
-            <input type="range" min={-0.5} max={1.5} step={0.1} value={v} aria-label="Lagoon and sea level in metres" onChange={(e) => onLevel(Math.round(+e.target.value * 10) / 10)}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, opacity: 0, cursor: "pointer" }} />
-          </span>
-          <span style={{ display: "flex", justifyContent: "space-between", color: "var(--ink-muted)", fontSize: 11, ...FIG }}><span>−0.5 m</span><span>+0.5</span><span>+1.5 m</span></span>
-        </div>
+        <Slider label={aoiId?.startsWith("lagos") ? "Lagoon / sea level" : "Sea level"} min={-0.5} max={1.5} step={0.1} value={v} text={`${v > 0 ? "+" : ""}${v.toFixed(1)} m`} lo="−0.5 m" hi="+1.5 m" onChange={onLevel} />
         <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
           {level == null ? "No tide intervention. " : `Level ${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)} m. `}
           Holds the {aoiId?.startsWith("lagos") ? "lagoon and sea edge" : "sea edge"} at one level for the whole run. A scenario level, not an observed tide. Coastal areas only.

@@ -13,7 +13,8 @@ import {
 import type { DrainCard, DrainFeature, DrainFill, DrainKind, DrainSystem, Outfall } from "../lib/drainage";
 import { Anchored } from "./Anchored";
 import type { Anchors } from "./Anchored";
-import { Slider, Toggle } from "./RainCards";
+import { Slider } from "./controls/Slider";
+import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, Field, FIG, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
 

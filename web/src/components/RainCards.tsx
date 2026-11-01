@@ -8,40 +8,12 @@ import { coord } from "./WaypointDetails";
 import { compassOf, domainSwitchVisible, effectiveCentre, isCell, setMoving, setRain, setRainMode, useRain } from "../lib/rain";
 import type { RainMode } from "../lib/rain";
 import type { RainProfile } from "../lib/api";
+import { Slider } from "./controls/Slider";
+import { Switch as Toggle } from "./controls/Switch";
 
 const ghostBtn: CSSProperties = { ...raisedButton, height: 30, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", cursor: "pointer" };
 const textBtn: CSSProperties = { padding: "3px 6px", background: "transparent", border: 0, borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" };
 const hint: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
-
-/** Slider drawn in danfo (a value the user sets), driven by an invisible native range input. */
-export function Slider({ label, value, min, max, step, text, lo, hi, onChange }: { label: string; value: number; min: number; max: number; step: number; text: string; lo: string; hi: string; onChange: (v: number) => void }) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <span style={{ display: "flex", justifyContent: "space-between", color: "var(--ink-muted)" }}><span>{label}</span><span style={{ color: "var(--ink)", fontWeight: 600, ...FIG }}>{text}</span></span>
-      <span style={{ position: "relative", display: "block", height: 24 }}>
-        <span style={{ position: "absolute", left: 0, right: 0, top: 10, height: 4, background: "var(--ground)", borderRadius: "var(--radius-pill)", boxShadow: "var(--inset-shadow)" }} />
-        <span style={{ position: "absolute", left: 0, width: `${pct}%`, top: 10, height: 4, background: "var(--danfo)", borderRadius: "var(--radius-pill)" }} />
-        <span style={{ position: "absolute", left: `${pct}%`, top: 4, width: 16, height: 16, marginLeft: -8, borderRadius: "50%", background: "var(--raised-bg)", border: "1px solid var(--control-edge)", boxShadow: "var(--raised-shadow)" }} />
-        <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(+e.target.value)}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, opacity: 0, cursor: "pointer" }} />
-      </span>
-      <span style={{ display: "flex", justifyContent: "space-between", color: "var(--ink-muted)", fontSize: 11, ...FIG }}><span>{lo}</span><span>{hi}</span></span>
-    </div>
-  );
-}
-
-export function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
-  return (
-    <label style={{ position: "relative", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-      <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} style={{ position: "absolute", zIndex: 1, opacity: 0, width: 34, height: 20, margin: 0, cursor: "pointer" }} />
-      <span aria-hidden="true" style={{ width: 34, height: 20, flex: "none", borderRadius: "var(--radius-pill)", position: "relative", boxShadow: "var(--inset-shadow)", background: on ? "var(--danfo)" : "var(--ground)" }}>
-        <span style={{ position: "absolute", top: 2, left: on ? 16 : 2, width: 16, height: 16, borderRadius: "50%", background: on ? "var(--on-danfo)" : "var(--ink-muted)" }} />
-      </span>
-      {label}
-    </label>
-  );
-}
 
 /** Click or drag the dial to set the heading the storm moves toward (0 = north, clockwise). */
 function Dial({ deg, onChange }: { deg: number; onChange: (d: number) => void }) {

@@ -13,7 +13,7 @@ import { abortSolve, boxCentre, setGpuBox, setSolveController, useGpuBox } from 
 import { assemblePatch, setCloseUp } from "../lib/patch3d";
 import type { PatchRow } from "../lib/patch3d";
 import { Card, FIG, raisedButton, Segmented } from "./rev5";
-import { Slider } from "./RainCards";
+import { Slider } from "./controls/Slider";
 
 const MEM_KEY = "dr_gpu_mb";
 const CELLS = [0.5, 1, 2, 4];

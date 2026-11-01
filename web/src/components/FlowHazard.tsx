@@ -18,7 +18,7 @@ import type { HazardLegend, LL, LoadRow, VelocityManifest } from "../lib/flowhaz
 import { Anchored } from "./Anchored";
 import type { Anchors } from "./Anchored";
 import { buildingIndex, inRing, placesOf } from "./PlanView";
-import { Toggle } from "./RainCards";
+import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, FIG, raisedButton } from "./rev5";
 import { fmtT } from "./ds";
 

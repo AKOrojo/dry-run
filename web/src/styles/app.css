@@ -37,7 +37,6 @@ body { background: var(--ground); }
 .dr-field ::placeholder { color: var(--ink-muted); }
 .dr-field select:focus-visible, .dr-field input:focus-visible, .dr-field textarea:focus-visible {
   outline: var(--stroke-focus) solid var(--focus-ring); outline-offset: 2px; }
-.dr-field input[type="range"] { width: 100%; margin: 0; accent-color: var(--danfo); }
 
 /* Notice */
 .dr-notice { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--surface-raised);
@@ -74,33 +73,28 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 /* A crashed map's card sits at the top of the map, clear of an open sheet, so Reload stays in view. */
 .dr-app.bp-phone .dr-map .dr-fallback { align-items: flex-start !important; }
 /* Touch targets in the sheets: every control at least 40 px tall (the cards are the desktop cards). */
-.dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"], input:not([type="range"]):not([type="checkbox"]):not([type="radio"])),
+/* The compact layer slider keeps its 12 px box: its .dr-hit child is the 40 px target. */
+.dr-app.bp-phone .dr-sheet-body :is(button, select, [role="combobox"], [role="slider"]:not(:has(> .dr-hit)), input:not([type="radio"])),
 .dr-app.bp-phone .dr-sheet-body li[title], .dr-app.bp-phone .dr-sheet-body ol > li { min-height: 40px; }
 .dr-app.bp-phone .dr-sheet-body label:has(> input[type="number"]) { min-height: 40px; box-sizing: border-box; }
 .dr-app.bp-tablet .dr-drawer :is(button, select, [role="combobox"]) { min-height: 40px; }
 
-.dr-app.bp-phone .dr-sheet-body label:has(input[type="checkbox"]) { min-height: 40px; }
-.dr-app.bp-phone .dr-sheet-body input[type="range"] { min-height: 41px; }
 /* The small layer slider and the map's place chips keep their look; their hit area grows to 40 px. */
 .dr-app.bp-phone .dr-sheet-body .dr-hit { top: -14px !important; bottom: -14px !important; height: auto !important; min-height: 0; }
 .dr-app.bp-phone .dr-place-label { min-height: 40px; }
 .dr-app.bp-phone .dr-place-label > span:last-child { position: relative; }
 .dr-app.bp-phone .dr-place-label > span:last-child::after { content: ""; position: absolute; inset: -8px -6px; }
 .dr-app:is(.bp-phone, .bp-tablet) > header [role="combobox"] { min-height: 40px; }
+.dr-app.bp-tablet :is(input[type="text"], input[type="search"], input:not([type])) { min-height: 41px; }
 /* Tablet: the desktop frame, with every target at least 40 px (a finger on a 768 px screen). */
-.dr-app.bp-tablet :is(button, [role="slider"], [role="combobox"], select) { min-height: 40px; min-width: 40px; }
-.dr-app.bp-tablet :is(input[type="range"], input[type="text"], input[type="search"], input:not([type])) { min-height: 41px; }
+.dr-app.bp-tablet :is(button, [role="slider"]:not(:has(> .dr-hit)), [role="combobox"], select) { min-height: 40px; min-width: 40px; }
 .dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) { min-height: 42px; box-sizing: border-box; }
 .dr-app:is(.bp-phone, .bp-tablet) label:has(> input[type="number"]) > input { align-self: stretch; }
-.dr-app.bp-tablet label:has(input[type="checkbox"]) { min-height: 40px; }
 .dr-app.bp-tablet .dr-hit { top: -14px !important; bottom: -14px !important; height: auto !important; min-height: 0; }
 .dr-app.bp-tablet .dr-place-label { min-height: 40px; min-width: 0; }
 .dr-app.bp-tablet .dr-place-label > span:last-child { position: relative; }
 .dr-app.bp-tablet .dr-place-label > span:last-child::after { content: ""; position: absolute; inset: -8px -6px; }
 .dr-app.bp-tablet .dr-compass-n { font-size: 11px !important; }
-/* The layer rows' native checkbox sits invisibly over the drawn 16 px box: on touch it covers 40 px around it. */
-.dr-app:is(.bp-phone, .bp-tablet) label > span > input[type="checkbox"] { inset: auto !important; left: -12px !important; top: -12px !important; width: 40px !important; height: 40px !important; }
-.dr-app:is(.bp-phone, .bp-tablet) label > input[role="switch"] { inset: 0 !important; width: 100% !important; height: 100% !important; }
 /* Phone: the rain label gives the map back while a sheet is open (it would sit over the half sheet's edge). */
 .dr-app.bp-phone.sheet-open .dr-rain-chip { display: none !important; }
 /* Phone on its side: keep clear of the notch. The coordinate chip's controls are touch targets too. */

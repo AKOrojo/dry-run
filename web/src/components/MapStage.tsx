@@ -44,6 +44,7 @@ import { GpuBoxMap } from "./GpuBoxMap";
 import { DomainMap, domainBbox, outsideDomain } from "./DomainMap";
 import { listPatches, setCloseUp, useCloseUp } from "../lib/patch3d";
 import type { Anchors } from "./Anchored";
+import { Slider } from "./controls/Slider";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -332,8 +333,7 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
             background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
           {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
         </button>
-        <input type="range" aria-label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)}
-          onChange={(e) => onSeek(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: "var(--danfo)" }} />
+        <Slider bare label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)} text={fmtLen(hud.s)} onChange={onSeek} />
         <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>
         <span style={{ fontSize: 12, ...FIG }} title="Height above ground (scroll or E / Q)">{Math.round(hud.hAgl)} m up</span>
       </div>

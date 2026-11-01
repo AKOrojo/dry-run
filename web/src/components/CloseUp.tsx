@@ -9,7 +9,7 @@ import type { Anchors } from "./Anchored";
 import { ProvenanceBadge, fmtT } from "./ds";
 import { ChartFigure } from "./Dock";
 import { Band, Card, FIG, Segmented, raisedButton } from "./rev5";
-import { Toggle } from "./RainCards";
+import { Switch as Toggle } from "./controls/Switch";
 import { clock, useClock } from "../lib/clock";
 import { layers, setLayer, useLayers } from "../lib/layers";
 import { compassOf } from "../lib/rain";
