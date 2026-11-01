@@ -20,7 +20,7 @@ const ALL_STEPS = [
   { id: "drainage", title: "Set the drains", body: "Choose the drain system, how much rain it takes, how blocked it is and where it empties; the Drains layer and the timeline then show it filling." },
   { id: "simulate", title: "Run the flood model", body: "Simulate runs the storm on the 30 m model and fills the map and timeline." },
   { id: "coords", title: "Watch the storm", body: "While it simulates, the cloud and rain follow your storm. The coordinates show where you point; type a lat, lon to go there." },
-  { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
+  { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live, and how long until it starts when another run is ahead; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen." },

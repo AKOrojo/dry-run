@@ -48,7 +48,7 @@ const CloseUpDock = lazyNamed(() => import("./components/CloseUp"), "CloseUpDock
 import { useCloseUp } from "./lib/patch3d";
 import type { Spatial } from "./lib/api";
 import { resetSim, setSim } from "./lib/simstate";
-import { beforeRun, GIVE_UP_MS, WAKING_MS } from "./lib/simbar";
+import { beforeRun, GIVE_UP_MS, runningTotal, WAKING_MS } from "./lib/simbar";
 import type { EstWait } from "./lib/simbar";
 import { adoptDrainage, drainageSpec, resetDrainage, useDrainage } from "./lib/drainage";
 import { clearAreaCaches } from "./lib/areaCache";
@@ -103,7 +103,8 @@ export default function App() {
   const [estWait, setEstWait] = useState<EstWait>("waiting");
   const [live, setLive] = useState<{ startedAt: number; estS: number | null; tEnd: number; intervalS: number; framesTotal: number; prog: SimProgress | null;
     /** No `started` from the server yet (a cold instance can take tens of seconds). */ starting?: boolean;
-    /** The server says this joined someone else's job for the same scenario. */ joined?: boolean } | null>(null);
+    /** The server says this joined someone else's job for the same scenario. */ joined?: boolean;
+    /** From `started`, until progress reports its own: the wait for the runs ahead. */ queue?: { s: number | null; ahead: number } } | null>(null);
   const [lastSim, setLastSim] = useState<{ run_id: string; tookS: number | null } | null>(null);
   const [now, setNow] = useState(Date.now());
   const simAbort = useRef<AbortController>();
@@ -335,7 +336,7 @@ export default function App() {
           setSim({ estS: e.data.est_s });
           // A cached run opens at once: no progress card, no flash.
           if (cached) setLive(null);
-          else { setNow(Date.now()); setLive({ startedAt: t0, estS: e.data.est_s, tEnd: e.data.t_end_s, intervalS: e.data.output_interval_s, framesTotal: e.data.frames_total, prog: null, joined: !!e.data.joined }); }
+          else { setNow(Date.now()); setLive({ startedAt: t0, estS: e.data.est_s, tEnd: e.data.t_end_s, intervalS: e.data.output_interval_s, framesTotal: e.data.frames_total, prog: null, joined: !!e.data.joined, queue: { s: e.data.queue_s ?? null, ahead: e.data.ahead ?? 0 } }); }
         } else if (e.kind === "progress") {
           setLive((l) => l && { ...l, prog: e.data });
           setSim({ progress: e.data.fraction, modelT: e.data.sim_t_s });
@@ -388,9 +389,10 @@ export default function App() {
   };
   const simBar: SimBar = live ? (() => {
     const p = live.prog, simT = p?.sim_t_s ?? 0, tEnd = p?.t_end_s ?? live.tEnd;
-    return { state: "running" as const, elapsedS: (now - live.startedAt) / 1000,
-      estS: p?.eta_s != null ? p.elapsed_s + p.eta_s : live.estS, fraction: p?.fraction ?? 0, simT, tEnd,
-      measured: p?.measured ?? false, queued: p?.phase === "queued", joined: !!(live.joined || p?.joined), starting: !!live.starting,
+    const elapsedS = (now - live.startedAt) / 1000;
+    return { state: "running" as const, elapsedS, estS: runningTotal(elapsedS, p?.eta_s, live.estS), fraction: p?.fraction ?? 0, simT, tEnd,
+      measured: p?.measured ?? false, queued: p ? p.phase === "queued" : (live.queue?.ahead ?? 0) > 0,
+      ahead: p ? p.ahead ?? 0 : live.queue?.ahead ?? 0, queueS: p ? p.queue_s ?? null : live.queue?.s ?? null, joined: !!(live.joined || p?.joined), starting: !!live.starting,
       frames: [Math.min(live.framesTotal, Math.floor(simT / live.intervalS) + 1), live.framesTotal] as [number, number] };
   })()
     : lastSim && run?.run_id === lastSim.run_id && est && est !== "failed" && est.run_id === lastSim.run_id ? { state: "done", tookS: lastSim.tookS }

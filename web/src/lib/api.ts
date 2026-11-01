@@ -148,10 +148,13 @@ export type SimProgress = {
   elapsed_s: number; eta_s: number | null; measured: boolean;
   /** This stream joined a job another request had already started (asked of Eng D; absent means a job of its own). */
   joined?: boolean;
+  /** While queued: seconds until the engine is free for this run (null when a run ahead has no estimate), and how many
+   *  runs are ahead on this instance. eta_s already includes queue_s. Both 0 once solving. */
+  queue_s?: number | null; ahead?: number;
 };
 export type SimEvent =
   | { kind: "started"; data: { job_id: string; cancel_token: string; run_id: string; cached: boolean; est_s: number | null; t_end_s: number;
-      output_interval_s: number; frames_total: number; joined?: boolean } }
+      output_interval_s: number; frames_total: number; joined?: boolean; queue_s?: number | null; ahead?: number } }
   | { kind: "progress"; data: SimProgress }
   | { kind: "done"; data: { manifest: RunManifest } }
   | { kind: "cancelled"; data: { reason: string } }

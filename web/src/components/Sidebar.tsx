@@ -334,7 +334,8 @@ export type SimBar =
   | { state: "cached" }
   | { state: "live"; estS: number | null }
   | { state: "running"; elapsedS: number; estS: number | null; fraction: number; simT: number; tEnd: number; measured: boolean;
-      frames: [number, number] | null; queued: boolean; joined: boolean; starting: boolean }
+      frames: [number, number] | null; queued: boolean; joined: boolean; starting: boolean;
+      /** Runs ahead of this one on the instance, and the seconds until the solver is free (null: not known). */ ahead: number; queueS: number | null }
   | { state: "done"; tookS: number | null };
 
 function StormCard(p: ScenarioProps) {
@@ -436,6 +437,11 @@ function SimulateButton({ disabled, onClick }: { disabled: boolean; onClick: () 
   );
 }
 
+/** Queued behind another run: how long until the solver is free (eased: shown, from the server's queueS). No number when
+ *  it is not known, or when the run ahead is saving (0 s for about a second); never "about 0 s". */
+const waitText = (queueS: number | null, shown: number | null) =>
+  queueS != null && queueS >= 1 && shown != null && shown >= 1 ? `Waiting for another run, about ${clock(shown)}` : "Waiting for another run";
+
 /** The eta-based "N s left", eased (lib/simbar easeLeft) so a refined eta doesn't make it jump; resets between runs. */
 function useEasedLeft(target: number | null, running: boolean) {
   const st = useRef<{ shown: number | null; at: number }>({ shown: null, at: 0 });
@@ -449,6 +455,9 @@ function useEasedLeft(target: number | null, running: boolean) {
 function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear }: Pick<ScenarioProps, "sim" | "busy" | "canRun" | "canClear" | "onSimulate" | "onStop" | "onClear">) {
   const box = useRef<HTMLDivElement>(null);
   const running = sim.state === "running";
+  // The server's early queue estimates jump (and sometimes rise): ease the wait like the lock countdown.
+  const waiting = sim.state === "running" && sim.queued && !sim.joined && sim.ahead > 0;
+  const waitShown = useEasedLeft(waiting ? sim.queueS : null, waiting);
   // The running card is taller than the bar; keep Stop and the progress in view.
   const grown = running && sim.fraction > 0;
   useEffect(() => { if (running) box.current?.scrollIntoView({ block: "nearest" }); }, [running, grown]);
@@ -459,7 +468,7 @@ function SimulateBar({ sim, busy, canRun, canClear, onSimulate, onStop, onClear 
       <div ref={box} data-tour="simulate" role="status" aria-live="polite" style={simCard}>
         <div data-tour="sim-status" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Spinner {...icon15} color="var(--depth-3)" />
-          <span style={{ fontWeight: 600 }}>{sim.starting ? "Starting the solver…" : sim.queued ? (sim.joined ? "Waiting for the same run" : "Queued for the solver…") : "Simulating live"}</span>
+          <span style={{ fontWeight: 600 }}>{sim.starting ? "Starting the solver…" : sim.queued ? (sim.joined ? "Waiting for the same run" : sim.ahead > 0 ? waitText(sim.queueS, waitShown) : "Queued for the solver…") : "Simulating live"}</span>
           <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{clock(sim.elapsedS)}{est}</span>
         </div>
         <span role="progressbar" aria-label="Simulation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sim.fraction * 100)}

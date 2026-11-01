@@ -29,6 +29,12 @@ export function beforeRun(ready: boolean, mode: RainMode, est: SimEstimate | "fa
   return wait === "gaveUp" ? { state: "live", estS: null } : wait === "waking" ? { state: "waking" } : { state: "checking" };
 }
 
+/** The running total ("of about M:SS"): time since Simulate was pressed plus the server's eta. elapsedS must be the client's
+ *  own clock: the server restarts its elapsed_s when a queued run starts solving, so mixing the two undercounts the wait. */
+export function runningTotal(elapsedS: number, etaS: number | null | undefined, fallback: number | null): number | null {
+  return etaS != null ? elapsedS + etaS : fallback;
+}
+
 /** The lock countdown follows the server's eta, which refines in jumps (46 → 29 s). Ease it: never rise, and fall at
  *  most EASE_RATE seconds per second towards the eta. */
 export const EASE_RATE = 1.5;
