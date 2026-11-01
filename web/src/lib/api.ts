@@ -191,6 +191,9 @@ export const getRun = (id: string) => fetch(`${API}/api/runs/${encodeURIComponen
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
 export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
 
+/** The server's limit on a question (AgentRequest.question in dryrun/api/agent_routes.py). */
+export const QUESTION_MAX = 1000;
+
 /** POST /api/agent streams Server-Sent Events; EventSource can't POST, so read the stream manually. */
 export async function* askAgent(question: string, provider = "meta", aoi_id?: string): AsyncGenerator<AgentEvent> {
   const r = await fetch(`${API}/api/agent`, {

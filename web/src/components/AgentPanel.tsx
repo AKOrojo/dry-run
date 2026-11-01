@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ClockCounterClockwise, Copy, Key, PaperPlaneTilt, Columns, Flask, ArrowClockwise, Sparkle, Stop } from "@phosphor-icons/react";
-import { ApiError, askAgent, AgentEvent, getJudgeKey, getReplays, Replay, setJudgeKey } from "../lib/api";
+import { ApiError, askAgent, AgentEvent, getJudgeKey, getReplays, QUESTION_MAX, Replay, setJudgeKey } from "../lib/api";
 import { lockoutText, useLockout } from "../lib/lockout";
 import { LockoutNote } from "./LockoutNote";
 import { Notice } from "./Notice";
-import { Card, Field, Segmented, FIG } from "./rev5";
+import { Card, Field, Segmented, FIG, hintText } from "./rev5";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
@@ -74,6 +74,8 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
     } catch (e) {
       // A lockout counts down under the key box (minutes to hours), not as a Retry timer.
       if (e instanceof ApiError && e.lockout) fail({ code: "rate_limited", message: e.message, retryable: false });
+      // The box already trims and caps the question, so a 422 here means it broke the server's own limits.
+      else if (e instanceof ApiError && e.status === 422) fail({ code: e.code, message: `Write a question of up to ${QUESTION_MAX} characters.`, retryable: false });
       else fail(e instanceof ApiError ? { code: e.code, message: e.message, retryable: e.retryable, retry_after_s: e.retryAfterS }
         : { code: "unavailable", message: "The server is busy. Try again.", retryable: true });
     } finally { setBusy(false); }
@@ -103,6 +105,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
       {lock && <LockoutNote lock={lock} />}
     </Field>
   );
+  const nearMax = q.length > QUESTION_MAX * 0.9;  // the counter shows only near the limit
   const canAsk = !busy && q.trim() !== "" && !(needsKey && !key.trim()) && !(keyProvider && lock) && !(provider === "replay" && !replay);
   const copy = () => { if (brief) navigator.clipboard?.writeText(briefText(brief)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {}); };
 
@@ -116,7 +119,10 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
           {mode === "live" && <><Dot color="var(--verified)" />{MODEL_NAME[liveProv] ?? liveProv}</>}</span>}>
           <Pad gap={12}>
             <textarea aria-label="Goal" value={q} onChange={(e) => setQ(e.target.value)} rows={4} placeholder="Describe what you want the planner to find out."
+              maxLength={QUESTION_MAX} aria-describedby={nearMax ? "goal-count" : undefined}
               style={{ ...inputBox, padding: 10, resize: "vertical", fontSize: 14, lineHeight: "20px" }} />
+            {nearMax && <span id="goal-count" style={{ ...hintText, marginTop: -6 }}>
+              <span style={FIG}>{q.length}</span> of <span style={FIG}>{QUESTION_MAX}</span> characters{q.length >= QUESTION_MAX ? ", the most a question can have." : "."}</span>}
             <Field label="Model" hint="Live answers need the judge key. Replay and Fake are open to everyone.">
               <Segmented<Mode> active={mode} onChange={(m) => setProvider(m === "live" ? liveProv : m)}
                 options={[{ value: "live", label: "Live" }, { value: "replay", label: "Replay" }, { value: "fake", label: "Fake" }]} />

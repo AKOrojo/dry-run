@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, StringConstraints
 
 from dryrun.api.ratelimit import limit, limit_global, require_paid_access
 
@@ -14,7 +15,8 @@ router = APIRouter(prefix="/api")
 
 
 class AgentRequest(BaseModel):
-    question: str = Field(max_length=1000)
+    # Stripped first, so a blank or whitespace-only question is a 422 before any provider (paid or not) runs.
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
     provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | openrouter | fake | replay
     aoi_id: str | None = None  # default: DRYRUN_DEFAULT_AOI
 

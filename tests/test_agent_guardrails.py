@@ -223,6 +223,21 @@ def test_api_rejects_provider(client):
     assert post(client, provider="evil") == 400
 
 
+@pytest.mark.parametrize("question", ["", "   \n\t"])
+@pytest.mark.parametrize("provider", ["fake", "meta"])
+def test_api_rejects_blank_question(client, monkeypatch, question, provider):
+    monkeypatch.setattr(ratelimit, "_TEAM", "secret")
+    monkeypatch.setattr(loop, "run", lambda *a, **k: pytest.fail("the planner ran"))
+    r = client.post("/api/agent", json={"question": question, "provider": provider}, headers={"X-Team-Token": "secret"})
+    assert r.status_code == 422
+
+
+def test_api_strips_question_before_length_check(client):
+    r = client.post("/api/agent", json={"question": "  " + "q" * 1000 + "\n", "provider": "fake"})
+    assert r.status_code == 200
+    assert client.post("/api/agent", json={"question": "q" * 1001, "provider": "fake"}).status_code == 422
+
+
 def sim_args(label, total_mm=40):
     return json.dumps({"aoi_id": fixtures.AOI_ID, "storm": {"total_mm": total_mm, "duration_h": 1}, "label": label})
 

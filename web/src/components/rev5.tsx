@@ -116,12 +116,14 @@ export function Segmented<T extends string>({ options, active, onChange, size = 
   );
 }
 
+export const hintText: CSSProperties = { color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
+
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span className="label" style={{ fontSize: 11, lineHeight: "14px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-muted)" }}>{label}</span>
       {children}
-      {hint && <span style={{ color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" }}>{hint}</span>}
+      {hint && <span style={hintText}>{hint}</span>}
     </div>
   );
 }
