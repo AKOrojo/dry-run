@@ -1,9 +1,9 @@
 // Top bar (rev 5 header()): wordmark, area, storm summary, mode tabs, View/Share, theme toggle.
-import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
-import { CaretDown, ChatTeardropText, Check, CloudRain, Columns, Crosshair, DotsThreeVertical, DownloadSimple, Info, Layout, Link, MapTrifold, Moon, Question, ShareNetwork, Sun } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
+import { CaretDown, ChatTeardropText, CloudRain, Columns, Crosshair, DotsThreeVertical, DownloadSimple, Info, Layout, Link, MapTrifold, Moon, Question, ShareNetwork, Sun } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
-import { Checkbox, FIG } from "./rev5";
+import { FIG } from "./rev5";
 import { Select } from "./controls/Select";
 import type { SelectGroup } from "./controls/Select";
 import { areaDetail, areaFacts } from "../lib/areas";
@@ -13,6 +13,8 @@ import { setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { setView, useView } from "../lib/view";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Tooltip } from "./controls/Tooltip";
+import { Menu } from "./controls/Menu";
+import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
 const PATTERN_TEXT = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" } as const;
@@ -34,105 +36,38 @@ function ModeTab({ name, Ic, active, badge, onClick, h = 28 }: { name: Mode; Ic:
   );
 }
 
-// Dropdowns follow the map's right-click menu (MapStage.tsx). Fixed position so the header's overflow does not clip them.
-const menuItem: CSSProperties = {
-  width: "100%", height: 28, display: "flex", alignItems: "center", gap: 9, padding: "0 9px", border: 0, borderRadius: 3,
-  background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 12, textAlign: "left", cursor: "pointer", whiteSpace: "nowrap",
-};
-const menuLabel: CSSProperties = { padding: "6px 9px 2px", color: "var(--ink-muted)", fontSize: 11 };
-const menuRule = <div role="separator" style={{ height: 1, margin: "3px 0", background: "var(--hairline)" }} />;
 const iconBtn: CSSProperties = { width: 40, height: 40, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent",
   border: 0, borderRadius: "var(--radius-md)", cursor: "pointer" };
-/** Menu rows on a phone or tablet: 40 px touch targets. */
-const touchItem: CSSProperties = { ...menuItem, height: 40, fontSize: 13 };
-const tick = (on: boolean) => <span style={{ width: 16, display: "flex", justifyContent: "center", flex: "none" }}>{on && <Check size={13} weight="bold" />}</span>;
 
-function Menu({ name, Ic, iconOnly = false, tour, children }: { name: string; Ic: Icon;
-  /** Phone and tablet: a 40 px icon button (the ⋮ overflow menu), the menu kept on screen at the right edge. */ iconOnly?: boolean; tour?: string;
-  children: (close: () => void) => ReactNode }) {
-  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
-  const btn = useRef<HTMLButtonElement>(null);
-  const box = useRef<HTMLDivElement>(null);
-  const close = (refocus = true) => { setAt(null); if (refocus) btn.current?.focus(); };
-  useEffect(() => {
-    if (!at) return;
-    box.current?.querySelector<HTMLElement>("[role^=menuitem]")?.focus();
-    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) close(false); };
-    const shut = () => close(false);
-    document.addEventListener("pointerdown", away);
-    window.addEventListener("resize", shut);
-    return () => { document.removeEventListener("pointerdown", away); window.removeEventListener("resize", shut); };
-  }, [at]);
-  const open = () => {
-    const r = btn.current!.getBoundingClientRect();
-    const w = iconOnly ? Math.min(300, window.innerWidth - 16) : 228;
-    setAt({ left: Math.max(8, Math.min(iconOnly ? r.right - w : r.left, window.innerWidth - w)), top: r.bottom + 6 });
-  };
-  const onKey = (e: KeyboardEvent) => {
-    const items = [...(box.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === "Escape") { e.preventDefault(); close(); }
-    else if (e.key === "Tab") close(false);
-    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
-    }
-  };
-  return (
-    <>
-      {iconOnly ? (
-        <Tooltip text={name}><button ref={btn} type="button" data-tour={tour} aria-label={name} aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
-          style={{ ...iconBtn, color: at ? "var(--ink)" : "var(--ink-muted)" }}>
-          <Ic size={18} weight="bold" />
-        </button></Tooltip>
-      ) : (
-        <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
-          style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0, color: at ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
-          <Ic size={15} weight="bold" />{name}<CaretDown size={12} weight="bold" />
-        </button>
-      )}
-      {at && (
-        <div ref={box} role="menu" aria-label={name} onKeyDown={onKey}
-          style={{ position: "fixed", left: at.left, top: at.top, zIndex: 20, minWidth: 220, ...(iconOnly ? { width: Math.min(300, window.innerWidth - 16), boxSizing: "border-box", maxHeight: `calc(100dvh - ${at.top + 8}px)`, overflowY: "auto" } : {}), padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
-            borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", color: "var(--ink)", fontWeight: 400 }}>
-          {children(() => close())}
-        </div>
-      )}
-    </>
-  );
-}
+// The header's menus (board 11 Menu): View, Share, and the ⋮ overflow on a phone or tablet.
+const headerTrigger = (name: string, Ic: Icon) => (p: MenuTriggerProps) => (
+  <button {...p} type="button" style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0,
+    color: p["aria-expanded"] ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
+    <Ic size={15} weight="bold" />{name}<CaretDown size={12} weight="bold" />
+  </button>
+);
 
 function ViewMenu({ theme, onTheme, onTour }: { theme: Theme; onTheme: (t: Theme) => void; onTour: () => void }) {
   const v = useView();
   const lay = useLayers();
   const { imageryMode } = lay;
-  const check = (label: string, on: boolean, flip: () => void) => (
-    <button type="button" role="menuitemcheckbox" aria-checked={on} onClick={flip} style={menuItem}><Checkbox on={on} />{label}</button>
-  );
-  const radio = (label: string, on: boolean, pick: () => void) => (
-    <button type="button" role="menuitemradio" aria-checked={on} onClick={pick} style={menuItem}>{tick(on)}{label}</button>
-  );
   return (
-    <Menu name="View" Ic={Layout}>
-      {(close) => (
-        <>
-          {check("Show sidebar", v.sidebar, () => setView({ sidebar: !v.sidebar }))}
-          {check("Show timeline", v.timeline, () => setView({ timeline: !v.timeline }))}
-          {check("Coordinates", v.coords, () => setView({ coords: !v.coords }))}
-          {check("Clouds and rain", lay.weather.on, () => setLayer("weather", { on: !lay.weather.on }))}
-          {menuRule}
-          <div style={menuLabel}>Imagery</div>
-          {radio("Colour", imageryMode === "colour", () => setImageryMode("colour"))}
-          {radio("Greyscale", imageryMode === "greyscale", () => setImageryMode("greyscale"))}
-          {menuRule}
-          <div style={menuLabel}>Theme</div>
-          {radio("Dark", theme === "dark", () => onTheme("dark"))}
-          {radio("Light", theme === "light", () => onTheme("light"))}
-          {menuRule}
-          <button type="button" role="menuitem" onClick={() => { close(); onTour(); }} style={menuItem}>{tick(false)}Take the tour</button>
-        </>
-      )}
-    </Menu>
+    <Menu label="View" trigger={headerTrigger("View", Layout)} items={[
+      { kind: "check", label: "Show sidebar", checked: v.sidebar, keepOpen: true, onSelect: () => setView({ sidebar: !v.sidebar }) },
+      { kind: "check", label: "Show timeline", checked: v.timeline, keepOpen: true, onSelect: () => setView({ timeline: !v.timeline }) },
+      { kind: "check", label: "Coordinates", checked: v.coords, keepOpen: true, onSelect: () => setView({ coords: !v.coords }) },
+      { kind: "check", label: "Clouds and rain", checked: lay.weather.on, keepOpen: true, onSelect: () => setLayer("weather", { on: !lay.weather.on }) },
+      { kind: "separator" },
+      { kind: "caption", label: "Imagery" },
+      { kind: "radio", label: "Colour", checked: imageryMode === "colour", keepOpen: true, onSelect: () => setImageryMode("colour") },
+      { kind: "radio", label: "Greyscale", checked: imageryMode === "greyscale", keepOpen: true, onSelect: () => setImageryMode("greyscale") },
+      { kind: "separator" },
+      { kind: "caption", label: "Theme" },
+      { kind: "radio", label: "Dark", checked: theme === "dark", keepOpen: true, onSelect: () => onTheme("dark") },
+      { kind: "radio", label: "Light", checked: theme === "light", keepOpen: true, onSelect: () => onTheme("light") },
+      { kind: "separator" },
+      { kind: "item", label: "Take the tour", onSelect: onTour },
+    ]} />
   );
 }
 
@@ -145,16 +80,10 @@ function ShareMenu({ onCopyLink, onSaveImage }: { onCopyLink: () => Promise<stri
   }, [status]);
   return (
     <>
-      <Menu name="Share" Ic={ShareNetwork}>
-        {(close) => (
-          <>
-            <button type="button" role="menuitem" style={menuItem} onClick={async () => { close(); setStatus(await onCopyLink()); }}>
-              <Link size={14} weight="bold" />Copy link to this view</button>
-            <button type="button" role="menuitem" style={menuItem} onClick={() => { close(); setStatus(onSaveImage()); }}>
-              <DownloadSimple size={14} weight="bold" />Save map image (PNG)</button>
-          </>
-        )}
-      </Menu>
+      <Menu label="Share" trigger={headerTrigger("Share", ShareNetwork)} items={[
+        { kind: "item", label: "Copy link to this view", icon: <Link size={16} weight="bold" />, onSelect: async () => setStatus(await onCopyLink()) },
+        { kind: "item", label: "Save map image (PNG)", icon: <DownloadSimple size={16} weight="bold" />, onSelect: () => setStatus(onSaveImage()) },
+      ]} />
       <span role="status" aria-live="polite" style={{ color: "var(--ink-muted)", fontSize: 12, display: status ? undefined : "none" }}>{status}</span>
     </>
   );
@@ -174,45 +103,39 @@ function OverflowMenu({ layout, mode, onMode, agentRuns, storm, theme, onTheme, 
     const id = window.setTimeout(() => setStatus(null), 2500);
     return () => window.clearTimeout(id);
   }, [status]);
-  const ic = (I: Icon) => <span style={{ width: 16, display: "flex", justifyContent: "center", flex: "none" }}><I size={15} weight="bold" /></span>;
-  const check = (label: string, on: boolean, flip: () => void, I?: Icon) => (
-    <button type="button" role="menuitemcheckbox" aria-checked={on} onClick={flip} style={touchItem}>
-      {I ? ic(I) : <Checkbox on={on} />}{label}{I && <span style={{ marginLeft: "auto", color: "var(--ink-muted)" }}>{on ? "on" : "off"}</span>}</button>
-  );
-  const radio = (label: string, on: boolean, pick: () => void, badge?: number) => (
-    <button type="button" role="menuitemradio" aria-checked={on} onClick={pick} style={touchItem}>{tick(on)}{label}
-      {!!badge && <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{badge} {badge === 1 ? "run" : "runs"}</span>}</button>
-  );
+  const items: MenuEntry[] = [];
+  if (layout === "phone") items.push(
+    { kind: "caption", label: "Mode" },
+    { kind: "radio", label: "Scenario", checked: mode === "Scenario", onSelect: () => onMode("Scenario") },
+    { kind: "radio", label: "Compare", checked: mode === "Compare", onSelect: () => onMode("Compare") },
+    { kind: "radio", label: "Agent", checked: mode === "Agent", hint: agentRuns ? `${agentRuns} ${agentRuns === 1 ? "run" : "runs"}` : undefined, onSelect: () => onMode("Agent") },
+    { kind: "separator" });
+  items.push(
+    { kind: "item", label: `Storm: ${storm}`, icon: <CloudRain size={16} weight="bold" />, disabled: true, onSelect: () => {} },
+    { kind: "item", label: "Share link", icon: <ShareNetwork size={16} weight="bold" />, onSelect: async () => setStatus(await onCopyLink()) },
+    { kind: "item", label: "Save map image", icon: <DownloadSimple size={16} weight="bold" />, onSelect: () => setStatus(onSaveImage()) },
+    { kind: "separator" });
+  if (layout === "tablet") items.push(
+    { kind: "check", label: "Show timeline", checked: v.timeline, keepOpen: true, onSelect: () => setView({ timeline: !v.timeline }) },
+    { kind: "check", label: "Clouds and rain", checked: lay.weather.on, keepOpen: true, onSelect: () => setLayer("weather", { on: !lay.weather.on }) },
+    { kind: "caption", label: "Imagery" },
+    { kind: "radio", label: "Colour", checked: lay.imageryMode === "colour", keepOpen: true, onSelect: () => setImageryMode("colour") },
+    { kind: "radio", label: "Greyscale", checked: lay.imageryMode === "greyscale", keepOpen: true, onSelect: () => setImageryMode("greyscale") },
+    { kind: "separator" });
+  items.push(
+    { kind: "check", label: "Show coordinates", icon: <Crosshair size={16} weight="bold" />, hint: v.coords ? "on" : "off", checked: v.coords, keepOpen: true, onSelect: () => setView({ coords: !v.coords }) },
+    { kind: "item", label: "Quick tour", icon: <Info size={16} weight="bold" />, onSelect: onTour },
+    { kind: "check", label: "Dark theme", icon: <Moon size={16} weight="bold" />, hint: theme === "dark" ? "on" : "off", checked: theme === "dark", keepOpen: true, onSelect: () => onTheme(theme === "dark" ? "light" : "dark") });
   return (
     <>
-      <Menu name="More" Ic={DotsThreeVertical} iconOnly tour="menu">
-        {(close) => (
-          <>
-            {layout === "phone" && <>
-              <div style={menuLabel} className="label">Mode</div>
-              {radio("Scenario", mode === "Scenario", () => { close(); onMode("Scenario"); })}
-              {radio("Compare", mode === "Compare", () => { close(); onMode("Compare"); })}
-              {radio("Agent", mode === "Agent", () => { close(); onMode("Agent"); }, agentRuns)}
-              {menuRule}
-            </>}
-            <div style={{ ...touchItem, boxSizing: "border-box", cursor: "default", whiteSpace: "normal", height: "auto", minHeight: 40, padding: "6px 9px", lineHeight: "17px" }}>{ic(CloudRain)}<span>Storm: {storm}</span></div>
-            <button type="button" role="menuitem" style={touchItem} onClick={async () => { close(); setStatus(await onCopyLink()); }}>{ic(ShareNetwork)}Share link</button>
-            <button type="button" role="menuitem" style={touchItem} onClick={() => { close(); setStatus(onSaveImage()); }}>{ic(DownloadSimple)}Save map image</button>
-            {menuRule}
-            {layout === "tablet" && <>
-              {check("Show timeline", v.timeline, () => setView({ timeline: !v.timeline }))}
-              {check("Clouds and rain", lay.weather.on, () => setLayer("weather", { on: !lay.weather.on }))}
-              <div style={menuLabel}>Imagery</div>
-              {radio("Colour", lay.imageryMode === "colour", () => setImageryMode("colour"))}
-              {radio("Greyscale", lay.imageryMode === "greyscale", () => setImageryMode("greyscale"))}
-              {menuRule}
-            </>}
-            {check("Show coordinates", v.coords, () => setView({ coords: !v.coords }), Crosshair)}
-            <button type="button" role="menuitem" style={touchItem} onClick={() => { close(); onTour(); }}>{ic(Info)}Quick tour</button>
-            {check("Dark theme", theme === "dark", () => onTheme(theme === "dark" ? "light" : "dark"), Moon)}
-          </>
-        )}
-      </Menu>
+      <Menu label="More" items={items} trigger={(p) => (
+        <Tooltip text="More">
+          <button {...p} type="button" data-tour="menu" aria-label="More"
+            style={{ ...iconBtn, color: p["aria-expanded"] ? "var(--ink)" : "var(--ink-muted)" }}>
+            <DotsThreeVertical size={18} weight="bold" />
+          </button>
+        </Tooltip>
+      )} />
       {status && <span role="status" aria-live="polite" style={{ position: "fixed", top: 54, right: 12, zIndex: 20, maxWidth: "calc(100vw - 24px)", padding: "6px 10px", whiteSpace: "normal",
         background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", color: "var(--ink)", fontSize: 12 }}>{status}</span>}
     </>

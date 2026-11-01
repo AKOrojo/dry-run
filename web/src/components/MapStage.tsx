@@ -47,6 +47,8 @@ import { requestRenderSoon } from "../lib/render";
 import type { Anchors } from "./Anchored";
 import { Slider } from "./controls/Slider";
 import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
+import { Menu } from "./controls/Menu";
+import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -218,35 +220,36 @@ function ViewSwitch({ active, onPick, canFly, compact = false, extra }: { active
   );
 }
 
-const menuItem: CSSProperties = {
-  width: "100%", height: 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 9px", border: 0, borderRadius: 3,
-  background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 12, textAlign: "left", cursor: "pointer",
-};
-
-/** "Draw route" button beside the view switch; with a saved or evacuation route it opens a small menu. */
-function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, onToggleMenu, onEvac, onClear, compact = false, short = false }: {
-  drawing: boolean; menuOpen: boolean; hasRoute: boolean; hasEvac: boolean;
+/** "Draw route" button beside the view switch; with a saved or evacuation route it opens a small menu (board 11 Menu). */
+function RouteButton({ drawing, hasRoute, hasEvac, onDraw, onCancel, onEvac, onClear, compact = false, short = false }: {
+  drawing: boolean; hasRoute: boolean; hasEvac: boolean;
   /** Phone: a 40 px icon inside the view switch's group. Tablet: the shorter "Route" label. */ compact?: boolean; short?: boolean;
-  onDraw: () => void; onCancel: () => void; onToggleMenu: () => void; onEvac: () => void; onClear: () => void;
+  onDraw: () => void; onCancel: () => void; onEvac: () => void; onClear: () => void;
 }) {
   const extras = hasRoute || hasEvac;
-  const menu = menuOpen && !drawing && (
-    <div role="menu" style={{ position: "absolute", ...(compact ? { left: 0, top: 46 } : { right: 0, top: 40 }), minWidth: 190, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
-      borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", zIndex: 2 }}>
-      <button type="button" role="menuitem" onClick={onDraw} style={compact ? { ...menuItem, height: 40 } : menuItem}>Draw new route</button>
-      {hasEvac && <button type="button" role="menuitem" onClick={onEvac} style={compact ? { ...menuItem, height: 40 } : menuItem}>Use evacuation route</button>}
-      {hasRoute && <button type="button" role="menuitem" onClick={onClear} style={compact ? { ...menuItem, height: 40 } : menuItem}>Clear route</button>}
-    </div>
+  const label = drawing ? "Cancel drawing" : "Draw route";
+  const items: MenuEntry[] = [{ kind: "item", label: "Draw new route", onSelect: onDraw }];
+  if (hasEvac) items.push({ kind: "item", label: "Use evacuation route", onSelect: onEvac });
+  if (hasRoute) items.push({ kind: "item", label: "Clear route", onSelect: onClear });
+  // With a menu, the button's own click (or key) opens it; otherwise it draws, or cancels a drawing.
+  const press = (p: Partial<MenuTriggerProps>) => ({ ...p, onClick: p.onClick ?? (drawing ? onCancel : onDraw) });
+  const iconBtn = (p: Partial<MenuTriggerProps>) => (
+    <UiTooltip text={label}><button {...press(p)} type="button" aria-pressed={drawing} aria-label={label}
+      style={{ ...segBtn(drawing, 40), width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+      <Path size={18} weight="bold" />
+    </button></UiTooltip>
   );
+  const textBtn = (p: Partial<MenuTriggerProps>) => (
+    <UiTooltip text={label}><button {...press(p)} type="button" aria-pressed={drawing}
+      style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+      <Path size={14} weight="bold" />{drawing ? "Drawing" : short ? "Route" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
+    </button></UiTooltip>
+  );
+  const menuOn = extras && !drawing;
   if (compact) {
     return (
       <span style={{ position: "relative", display: "flex" }}>
-        <UiTooltip text={drawing ? "Cancel drawing" : "Draw route"}><button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
-          aria-label={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
-          style={{ ...segBtn(drawing, 40), width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-          <Path size={18} weight="bold" />
-        </button></UiTooltip>
-        {menu}
+        {menuOn ? <Menu label="Route" items={items} trigger={iconBtn} /> : iconBtn({})}
       </span>
     );
   }
@@ -254,12 +257,8 @@ function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, o
     <div style={{ position: "relative", pointerEvents: "auto" }}>
       <div style={{ display: "flex", padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6,
         boxShadow: `inset 0 1px 0 ${elevHi}, var(--shadow-float)` }}>
-        <UiTooltip text={drawing ? "Cancel drawing" : "Draw route"}><button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
-          style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <Path size={14} weight="bold" />{drawing ? "Drawing" : short ? "Route" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
-        </button></UiTooltip>
+        {menuOn ? <Menu label="Route" items={items} trigger={textBtn} /> : textBtn({})}
       </div>
-      {menu}
     </div>
   );
 }
@@ -668,7 +667,6 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [drawPts, setDrawPts] = useState<LonLat[]>([]);
   const drawRef = useRef({ drawing: false, pts: [] as LonLat[] });
   drawRef.current = { drawing, pts: drawPts };
-  const [routeMenu, setRouteMenu] = useState(false);
   const fly = useFlyAlong(viewer, mode === "fly", route);
   const flyPlayingRef = useRef(false);
   flyPlayingRef.current = mode === "fly" && fly.hud.playing;
@@ -816,6 +814,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     let seq = 0;
     let down: { x: number; y: number } | null = null;
     const local = (e: MouseEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    // The menu opens at a viewport point (its position is fixed to the window).
+    const toVp = (x: number, y: number) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x, y: r.top + y }; };
     const pick = (x: number, y: number) => {
       const p = s.globe.pick(viewer.camera.getPickRay(new Cesium.Cartesian2(x, y)) as Cesium.Ray, s);
       if (!p) return null;
@@ -855,7 +855,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         if (!down || Math.hypot(down.x - at.x, down.y - at.y) > 0) return;
         down = null;  // the finger's lift is not a tap
         const p = pick(at.x, at.y);
-        if (p) setMenu({ x: at.x, y: at.y, ...p });
+        if (p) setMenu({ ...toVp(at.x, at.y), ...p });
       }, LONG_PRESS_MS);
     };
     const onTouchMove = (e: PointerEvent) => { if (e.pointerType === "touch" && down && Math.hypot(local(e).x - down.x, local(e).y - down.y) > 8) clearTimeout(press); };
@@ -892,7 +892,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       const { x, y } = local(e);
       if (rdown && Math.hypot(x - rdown.x, y - rdown.y) > 4) return;  // it was a right-drag (tilt), not a click
       const p = pick(x, y);
-      if (p) setMenu({ x, y, ...p });
+      if (p) setMenu({ ...toVp(x, y), ...p });
     };
     const onRDown = (e: MouseEvent) => { if (e.button === 2) rdown = local(e); };
     canvas.addEventListener("mousemove", onMove);
@@ -902,6 +902,16 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     canvas.addEventListener("pointerdown", onRDown);
     canvas.addEventListener("pointerup", onUp);
     canvas.addEventListener("contextmenu", onContext);
+    // The map takes keyboard focus. Shift+F10 or the context-menu key opens the waypoint menu at the map's centre.
+    const onMenuKey = (e: KeyboardEvent) => {
+      if (!((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu")) return;
+      e.preventDefault();
+      const x = canvas.clientWidth / 2, y = canvas.clientHeight / 2;
+      const p = pick(x, y);
+      if (p) setMenu({ ...toVp(x, y), ...p });
+    };
+    if (!canvas.hasAttribute("tabindex")) canvas.tabIndex = 0;
+    canvas.addEventListener("keydown", onMenuKey);
     canvas.addEventListener("pointermove", onTouchMove);
     return () => {
       clearTimeout(timer);
@@ -914,6 +924,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       canvas.removeEventListener("pointerdown", onRDown);
       canvas.removeEventListener("pointerup", onUp);
       canvas.removeEventListener("contextmenu", onContext);
+      canvas.removeEventListener("keydown", onMenuKey);
     };
   }, [viewer, runId, inAoi]);
 
@@ -1004,14 +1015,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   useEffect(() => { if (mode === "free" || drawing || (mode === "fly" && fly.hud.playing)) setHover(null); }, [mode, drawing, fly.hud.playing]);
 
   const pickMode = (v: ViewName) => {
-    setRouteMenu(false);
     if (v === "Free") { setHover(null); setMode("free"); return; }
     if (v === "Fly along") { startFly(); return; }
     if (modeRef.current !== "orbit") backToOrbit();
     pickView(v);
   };
   const startDraw = () => {
-    setRouteMenu(false);
     if (modeRef.current !== "orbit") backToOrbit();
     setDrawPts([]); setDrawing(true);
   };
@@ -1085,7 +1094,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
-        setPinned(null); setMenu(null); setSelectedPlace(null); setSelectedWp(null); setRouteMenu(false);
+        setPinned(null); setMenu(null); setSelectedPlace(null); setSelectedWp(null);
         if (drawing) { setDrawing(false); setDrawPts([]); } else if (modeRef.current !== "orbit") backToOrbit();
       }
       else if (drawing) {
@@ -1360,16 +1369,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         )}
 
-        {menu && (
-          <div role="menu" style={{ position: "absolute", left: menu.x, top: menu.y, minWidth: 160, padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)",
-            borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "auto" }}>
-            <button type="button" role="menuitem" onClick={() => { dropWaypoint(menu.lon, menu.lat); setMenu(null); }}
-              style={{ width: "100%", height: touch ? 40 : 28, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "0 9px", border: 0, borderRadius: 3,
-                background: "transparent", color: "var(--ink)", font: "inherit", fontSize: touch ? 13 : 12, textAlign: "left", cursor: "pointer" }}>
-              Drop waypoint{!touch && <span style={{ color: "var(--ink-muted)" }}>W</span>}
-            </button>
-          </div>
-        )}
+        <Menu label="Map" at={menu ? { x: menu.x, y: menu.y } : null} onClose={() => setMenu(null)} returnFocus={() => (viewer && !viewer.isDestroyed() ? viewer.canvas : null)}
+          items={menu ? [{ kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) }] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {run && !!frames?.length && !closeUp.active && (
@@ -1380,15 +1381,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         {phone ? (
           <div data-declutter-block style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
             <ViewSwitch compact active={active} onPick={pickMode} canFly={route.length >= 2} extra={
-              <RouteButton compact drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
-                onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
-                onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />} />
+              <RouteButton compact drawing={drawing} hasRoute={route.length >= 2} hasEvac={!!evac}
+                onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }}
+                onEvac={() => { if (evac) setFlyRoute(evac); }} onClear={() => { clearFlyRoute(); }} />} />
           </div>
         ) : (
           <div data-declutter-block style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <RouteButton short={layout === "tablet"} drawing={drawing} menuOpen={routeMenu} hasRoute={route.length >= 2} hasEvac={!!evac}
-              onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }} onToggleMenu={() => setRouteMenu((v) => !v)}
-              onEvac={() => { if (evac) setFlyRoute(evac); setRouteMenu(false); }} onClear={() => { clearFlyRoute(); setRouteMenu(false); }} />
+            <RouteButton short={layout === "tablet"} drawing={drawing} hasRoute={route.length >= 2} hasEvac={!!evac}
+              onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }}
+              onEvac={() => { if (evac) setFlyRoute(evac); }} onClear={() => { clearFlyRoute(); }} />
             <ViewSwitch active={active} onPick={pickMode} canFly={route.length >= 2} />
           </div>
         )}
