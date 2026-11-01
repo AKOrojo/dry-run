@@ -582,6 +582,17 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     wasCloseup.current = closeup;
   }, [closeup]);
   const { t_s } = useClock();
+  // Phone: the sticky Simulate footer covers the bottom of the scroller, so focus and scrollIntoView stop above it
+  // (otherwise a control scrolled into view lands under the footer and a tap hits the footer).
+  const foot = useRef<HTMLDivElement>(null);
+  const [footH, setFootH] = useState(0);
+  useEffect(() => {
+    const el = foot.current;
+    if (!el) { setFootH(0); return; }
+    const ro = new ResizeObserver(() => setFootH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [phone, tab]);
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
   const sim = scenario.sim;
@@ -591,7 +602,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   return (
     <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
-      <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10 }}>
+      <div style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
         {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
           <button type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
@@ -619,7 +630,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
               {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
             {phone ? (
-              <div style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
+              <div ref={foot} style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
                 borderTop: "1px solid var(--hairline)", display: "flex", flexDirection: "column", order: 1 }}>
                 <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
               </div>
