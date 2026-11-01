@@ -199,7 +199,7 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, d
     const svg = ref.current?.querySelector("svg");
     if (!svg) { say("Couldn't save the image.", 4000); return; }
     try {
-      const url = await chartPng({ svg, title, area: area.name || area.aoi });
+      const url = await chartPng({ svg, title, unit, area: area.name || area.aoi });
       const a = document.createElement("a");
       a.href = url;
       a.download = chartFilename(area.aoi, title, area.run);

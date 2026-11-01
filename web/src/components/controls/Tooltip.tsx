@@ -38,6 +38,10 @@ export function TipBubble({ id, text, anchor, decorative = false }: { id?: strin
 // Visually hidden but still read: the text a native title gave as the element's description.
 const srOnly = { position: "fixed", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 } as const;
 
+/** Whether the tooltip adds to the element's name: a text that repeats the accessible name is not described again. */
+export const describes = (text: string, ariaLabel?: string, childText?: string) =>
+  text.trim().toLowerCase() !== (ariaLabel?.trim() || childText?.trim() || "").toLowerCase();
+
 /** The child's own aria-describedby (a field's counter) plus the tooltip's. */
 export const describedBy = (own: unknown, id: string) => (typeof own === "string" && own.trim() ? `${own} ${id}` : id);
 
@@ -71,13 +75,17 @@ export function Tooltip({ text, children }: { text: string; children: ReactEleme
   };
   // Over a nested element with its own tooltip (a row's remove button), only the inner one shows, as with native titles.
   const nested = (e: PointerEvent<HTMLElement>) => (e.target as Element).closest("[data-tip]") !== e.currentTarget;
+  const own = children.props as Record<string, unknown> & { children?: unknown };
+  const kids = Array.isArray(own.children) ? own.children : [own.children];
+  const childText = kids.filter((k) => typeof k === "string" || typeof k === "number").join("");
+  const described = describes(text, own["aria-label"] as string | undefined, childText);
   const p = children.props as Record<string, ((e: never) => void) | undefined>;
   const call = (name: string, e: unknown) => (p[name] as ((e: unknown) => void) | undefined)?.(e);
   return (
     <>
       {cloneElement(children, {
         // Always described, as with a native title, not only while the bubble shows.
-        "aria-describedby": describedBy((children.props as { "aria-describedby"?: string })["aria-describedby"], id),
+        "aria-describedby": described ? describedBy(own["aria-describedby"], id) : own["aria-describedby"],
         "data-tip": "",
         onPointerEnter: (e: PointerEvent<HTMLElement>) => {
           call("onPointerEnter", e);
@@ -95,7 +103,7 @@ export function Tooltip({ text, children }: { text: string; children: ReactEleme
         onFocus: (e: FocusEvent<HTMLElement>) => { call("onFocus", e); if (e.currentTarget.matches(":focus-visible")) setAnchor(e.currentTarget.getBoundingClientRect()); },
         onBlur: (e: FocusEvent<HTMLElement>) => { call("onBlur", e); hide(); },
       })}
-      {createPortal(<span id={id} style={srOnly}>{text}</span>, document.body)}
+      {described && createPortal(<span id={id} style={srOnly}>{text}</span>, document.body)}
       {anchor && <TipBubble text={text} anchor={anchor} decorative />}
     </>
   );

@@ -447,7 +447,7 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
 function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
   return (
     // Only the chip takes clicks: the dot and the gap stay click-through, so a building under them can be picked.
-    <Button variant="text" type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected}
+    <Button variant="text" type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected} aria-label={name}
       style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
         border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "none" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />

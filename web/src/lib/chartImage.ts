@@ -47,7 +47,7 @@ async function fontFaces(svg: SVGSVGElement): Promise<string> {
   return (await Promise.all(faces)).join("");
 }
 
-export async function chartPng({ svg, title, area }: { svg: SVGSVGElement; title: string; area: string }): Promise<string> {
+export async function chartPng({ svg, title, unit, area }: { svg: SVGSVGElement; title: string; unit: string; area: string }): Promise<string> {
   const cs = getComputedStyle(svg);
   const lookup = (name: string) => cs.getPropertyValue(name).trim();
   const W = svg.width.baseVal.value, H = svg.height.baseVal.value;
@@ -70,12 +70,13 @@ export async function chartPng({ svg, title, area }: { svg: SVGSVGElement; title
   if (!ctx) throw new Error("No 2D canvas");
   ctx.scale(scale, scale);
   const font = lookup("--font-sans") || "sans-serif";
-  await Promise.all([document.fonts.load(`600 14px ${font}`, title), document.fonts.load(`400 12px ${font}`, area)]).catch(() => {});
+  const heading = `${title} (${unit})`;
+  await Promise.all([document.fonts.load(`600 14px ${font}`, heading), document.fonts.load(`400 12px ${font}`, area)]).catch(() => {});
   ctx.fillStyle = lookup("--ground") || "#ffffff";
   ctx.fillRect(0, 0, cw, ch);
   ctx.fillStyle = lookup("--ink") || "#000000";
   ctx.font = `600 14px ${font}`;
-  ctx.fillText(title, pad, pad + 12);
+  ctx.fillText(heading, pad, pad + 12);
   ctx.fillStyle = lookup("--ink-muted") || "#666666";
   ctx.font = `400 12px ${font}`;
   ctx.fillText(area, pad, pad + 30);
