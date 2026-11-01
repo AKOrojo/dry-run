@@ -9,6 +9,7 @@ import { useShort, useTouch } from "../lib/breakpoint";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
+import { PhotorealChip } from "./PhotorealChip";
 import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
 import type { AOIManifest, PointInfo, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
@@ -1357,11 +1358,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           items={menu ? [{ kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) }] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
-        {run && !!frames?.length && !closeUp.active && (
-          <div data-declutter-block={phone ? "" : undefined} style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), pointerEvents: "auto" }}>
-            <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
-          </div>
-        )}
+        {/* Top-left chip stack: the run's badge, then the "3D city unavailable" chip when Google's tiles failed. */}
+        <div style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, pointerEvents: "none" }}>
+          {run && !!frames?.length && !closeUp.active && (
+            <div data-declutter-block={phone ? "" : undefined} style={{ pointerEvents: "auto" }}>
+              <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
+            </div>
+          )}
+          <PhotorealChip phone={phone} />
+        </div>
         {phone ? (
           <div data-declutter-block style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
             <ViewSwitch compact active={active} onPick={pickMode} canFly={route.length >= 2} extra={
