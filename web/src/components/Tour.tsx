@@ -24,7 +24,7 @@ const ALL_STEPS = [
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
   { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen." },
-  { id: "marks", title: "Mark places and moments", body: "Right-click the map to drop a waypoint; + Note pins a note at the playhead." },
+  { id: "marks", title: "Mark places and moments", body: "Right-click the map, or press Shift+F10 on it, to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
   { id: "flow", title: "Read flow and hazard", body: "Turn on flow arrows, the AIDR hazard rating and loads on buildings, or draw a line to see depth along it." },
   { id: "gpu3d", title: "3D on your GPU", body: "Solve a 3D close-up of any box on your own graphics card; nothing is uploaded. No run open yet? Open the demo run, pick the box on the map, then Run 3D here." },
