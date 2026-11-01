@@ -60,7 +60,7 @@ const PHONE_STEPS: Step[] = [
   { id: "plan", title: "Inspect a building", body: "Tap 3D to switch to the 2D plan view, then tap a building for its depths and the street beside it." },
   { id: "legend", title: "What the colours mean", body: "The legend button opens the legends of the layers that are on." },
   { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
-  { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Photos from residents show as observation pins; a green ring means the photo and the model agree. Right-click the map or use the Layers row to add a photo of the water. Sources and credits are linked at the end." },
+  { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Photos from residents show as observation pins; a green ring means the photo and the model agree. Long-press the map or use the Layers row to add a photo of the water. Sources and credits are linked at the end." },
   ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
   { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
   { ...ALL_STEPS.find((x) => x.id === "agent")!, anchor: "tab-agent" },

@@ -96,6 +96,7 @@ const lists = new Map<string, Observation[]>();
 const listSubs = new Set<() => void>();
 const emitList = () => listSubs.forEach((f) => f());
 const keyOf = (aoiId: string, runId?: string) => `${aoiId}|${runId ?? ""}`;
+const inflight = new Map<string, Promise<Observation[]>>();
 
 /** Add a newly uploaded observation to its list, without refetching. */
 export function addObservation(aoiId: string, runId: string | undefined, o: Observation) {
@@ -113,9 +114,15 @@ export function useObservations(aoiId?: string, runId?: string): Observation[] |
   );
   useEffect(() => {
     if (!aoiId) return;
-    const ac = new AbortController();
-    getObservations(aoiId, runId, ac.signal).then((l) => { lists.set(key, l); emitList(); }).catch(() => { /* aborted or offline: no pins */ });
-    return () => ac.abort();
+    // The map and the Layers row both ask: one request per key, shared while it is in flight.
+    let alive = true;
+    let p = inflight.get(key);
+    if (!p) {
+      p = getObservations(aoiId, runId).finally(() => inflight.delete(key));
+      inflight.set(key, p);
+    }
+    p.then((l) => { if (alive) { lists.set(key, l); emitList(); } }).catch(() => { /* offline: no pins */ });
+    return () => { alive = false; };
   }, [key]);  // eslint-disable-line react-hooks/exhaustive-deps
   return list;
 }
