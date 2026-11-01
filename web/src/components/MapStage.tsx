@@ -345,7 +345,8 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
         </div>
         Flood
         <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }}>
-          {LINKS.map((l) => <UiTooltip key={l.key} text={l.title}><button type="button" disabled={!canLink} aria-pressed={link === l.key} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button></UiTooltip>)}
+          {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
+          {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><button type="button" disabled={!canLink} aria-pressed={link === l.key} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button></UiTip>)}
         </div></UiTip>
         {below && <span style={{ marginLeft: "auto", color: "var(--ink)", ...FIG }}>{below}</span>}
       </div>
