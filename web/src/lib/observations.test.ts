@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agrees, cardHeading, checkPhoto, countNote, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, uploadProblem, waterInPhoto } from "./observations";
+import { NO_WATER, noWater, agrees, cardHeading, checkPhoto, countNote, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, uploadProblem, waterInPhoto } from "./observations";
 
 const base = { est_depth_m: 0.4, depth_low_m: null, depth_high_m: null, sim_depth_m: null };
 
@@ -67,7 +67,7 @@ describe("upload checks", () => {
 
 describe("upload problems", () => {
   it("maps each status to its copy", () => {
-    expect(uploadProblem(400).title).toBe("No water found in this photo.");
+    expect(uploadProblem(400).title).toBe("The photo could not be read.");  // unreadable image or a bad field, not "no water"
     expect(uploadProblem(413).title).toBe("That photo is over 8 MB.");
     expect(uploadProblem(415).title).toBe("That file isn't a JPEG, PNG or WebP photo.");
     expect(uploadProblem(502).next).toBe("Nothing was saved. Try again in a minute.");
@@ -80,5 +80,19 @@ describe("upload problems", () => {
     expect(retryAtText(600, now)).toBe("14:30");
     expect(uploadProblem(429, 600, now).next).toBe("Try again at 14:30");
     expect(retryAtText(undefined, now)).toBe("14:20");
+  });
+  it("tells a key lockout from the hourly limit on a 429", () => {
+    const now = new Date(2026, 10, 1, 15, 24);
+    expect(uploadProblem(429, 840, now).title).toBe("Twenty photos this hour already.");
+    expect(uploadProblem(429, 840, now).next).toBe("Try again at 15:38");
+    const locked = uploadProblem(429, 840, now, true);
+    expect(locked.key).toBe(true);
+    expect(locked.title).toMatch(/needs the judge key/);
+  });
+  it("treats a photo without flood water as no water, kept off the map", () => {
+    expect(noWater({ est_depth_m: null, water_fraction: 0 })).toBe(true);
+    expect(noWater({ est_depth_m: null, water_fraction: 0.2 })).toBe(false);
+    expect(noWater({ est_depth_m: 0.3, water_fraction: 0.005 })).toBe(false);
+    expect(NO_WATER.title).toBe("No water found in this photo.");
   });
 });

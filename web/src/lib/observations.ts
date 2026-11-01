@@ -75,10 +75,16 @@ export function retryAtText(retryAfterS: number | undefined, now: Date = new Dat
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }
 
-/** The copy for a failed upload, from the HTTP status the server gave. */
-export function uploadProblem(status: number, retryAfterS?: number, now: Date = new Date()): UploadProblem {
+export const NO_WATER: UploadProblem = { title: "No water found in this photo.", next: "Try one that shows the water against something of known height: a kerb, a car wheel, a door step." };
+
+/** The server answers a photo without flood water with an observation that has no depth (not an error): it is kept off the map. */
+export const noWater = (o: Pick<Observation, "est_depth_m" | "water_fraction">) => o.est_depth_m == null && o.water_fraction <= 0.01;
+
+/** The copy for a failed upload, from the HTTP status the server gave. A 429 that is a key lockout (a wrong judge key) is the key
+ *  row, not the hourly limit; a 400 is an unreadable image or bad field, never "no water" (that comes back as an observation). */
+export function uploadProblem(status: number, retryAfterS?: number, now: Date = new Date(), lockout = false): UploadProblem {
+  if (lockout) return { title: "Adding observations needs the judge key. Paste it in the Agent tab, then come back.", next: "", key: true };
   switch (status) {
-    case 400: return { title: "No water found in this photo.", next: "Try one that shows the water against something of known height: a kerb, a car wheel, a door step." };
     case 413: return { title: "That photo is over 8 MB.", next: "Choose a smaller one, or a screenshot of it." };
     case 415: return { title: "That file isn't a JPEG, PNG or WebP photo.", next: "Choose a JPEG, PNG or WebP photo." };
     case 429: return { title: "Twenty photos this hour already.", next: `Try again at ${retryAtText(retryAfterS, now)}` };

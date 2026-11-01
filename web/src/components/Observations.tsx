@@ -11,7 +11,7 @@ import { useClock } from "../lib/clock";
 import { useTouch } from "../lib/breakpoint";
 import { useLockout } from "../lib/lockout";
 import {
-  addObservation, agrees, cardHeading, checkPhoto, endAddObservation, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB, uploadProblem,
+  addObservation, agrees, cardHeading, checkPhoto, endAddObservation, NO_WATER, noWater, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB, uploadProblem,
   useObsUi, waterInPhoto,
 } from "../lib/observations";
 import type { UploadProblem } from "../lib/observations";
@@ -44,7 +44,7 @@ export function ObservationPins({ viewer, scene, anchors, aoiId, list, hidden }:
   if (!on || !list) return null;
   return (
     <>
-      {list.map((o) => {
+      {list.filter((o) => !noWater(o)).map((o) => {
         const agree = agrees(o);
         const isOpen = picked?.obs_id === o.obs_id;
         return (
@@ -176,13 +176,14 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
     form.append("source", "citizen_photo");
     try {
       const o = await postObservation(form, ac.signal);
+      if (noWater(o)) { setProblem(NO_WATER); setPhase("ready"); return; }
       if (aoi) addObservation(aoi.aoi_id, run?.run_id, o);
       setLayer("photos", { on: true });
       openObservation(o.obs_id);
       endAddObservation();
     } catch (e) {
       if ((e as Error).name === "AbortError") { setPhase("ready"); return; }
-      setProblem(uploadProblem(e instanceof ApiError ? e.status : 0, e instanceof ApiError ? e.retryAfterS : undefined));
+      setProblem(uploadProblem(e instanceof ApiError ? e.status : 0, e instanceof ApiError ? e.retryAfterS : undefined, new Date(), e instanceof ApiError && !!e.lockout));
       setPhase("ready");
     } finally {
       ctl.current = null;

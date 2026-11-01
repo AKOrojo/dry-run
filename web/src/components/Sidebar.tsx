@@ -31,7 +31,7 @@ import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 const DrainageCard = lazyNamed(() => import("./Drainage"), "DrainageCard");
 import { easeLeft } from "../lib/simbar";
-import { countNote, requestAddAtCentre, useObservations, useObsUi } from "../lib/observations";
+import { countNote, noWater, requestAddAtCentre, useObservations, useObsUi } from "../lib/observations";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
@@ -202,7 +202,7 @@ function LayersCard({ aoiId, runId }: { aoiId?: string; runId?: string }) {
                 <CtlButton variant="raised" type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
                   style={{ height: 24, padding: "0 9px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
                   Open</CtlButton>
-              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.key === "photos" ? (obs ? countNote(obs.length) : "") : r.note ?? ""}</span>}
+              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.key === "photos" ? (obs ? countNote(obs.filter((o) => !noWater(o)).length) : "") : r.note ?? ""}</span>}
             </span>
           </div></Tip>
           {r.key === "photos" && <div style={{ padding: "0 14px 6px" }}><CtlButton variant="text" type="button" onClick={() => requestAddAtCentre()} style={{ fontSize: 12, height: 26, color: "var(--ink)" }}>+ Add a photo of the water</CtlButton></div>}
