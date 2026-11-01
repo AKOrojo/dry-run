@@ -30,6 +30,6 @@ export const Pad = ({ children, gap = 10 }: { children: ReactNode; gap?: number 
   <div style={{ display: "flex", flexDirection: "column", gap, padding: 14 }}>{children}</div>;
 
 export function Footer({ children }: { children: ReactNode }) {
-  return <div style={{ position: "sticky", bottom: 0, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginTop: "auto",
+  return <div data-sticky-foot="" style={{ position: "sticky", bottom: 0, display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginTop: "auto",
     background: "var(--surface)", borderTop: "1px solid var(--hairline)" }}>{children}</div>;
 }

@@ -580,26 +580,42 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     wasCloseup.current = closeup;
   }, [closeup]);
   const { t_s } = useClock();
-  // Phone: the sticky Simulate footer covers the bottom of the scroller, so focus and scrollIntoView stop above it
-  // (otherwise a control scrolled into view lands under the footer and a tap hits the footer).
-  const foot = useRef<HTMLDivElement>(null);
+  // A sticky footer (the phone's Simulate bar, the Agent's Ask bar: [data-sticky-foot]) covers the bottom of the
+  // scroller, so focus and scrollIntoView stop above it (otherwise a control scrolled into view lands under the footer
+  // and a tap hits the footer). The visible one is followed as tabs and panels mount.
   const scroller = useRef<HTMLDivElement>(null);
   const [footH, setFootH] = useState(0);
   useEffect(() => {
-    const el = foot.current;
-    if (!el) { setFootH(0); return; }
-    let last = el.offsetHeight;
-    const ro = new ResizeObserver(() => {
-      const h = el.offsetHeight, grew = h - last;
+    const sc = scroller.current;
+    if (!sc) return;
+    let el: HTMLElement | null = null, last = 0;
+    // What it covers: its height, plus the gap its bottom offset leaves above the scroller's padded edge.
+    const covers = (f: HTMLElement) => f.offsetHeight + (parseFloat(getComputedStyle(sc).paddingBottom) || 0) + (parseFloat(getComputedStyle(f).bottom) || 0);
+    const measure = () => {
+      // The visible footer: a closed phone sheet has none, and opening it resizes the scroller, which lands here.
+      const f = Array.from(sc.querySelectorAll<HTMLElement>("[data-sticky-foot]")).find((x) => x.offsetParent !== null) ?? null;
+      if (f !== el) {
+        if (el) ro.unobserve(el);
+        el = f;
+        if (f) ro.observe(f, { box: "border-box" });  // padding counts (the safe-area inset)
+        last = f ? covers(f) : 0;
+        setFootH(last);
+        return;
+      }
+      if (!el) return;
+      const h = covers(el), grew = h - last;
       last = h;
       setFootH(h);
       // The footer grows when a status line wraps (the estimate arriving after a change): scroll by the growth, so
       // whatever sat just above the footer, touched or not, stays above it.
-      const sc = scroller.current;
-      if (sc && grew > 0 && sc.scrollTop > 0) sc.scrollTop += grew;
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+      if (grew > 0 && last > grew && sc.scrollTop > 0) sc.scrollTop += grew;
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(sc);
+    measure();
+    const mo = new MutationObserver(measure);
+    mo.observe(sc, { childList: true, subtree: true });
+    return () => { ro.disconnect(); mo.disconnect(); };
   }, [phone, tab]);
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
@@ -638,7 +654,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
               {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
             {phone ? (
-              <div ref={foot} style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
+              <div data-sticky-foot="" style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
                 borderTop: "1px solid var(--hairline)", display: "flex", flexDirection: "column", order: 1 }}>
                 <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
               </div>
