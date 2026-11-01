@@ -4,6 +4,7 @@ import { X } from "@phosphor-icons/react";
 import { Band } from "./rev5";
 import { markTourDone as markDone } from "../lib/tour";
 import type { Breakpoint } from "../lib/breakpoint";
+import { Button } from "./controls/Button";
 
 const CARD_W = 300;
 const GAP = 14;
@@ -199,23 +200,23 @@ export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: 
         style={{ position: "fixed", left: pos.left, top: pos.top, width: CARD_W, display: "flex", flexDirection: "column", background: "var(--surface)", visibility: searching ? "hidden" : undefined,
           border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--shadow-float)", overflow: "hidden" }}>
         <Band title={`Step ${i + 1} of ${STEPS.length}`} right={
-          <button type="button" aria-label="Close tour" onClick={finish}
+          <Button variant="icon" type="button" aria-label="Close tour" onClick={finish}
             style={{ marginLeft: "auto", width: narrow ? 40 : 24, height: narrow ? 40 : 24, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)" }}>
             <X size={14} weight="bold" />
-          </button>} />
+          </Button>} />
         <div style={{ padding: "12px 14px 4px" }}>
           <p style={{ margin: 0, fontWeight: 600, fontSize: 14, lineHeight: "20px" }}>{step.title}</p>
           <p style={{ margin: "4px 0 0", color: "var(--ink-muted)", fontSize: 13, lineHeight: "18px" }}>{step.body}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px 12px" }}>
-          <button type="button" onClick={finish} style={textBtn}>Skip tour</button>
+          <Button variant="text" type="button" onClick={finish} style={textBtn}>Skip tour</Button>
           <span style={{ marginLeft: "auto" }} />
-          {i > 0 && <button type="button" onClick={back} style={raisedBtn}>Back</button>}
-          <button type="button" autoFocus onClick={next}
+          {i > 0 && <Button variant="raised" type="button" onClick={back} style={raisedBtn}>Back</Button>}
+          <Button variant="danfo" type="button" autoFocus onClick={next}
             style={{ height: bh, padding: "0 16px", background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)",
               border: "1px solid var(--danfo-edge)", borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)", font: "inherit", fontWeight: 600 }}>
             {last ? "Done" : "Next"}
-          </button>
+          </Button>
         </div>
       </section>
     </div>

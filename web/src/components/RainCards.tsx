@@ -10,6 +10,7 @@ import type { RainMode } from "../lib/rain";
 import type { RainProfile } from "../lib/api";
 import { Slider } from "./controls/Slider";
 import { Switch as Toggle } from "./controls/Switch";
+import { Button } from "./controls/Button";
 
 const ghostBtn: CSSProperties = { ...raisedButton, height: 30, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", cursor: "pointer" };
 const textBtn: CSSProperties = { padding: "3px 6px", background: "transparent", border: 0, borderRadius: "var(--radius-md)", color: "var(--ink-muted)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" };
@@ -63,8 +64,8 @@ function CellControls({ onPick }: { onPick?: boolean }) {
           <span style={{ color: "var(--ink-muted)" }}>Centre</span>
           <span style={{ fontFamily: mono, fontSize: 12, ...FIG }}>{placeCell ? (c ? coord(c[1], c[0]) : s.place) : c ? coord(c[1], c[0]) : "Not set"}</span>
         </span>
-        {onPick && <button type="button" aria-pressed={s.picking === "centre"} onClick={() => setRain({ picking: s.picking === "centre" ? null : "centre" })} style={ghostBtn}>
-          <MapPin size={14} weight="bold" />{s.picking === "centre" ? "Click the map" : "Pick on map"}</button>}
+        {onPick && <Button variant="raised" type="button" aria-pressed={s.picking === "centre"} onClick={() => setRain({ picking: s.picking === "centre" ? null : "centre" })} style={ghostBtn}>
+          <MapPin size={14} weight="bold" />{s.picking === "centre" ? "Click the map" : "Pick on map"}</Button>}
       </div>
       <Slider label="Radius" value={s.radius_m} min={1000} max={15000} step={500} text={`${+(s.radius_m / 1000).toFixed(1)} km`} lo="1 km" hi="15 km" onChange={(v) => setRain({ radius_m: v })} />
       <Field label="Falloff" hint="The dashed ring is where rain drops to 13.5 % of the centre. Flat: even rain inside the ring, none outside.">
@@ -122,10 +123,10 @@ export function RainAreaCard({ hasInflows = false }: { hasInflows?: boolean }) {
                 <span style={{ color: "var(--ink-muted)" }}>Area</span>
                 <span style={{ fontWeight: 600, ...FIG }}>{s.picking === "polygon" ? "Drawing on the map" : s.polygon ? `${s.polygon.length} points · ${km2(s.polygon).toFixed(1)} km²` : "Not drawn yet"}</span>
               </span>
-              <button type="button" aria-pressed={s.picking === "polygon"} onClick={() => setRain({ picking: s.picking === "polygon" ? null : "polygon" })} style={ghostBtn}>
-                <Polygon size={14} weight="bold" />{s.picking === "polygon" ? "Cancel" : s.polygon ? "Redraw" : "Draw on map"}</button>
+              <Button variant="raised" type="button" aria-pressed={s.picking === "polygon"} onClick={() => setRain({ picking: s.picking === "polygon" ? null : "polygon" })} style={ghostBtn}>
+                <Polygon size={14} weight="bold" />{s.picking === "polygon" ? "Cancel" : s.polygon ? "Redraw" : "Draw on map"}</Button>
             </div>
-            {s.polygon && s.picking !== "polygon" && <span><button type="button" onClick={() => setRain({ polygon: null })} style={{ ...textBtn, padding: 0 }}>Clear</button></span>}
+            {s.polygon && s.picking !== "polygon" && <span><Button variant="text" type="button" onClick={() => setRain({ polygon: null })} style={{ ...textBtn, padding: 0 }}>Clear</Button></span>}
             <p style={hint}>{s.picking === "polygon" ? "Click to add points · Enter or double-click to finish · Backspace to undo · Esc to cancel."
               : "The rain total falls inside the area and none outside it."}</p>
           </>
@@ -139,12 +140,12 @@ export function RainAreaCard({ hasInflows = false }: { hasInflows?: boolean }) {
             {s.placeAsCell ? (
               <>
                 <CellControls />
-                <span><button type="button" onClick={() => setRain({ placeAsCell: false })} style={{ ...textBtn, padding: 0, color: "var(--ink)", textDecoration: "underline" }}>Rain over the whole place instead</button></span>
+                <span><Button variant="text" type="button" onClick={() => setRain({ placeAsCell: false })} style={{ ...textBtn, padding: 0, color: "var(--ink)", textDecoration: "underline" }}>Rain over the whole place instead</Button></span>
               </>
             ) : (
               <>
                 <p style={hint}>The rain total falls inside this place and none outside it.</p>
-                <span><button type="button" onClick={() => setRain({ placeAsCell: true })} style={{ ...textBtn, padding: 0, color: "var(--ink)", textDecoration: "underline" }}>Centre a storm cell here instead</button></span>
+                <span><Button variant="text" type="button" onClick={() => setRain({ placeAsCell: true })} style={{ ...textBtn, padding: 0, color: "var(--ink)", textDecoration: "underline" }}>Centre a storm cell here instead</Button></span>
               </>
             )}
           </>

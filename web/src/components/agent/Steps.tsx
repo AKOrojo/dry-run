@@ -4,6 +4,7 @@ import type { AgentEvent } from "../../lib/api";
 import { FIG, mono } from "../rev5";
 import { Badge } from "./bits";
 import { Tooltip } from "../controls/Tooltip";
+import { Button } from "../controls/Button";
 
 export const TOOLS: Record<string, { Icon: typeof Info; label: string }> = {
   get_aoi_info: { Icon: Info, label: "Read the study area" },
@@ -69,8 +70,8 @@ export function Stepper({ steps, running, thought, now, onRun }:
               </div>
               {runId && (
                 <div style={{ fontSize: 12, color: "var(--ink-muted)" }}>
-                  <span style={{ fontFamily: mono }}>{runId}</span> · <button type="button" onClick={() => onRun(runId)}
-                    style={{ padding: 0, border: 0, background: "none", font: "inherit", color: "var(--ink)", textDecoration: "underline" }}>Show on map</button>
+                  <span style={{ fontFamily: mono }}>{runId}</span> · <Button variant="text" type="button" onClick={() => onRun(runId)}
+                    style={{ padding: 0, border: 0, background: "none", font: "inherit", color: "var(--ink)", textDecoration: "underline" }}>Show on map</Button>
                 </div>
               )}
               {s.name === "surrogate_sweep" && <span><Badge>Screening only</Badge></span>}

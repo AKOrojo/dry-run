@@ -13,6 +13,7 @@ import { Select } from "./controls/Select";
 import { describeIv } from "./Sidebar";
 import { Globe } from "./Globe";
 import { Tooltip } from "./controls/Tooltip";
+import { Button as CtlButton } from "./controls/Button";
 
 export type CompareView = "A" | "B" | "Swipe" | "Side by side" | "Difference";
 
@@ -60,8 +61,8 @@ export function CompareCard({ runs, a, b, onA, onB, onSwap, busy, onScenario }: 
   }
   return (
     <Card title="Compare runs" right={
-      <button type="button" onClick={onSwap} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "3px 6px", background: "transparent", border: 0,
-        color: "var(--ink-muted)", font: "inherit", fontSize: 12 }}><ArrowCounterClockwise size={13} weight="bold" />Swap</button>}>
+      <CtlButton variant="text" type="button" onClick={onSwap} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "3px 6px", background: "transparent", border: 0,
+        color: "var(--ink-muted)", font: "inherit", fontSize: 12 }}><ArrowCounterClockwise size={13} weight="bold" />Swap</CtlButton>}>
       <div data-tour="compare-runs" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px" }}>
         <RunSelect l="A" runs={runs} value={a} onChange={onA} />
         <RunSelect l="B" runs={runs} value={b} onChange={onB} />
@@ -170,13 +171,13 @@ export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }
       {view === "Swipe" && (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${100 * split}%`, width: 0, zIndex: 1 }}>
           <span style={{ position: "absolute", top: 0, bottom: 0, left: -1, width: 2, background: "var(--danfo)" }} />
-          <button type="button" aria-label="Drag to swipe between A and B" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); }}
+          <CtlButton variant="icon" type="button" aria-label="Drag to swipe between A and B" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); }}
             onPointerMove={(e) => { if (e.buttons) drag(e); }}
             onKeyDown={(e) => { if (e.key === "ArrowLeft") onSplit(Math.max(0.05, split - 0.05)); if (e.key === "ArrowRight") onSplit(Math.min(0.95, split + 0.05)); }}
             style={{ position: "absolute", top: "50%", left: -22, width: 44, height: 44, marginTop: -22, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "50%",
               background: "var(--danfo)", color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)", boxShadow: "var(--shadow-float)", cursor: "ew-resize", pointerEvents: "auto", touchAction: "none" }}>
             <Columns size={18} weight="bold" />
-          </button>
+          </CtlButton>
         </div>
       )}
       {view === "Side by side" && <span style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 2, marginLeft: -1, background: "var(--hairline)" }} />}
@@ -194,11 +195,11 @@ export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }
         {views.map((v) => {
           const on = v === view;
           return (
-            <button key={v} type="button" aria-pressed={on} onClick={() => onView(v)}
+            <CtlButton variant="segment" pressed={on} key={v} type="button" onClick={() => onView(v)}
               style={{ height: 26, display: "flex", alignItems: "center", gap: 6, padding: v.length === 1 ? "0 8px 0 4px" : "0 10px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12, whiteSpace: "nowrap",
                 ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
               {v.length === 1 ? <><Letter l={v as "A" | "B"} size={18} />Run {v}</> : v}
-            </button>
+            </CtlButton>
           );
         })}
       </div>

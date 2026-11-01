@@ -12,6 +12,7 @@ import { fmtT } from "./ds";
 import { Band, Card, FIG, mono, raisedButton } from "./rev5";
 import { DepthChart } from "./Dock";
 import { areaCache } from "../lib/areaCache";
+import { Button } from "./controls/Button";
 
 type Ring = [number, number][];
 type BuildingInfo = { id: string; ring: Ring; height_m: number | null; source: string | null; lon: number; lat: number };
@@ -123,13 +124,13 @@ export function SelectedBuildingCard({ sel, second, onFly, onClear }: { sel: Sel
     ["Counted as", counted(sel.near)],
   ];
   return (
-    <Card title="Selected building" right={<button type="button" onClick={onClear} style={{ marginLeft: "auto", padding: "3px 6px", border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", fontSize: 12 }}>Clear</button>}>
+    <Card title="Selected building" right={<Button variant="text" type="button" onClick={onClear} style={{ marginLeft: "auto", padding: "3px 6px", border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", fontSize: 12 }}>Clear</Button>}>
       <dl style={{ margin: 0, padding: "10px 14px 12px", display: "grid", gridTemplateColumns: "112px minmax(0, 1fr)", rowGap: 7, columnGap: 10, fontSize: 13, lineHeight: "18px" }}>
         {rows.map(([k, v]) => <div key={k} style={{ display: "contents" }}><dt style={{ color: "var(--ink-muted)" }}>{k}</dt><dd style={{ margin: 0, minWidth: 0 }}>{v}</dd></div>)}
       </dl>
       <div style={{ display: "flex", gap: 8, padding: "0 14px 12px" }}>
-        <button type="button" onClick={onFly} style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13 }}><MapPin size={14} weight="bold" />Fly to</button>
-        <button type="button" onClick={copy} style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", fontSize: 13 }}><Copy size={14} weight="bold" />{copied ? "Copied" : "Copy link"}</button>
+        <Button variant="raised" type="button" onClick={onFly} style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13 }}><MapPin size={14} weight="bold" />Fly to</Button>
+        <Button variant="text" type="button" onClick={copy} style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 10px", border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", fontSize: 13 }}><Copy size={14} weight="bold" />{copied ? "Copied" : "Copy link"}</Button>
       </div>
       {second && (
         <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>

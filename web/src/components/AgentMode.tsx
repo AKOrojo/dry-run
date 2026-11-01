@@ -8,6 +8,7 @@ import { TOOLS } from "./agent/Steps";
 import { Band, Card, FIG, mono } from "./rev5";
 import { describeIv } from "./Sidebar";
 import { Tip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 /** What the agent session produced, in order: run ids, the recommended run, the place it studied most. */
 export type Session = { runIds: string[]; recommended: string | null; place: string | null; calls: { name: string; args: any; runId?: string }[] };
@@ -89,14 +90,14 @@ export function RunsCard({ runs, shown, recommended, onShow }: { runs: RunManife
           const on = m.run_id === shown;
           return (
             <li key={m.run_id}>
-              <button type="button" aria-pressed={on} onClick={() => onShow(m)}
+              <Button variant="text" type="button" aria-pressed={on} onClick={() => onShow(m)}
                 style={{ width: "100%", display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "2px 10px", padding: "9px 14px", border: 0, borderTop: i ? "1px solid var(--hairline)" : 0,
                   background: on ? "var(--surface-raised)" : "transparent", boxShadow: on ? "inset 3px 0 0 var(--danfo)" : undefined, color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
                 <span style={{ fontWeight: on ? 600 : 400, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <span style={FIG}>{i + 1}</span> · {runTitle(m)}{m.run_id === recommended && <span style={{ color: "var(--danfo-text)", fontSize: 12, fontWeight: 600 }}> · recommended</span>}</span>
                 <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>{kind(m.backend)}</span>
                 <span style={{ gridColumn: "1 / -1", color: "var(--ink-muted)", fontSize: 12, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{runSub(m)}</span>
-              </button>
+              </Button>
             </li>
           );
         })}
@@ -125,8 +126,8 @@ export function AgentMapOverlay({ runs, shown, picked, onShow }: { runs: RunMani
         <div role="group" aria-label="Show run" style={{ position: "absolute", top: 64, right: 16, zIndex: 1, display: "flex", gap: 2, padding: 3, background: "var(--surface)",
           border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--card-shadow)", pointerEvents: "auto" }}>
           {runs.map((r, k) => (
-            <button key={r.run_id} type="button" aria-label={`Show run ${k + 1}`} aria-pressed={k === i} onClick={() => onShow(r)}
-              style={{ width: 28, height: 26, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, background: "transparent", cursor: "pointer" }}>{num(k + 1, k === i)}</button>
+            <Button variant="icon" key={r.run_id} type="button" aria-label={`Show run ${k + 1}`} aria-pressed={k === i} onClick={() => onShow(r)}
+              style={{ width: 28, height: 26, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, background: "transparent", cursor: "pointer" }}>{num(k + 1, k === i)}</Button>
           ))}
         </div>
       )}
@@ -147,7 +148,7 @@ function Bars({ bars, color, fmt, shown, recommended, onPick, labelled = false }
         const rec = b.id === recommended, on = b.id === shown;
         const pct = b.value == null ? 0 : (100 * b.value) / max;
         return (
-          <Tip key={b.id} text={rec ? "Recommended run" : undefined}><button type="button" onClick={() => onPick(b.id)}
+          <Tip key={b.id} text={rec ? "Recommended run" : undefined}><Button variant="text" type="button" onClick={() => onPick(b.id)}
             style={{ display: "grid", gridTemplateColumns: labelled ? "minmax(0, 1fr) auto" : "14px minmax(0, 1fr) auto", alignItems: "center", gap: labelled ? "3px 10px" : 10,
               padding: 0, border: 0, background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
             {labelled ? <span style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: on ? 600 : 400 }}>{b.label}</span>
@@ -158,7 +159,7 @@ function Bars({ bars, color, fmt, shown, recommended, onPick, labelled = false }
                 outline: rec ? "2px solid var(--danfo)" : undefined, outlineOffset: 1, opacity: on || !shown ? 1 : 0.75 }} />
             </span>
             {!labelled && <span style={{ minWidth: 52, textAlign: "right", fontSize: 13, fontWeight: rec ? 700 : 400, ...FIG }}>{b.value == null ? "…" : fmt(b.value)}</span>}
-          </button></Tip>
+          </Button></Tip>
         );
       })}
     </div>
@@ -251,9 +252,9 @@ function AgentLog({ session, runs, shown, onShow }: { session: Session; runs: Ru
         })}
       </ol>
       {session.calls.length > LOG_ROWS && (
-        <button type="button" onClick={() => setAll((v) => !v)} style={{ margin: "0 14px 10px", padding: 0, border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
+        <Button variant="text" type="button" onClick={() => setAll((v) => !v)} style={{ margin: "0 14px 10px", padding: 0, border: 0, background: "transparent", color: "var(--ink-muted)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
           {all ? "Show fewer" : `${session.calls.length - LOG_ROWS} more calls`}
-        </button>
+        </Button>
       )}
     </div>
   );

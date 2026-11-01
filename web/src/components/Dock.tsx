@@ -26,6 +26,7 @@ import { TextField } from "./controls/TextField";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry } from "./controls/Menu";
 import { Tooltip, Tip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
 type TS = NonNullable<RunManifest["timeseries"]>;
@@ -220,10 +221,10 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, d
         <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
           <Menu label="Chart actions" items={actions}
             trigger={(p) => (
-              <button {...p} type="button" aria-label={menu ? "Choose chart" : "Chart actions"}
+              <Button variant="icon" {...p} type="button" aria-label={menu ? "Choose chart" : "Chart actions"}
                 style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
                 <DotsThreeVertical size={14} weight="bold" />
-              </button>
+              </Button>
             )} />
         </span>
       </figcaption>
@@ -300,12 +301,12 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
       <Band title="Timeline" right={<span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 12 }}>{note ?? <><span style={{ fontFamily: "var(--font-mono)" }}>T+00:00 – {fmtT(durS)}</span> · {frames} frames, {stepMin} min</>}</span>} />
       <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: 18, alignItems: "center", padding: "14px 18px 10px 14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button type="button" aria-label="Play" style={{ ...sq, width: 30, ...raisedButton }} onClick={() => clock.set(nowS >= durS ? { t_s: 0, playing: true } : { playing: true })}>{svg12(ico.play)}</button>
-          <button type="button" aria-label="Pause" aria-pressed={!playing} style={{ ...sq, width: 30, ...(!playing ? pressed : raisedButton) }} onClick={() => clock.set({ playing: false })}>{svg12(ico.pause)}</button>
-          <button type="button" aria-label="Next event" style={{ ...sq, width: 30, ...raisedButton }} onClick={nextEvent}>{svg12(ico.next)}</button>
+          <Button variant="raised" type="button" aria-label="Play" style={{ ...sq, width: 30, ...raisedButton }} onClick={() => clock.set(nowS >= durS ? { t_s: 0, playing: true } : { playing: true })}>{svg12(ico.play)}</Button>
+          <Button variant="raised" type="button" aria-label="Pause" aria-pressed={!playing} style={{ ...sq, width: 30, ...(!playing ? pressed : raisedButton) }} onClick={() => clock.set({ playing: false })}>{svg12(ico.pause)}</Button>
+          <Button variant="raised" type="button" aria-label="Next event" style={{ ...sq, width: 30, ...raisedButton }} onClick={nextEvent}>{svg12(ico.next)}</Button>
           <span style={{ width: 4 }} />
-          <button type="button" aria-label="Playback speed" onClick={() => clock.set({ speed: SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] })}
-            style={{ ...sq, gap: 6, padding: "0 8px 0 10px", ...raisedButton, font: "inherit", ...FIG }}>{speed}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></button>
+          <Button variant="raised" type="button" aria-label="Playback speed" onClick={() => clock.set({ speed: SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] })}
+            style={{ ...sq, gap: 6, padding: "0 8px 0 10px", ...raisedButton, font: "inherit", ...FIG }}>{speed}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></Button>
         </div>
         <div ref={track} onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seek(e); }}
           onPointerMove={(e) => { if (e.buttons) seek(e); }} style={{ position: "relative", height: 66, cursor: "pointer", touchAction: "none" }}>
@@ -359,11 +360,10 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
   return (
     <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0, background: "var(--surface)" }}>
       <Band title="Key events" right={<>{extra}
-        <Tooltip text={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}><button type="button" data-tour="marks" disabled={!runId}
+        <Tooltip text={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}><Button variant="raised" type="button" data-tour="marks" disabled={!runId}
           onClick={() => { clock.set({ playing: false }); setDraft({ t: nowS, text: "" }); }}
-          style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500,
-            ...(runId ? {} : { opacity: 0.45, cursor: "not-allowed" }) }}>
-          <Plus size={12} weight="bold" />Note</button></Tooltip></>} />
+          style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500 }}>
+          <Plus size={12} weight="bold" />Note</Button></Tooltip></>} />
       {draft && (
         <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", minHeight: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
           <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
@@ -386,10 +386,10 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
                 <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
                 <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.text}</span>
                 <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(n.t_s)}</span>
-                <Tooltip text="Remove note"><button type="button" aria-label={`Remove note at ${fmtT(n.t_s)}`} onClick={(ev) => { ev.stopPropagation(); if (runId) removeNote(runId, n.id); }}
+                <Tooltip text="Remove note"><Button variant="icon" type="button" aria-label={`Remove note at ${fmtT(n.t_s)}`} onClick={(ev) => { ev.stopPropagation(); if (runId) removeNote(runId, n.id); }}
                   style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
                   <X size={12} weight="bold" />
-                </button></Tooltip>
+                </Button></Tooltip>
               </li></Tooltip>
             );
           }

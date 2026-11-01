@@ -49,6 +49,7 @@ import { Slider } from "./controls/Slider";
 import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
+import { Button } from "./controls/Button";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -100,13 +101,6 @@ const pill: CSSProperties = {
   padding: "4px 10px", background: "color-mix(in srgb, var(--ground) 84%, transparent)",
   border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", fontSize: 11, color: "var(--ink-muted)", whiteSpace: "nowrap",
 };
-const segBtn = (on: boolean, h: number, disabled = false): CSSProperties => ({
-  height: h, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
-  ...(on
-    ? { background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)", fontWeight: 600 }
-    : { background: "transparent", color: "var(--ink-muted)" }),
-  ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}),
-});
 
 // ---------- geometry helpers ----------
 function pointInRing(x: number, y: number, ring: [number, number][]) {
@@ -170,7 +164,7 @@ async function fetchReading(runId: string, lon: number, lat: number, tS: number)
 function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => void }) {
   const rot = -headingDeg;
   return (
-    <UiTooltip text="Reset to north"><button type="button" onClick={onReset} aria-label={`North, rotated ${Math.round(rot)} degrees. Click to reset.`}
+    <UiTooltip text="Reset to north"><Button variant="icon" type="button" onClick={onReset} aria-label={`North, rotated ${Math.round(rot)} degrees. Click to reset.`}
       style={{ position: "absolute", top: 16, left: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 0,
         background: "transparent", border: 0, font: "inherit", cursor: "pointer", pointerEvents: "auto" }}>
       <span className="dr-compass-n" style={{ fontSize: 10, lineHeight: "12px", fontWeight: 600, color: "var(--ink)", textShadow: "0 0 3px var(--ground)" }}>N</span>
@@ -183,7 +177,7 @@ function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => v
           <path d="M18 8.5 18 21.5 13 25z" fill="var(--ink-muted)" />
         </g>
       </svg>
-    </button></UiTooltip>
+    </Button></UiTooltip>
   );
 }
 
@@ -204,15 +198,11 @@ function ViewSwitch({ active, onPick, canFly, compact = false, extra }: { active
         const disabled = it.name === "Fly along" && !canFly;
         if (compact && it.name === "Fly along" && !canFly) return <Fragment key="route">{extra}</Fragment>;
         const btn = (
-          <UiTooltip key={it.name} text={disabled ? "Draw a route first" : it.name}><button type="button" disabled={disabled} aria-label={compact ? it.name : undefined}
-            aria-pressed={it.name === active} onClick={() => onPick(it.name)}
-            style={{ height: compact ? 40 : 28, ...(compact ? { width: 40, justifyContent: "center", padding: 0 } : {}), display: "flex", alignItems: "center", gap: 6, padding: compact ? 0 : "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
-              ...(it.name === active
-                ? { background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }
-                : { background: "transparent", color: "var(--ink-muted)" }),
-              ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}>
+          <UiTooltip key={it.name} text={disabled ? "Draw a route first" : it.name}><Button variant="segment" pressed={it.name === active} type="button" disabled={disabled} aria-label={compact ? it.name : undefined}
+            onClick={() => onPick(it.name)}
+            style={{ height: compact ? 40 : 28, ...(compact ? { width: 40, justifyContent: "center", padding: 0 } : {}), display: "flex", alignItems: "center", gap: 6, padding: compact ? 0 : "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12, fontWeight: "inherit" }}>
             {it.icon}{!compact && it.name}
-          </button></UiTooltip>
+          </Button></UiTooltip>
         );
         return compact && it.name === "Fly along" ? <Fragment key={it.name}>{extra}{btn}</Fragment> : btn;
       })}
@@ -234,16 +224,16 @@ function RouteButton({ drawing, hasRoute, hasEvac, onDraw, onCancel, onEvac, onC
   // With a menu, the button's own click (or key) opens it; otherwise it draws, or cancels a drawing.
   const press = (p: Partial<MenuTriggerProps>) => ({ ...p, onClick: p.onClick ?? (drawing ? onCancel : onDraw) });
   const iconBtn = (p: Partial<MenuTriggerProps>) => (
-    <UiTooltip text={label}><button {...press(p)} type="button" aria-pressed={drawing} aria-label={label}
-      style={{ ...segBtn(drawing, 40), width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+    <UiTooltip text={label}><Button variant="segment" pressed={drawing} {...press(p)} type="button" aria-label={label}
+      style={{ height: 40, width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
       <Path size={18} weight="bold" />
-    </button></UiTooltip>
+    </Button></UiTooltip>
   );
   const textBtn = (p: Partial<MenuTriggerProps>) => (
-    <UiTooltip text={label}><button {...press(p)} type="button" aria-pressed={drawing}
-      style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+    <UiTooltip text={label}><Button variant="segment" pressed={drawing} {...press(p)} type="button"
+      style={{ height: 28, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
       <Path size={14} weight="bold" />{drawing ? "Drawing" : short ? "Route" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
-    </button></UiTooltip>
+    </Button></UiTooltip>
   );
   const menuOn = extras && !drawing;
   if (compact) {
@@ -273,12 +263,6 @@ const LINKS: { key: FloodLink; label: string; title: string }[] = [
 ];
 const SPEED_NAME: Record<FlySpeed, string> = { 30: "Slow", 60: "Normal", 120: "Fast" };
 const fmtDur = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
-const primaryBtn: CSSProperties = {
-  height: 28, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", font: "inherit", fontWeight: 600,
-  background: "linear-gradient(180deg, color-mix(in srgb, var(--danfo) 88%, white) 0%, var(--danfo) 100%)", color: "var(--on-danfo)",
-  border: "1px solid var(--danfo-edge)", borderRadius: "var(--radius-md)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 1px 2px var(--elev-drop), 0 2px 6px var(--elev-drop-soft)",
-};
-const textBtn: CSSProperties = { height: 28, padding: "0 8px", background: "transparent", border: 0, color: "var(--ink-muted)", font: "inherit", cursor: "pointer" };
 const hudShell: CSSProperties = {
   position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 640, maxWidth: "calc(100% - 24px)",
   background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
@@ -301,13 +285,13 @@ function RouteReadyCard({ len, speed, onFly, onRedraw, onClear, onClose }: { len
         <Path size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
         <span style={{ fontWeight: 600 }}>Route ready</span>
         <span style={{ color: "var(--ink-muted)", fontSize: 12, ...FIG }}>{fmtLen(len)} · about {fmtDur(len / speed)} at {SPEED_NAME[speed].toLowerCase()} speed</span>
-        <button type="button" aria-label="Close" onClick={onClose} style={{ ...textBtn, marginLeft: "auto", width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button>
+        <Button variant="text" type="button" aria-label="Close" onClick={onClose} style={{ height: 28, marginLeft: "auto", width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></Button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--surface)" }}>
         <span style={{ fontSize: 12, color: "var(--ink-muted)", whiteSpace: "normal" }}>The camera flies the route 300 m up. Works before, during and after a simulation.</span>
-        <button type="button" onClick={onRedraw} style={textBtn}>Redraw</button>
-        <button type="button" onClick={onClear} style={textBtn}>Clear</button>
-        <button type="button" onClick={onFly} style={primaryBtn}><Drone size={14} weight="bold" />Fly along</button>
+        <Button variant="text" type="button" onClick={onRedraw} style={{ height: 28, padding: "0 8px" }}>Redraw</Button>
+        <Button variant="text" type="button" onClick={onClear} style={{ height: 28, padding: "0 8px" }}>Clear</Button>
+        <Button variant="danfo" type="button" onClick={onFly} style={{ height: 28, padding: "0 12px", display: "flex", alignItems: "center", gap: 6, cursor: "pointer", font: "inherit", fontWeight: 600, borderRadius: "var(--radius-md)" }}><Drone size={14} weight="bold" />Fly along</Button>
       </div>
     </div>
   );
@@ -325,14 +309,14 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
         <span style={{ fontWeight: 600 }}>Fly along</span>
         <span style={{ color: "var(--ink-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</span>
         <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>
-        <UiTooltip text="Exit (Esc)"><button type="button" aria-label="Exit fly along" onClick={onExit} style={{ ...textBtn, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button></UiTooltip>
+        <UiTooltip text="Exit (Esc)"><Button variant="text" type="button" aria-label="Exit fly along" onClick={onExit} style={{ height: 28, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></Button></UiTooltip>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)" }}>
-        <UiTooltip text={hud.playing ? "Pause (Space)" : "Play (Space)"}><button type="button" aria-label={hud.playing ? "Pause" : "Play"} onClick={() => onPlay(!hud.playing)}
+        <UiTooltip text={hud.playing ? "Pause (Space)" : "Play (Space)"}><Button variant="icon" type="button" aria-label={hud.playing ? "Pause" : "Play"} onClick={() => onPlay(!hud.playing)}
           style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
             background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
           {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
-        </button></UiTooltip>
+        </Button></UiTooltip>
         <Slider bare label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)} text={fmtLen(hud.s)} onChange={onSeek} />
         <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>
         <UiTooltip text="Height above ground (scroll or E / Q)"><span style={{ fontSize: 12, ...FIG }}>{Math.round(hud.hAgl)} m up</span></UiTooltip>
@@ -340,12 +324,12 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 12px 8px", background: "var(--surface)", fontSize: 12, color: "var(--ink-muted)" }}>
         Speed
         <div style={{ ...groupStyle, height: 26, gap: 2 }}>
-          {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><button type="button" aria-pressed={hud.speed === n} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 20), cursor: "pointer" }}>{SPEED_NAME[n]}</button></UiTooltip>)}
+          {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><Button variant="segment" pressed={hud.speed === n} type="button" onClick={() => onSpeed(n)} style={{ height: 20, cursor: "pointer" }}>{SPEED_NAME[n]}</Button></UiTooltip>)}
         </div>
         Flood
         <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }}>
           {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
-          {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><button type="button" disabled={!canLink} aria-pressed={link === l.key} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button></UiTip>)}
+          {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><Button variant="segment" pressed={link === l.key} type="button" disabled={!canLink} onClick={() => onLink(l.key)} style={{ height: 20, cursor: "pointer" }}>{l.label}</Button></UiTip>)}
         </div></UiTip>
         {below && <span style={{ marginLeft: "auto", color: "var(--ink)", ...FIG }}>{below}</span>}
       </div>
@@ -447,11 +431,11 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
           </span>
         )}
         {selected && (
-          <UiTooltip text="Remove waypoint (Delete)"><button type="button" aria-label={`Remove waypoint ${n}`} onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          <UiTooltip text="Remove waypoint (Delete)"><Button variant="icon" type="button" aria-label={`Remove waypoint ${n}`} onClick={(e) => { e.stopPropagation(); onRemove(); }}
             style={{ position: "absolute", top: -9, right: -9, width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
               background: "var(--surface-raised)", border: "1px solid var(--danfo)", borderRadius: "50%", color: "var(--ink)", boxShadow: "var(--shadow-float)", cursor: "pointer" }}>
             <X size={10} weight="bold" />
-          </button></UiTooltip>
+          </Button></UiTooltip>
         )}
       </span>
       <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true" style={{ marginTop: -1 }}><path d="M1 0h10L6 7z" fill="var(--surface-raised)" stroke="var(--danfo)" /></svg>
@@ -463,7 +447,7 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
 function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
   return (
     // Only the chip takes clicks: the dot and the gap stay click-through, so a building under them can be picked.
-    <button type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected}
+    <Button variant="text" type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected}
       style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
         border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "none" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />
@@ -473,7 +457,7 @@ function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: stri
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -1359,8 +1343,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </Anchored>
           <div style={{ position: "absolute", ...(short ? { right: 64, bottom: aboveCredits } : { left: 12, bottom: aboveChip + 30 }), display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
             <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} />
-            <button type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
-              style={{ ...groupStyle, ...colBtn, flex: "none" }}><X size={14} weight="bold" /></button>
+            <Button variant="icon" type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
+              style={{ ...groupStyle, ...colBtn, flex: "none" }}><X size={14} weight="bold" /></Button>
           </div>
         </>}
         {!pinned && hover && (
@@ -1443,10 +1427,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           : { display: "contents" }}>
           {phone && <div style={{ display: "flex", alignItems: "center", height: 40, padding: "0 0 0 12px", borderBottom: "1px solid var(--hairline)", flex: "none" }}>
             <span style={{ fontWeight: 600 }}>Legends</span>
-            <button type="button" aria-label="Close legends" onClick={() => setLegendOpen(false)}
+            <Button variant="icon" type="button" aria-label="Close legends" onClick={() => setLegendOpen(false)}
               style={{ marginLeft: "auto", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, color: "var(--ink-muted)", cursor: "pointer" }}>
               <X size={14} weight="bold" />
-            </button>
+            </Button>
           </div>}
           {phone && legendEmpty && <p style={{ margin: 0, padding: 12, color: "var(--ink-muted)", fontSize: 13 }}>The layers that are on have no legend. Turn on flow, hazard, drains or time to flood in Layers.</p>}
         <div ref={legendBox} data-declutter-block className={phone ? "dr-legends-phone" : undefined} style={phone
@@ -1476,10 +1460,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               <RoadHorizon size={15} weight="fill" color="var(--hazard)" style={{ flex: "none" }} />
               <span style={{ fontWeight: 600 }}>{place.name}</span>
               <span style={{ color: "var(--ink-muted)" }}>· corridor, {baseline ? "baseline " : ""}run maximum</span>
-              <button type="button" aria-label="Close" onClick={() => setSelectedPlace(null)}
+              <Button variant="icon" type="button" aria-label="Close" onClick={() => setSelectedPlace(null)}
                 style={{ marginLeft: "auto", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, color: "var(--ink-muted)", cursor: "pointer" }}>
                 <X size={14} weight="bold" />
-              </button>
+              </Button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "auto auto minmax(0, 1fr)", alignItems: "center", background: "var(--surface)" }}>
               <div style={{ display: "flex", flexDirection: "column", padding: "8px 16px 9px 12px" }}>
@@ -1509,15 +1493,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               <button type="button" data-tour="plan" aria-label={view === "Plan" ? "2D plan view. Switch to 3D" : "3D view. Switch to the 2D plan view"} onClick={() => pickView(view === "Plan" ? "Orbit" : "Plan")}
                 style={{ ...groupStyle, ...colBtn, fontWeight: 600, fontSize: 12 }}>{view === "Plan" ? "2D" : "3D"}</button>
               <div style={{ ...groupStyle, height: "auto", padding: 0, flexDirection: "column" }}>
-                <button type="button" aria-label="Zoom in" onClick={() => zoomBy(0.4)} style={{ ...colBtn, background: "transparent", border: 0 }}><Plus size={16} weight="bold" /></button>
+                <Button variant="icon" type="button" aria-label="Zoom in" onClick={() => zoomBy(0.4)} style={{ ...colBtn, background: "transparent", border: 0 }}><Plus size={16} weight="bold" /></Button>
                 <span aria-hidden="true" style={{ width: 24, height: 1, background: "var(--hairline)" }} />
-                <button type="button" aria-label="Zoom out" onClick={() => zoomBy(-0.6)} style={{ ...colBtn, background: "transparent", border: 0 }}><Minus size={16} weight="bold" /></button>
+                <Button variant="icon" type="button" aria-label="Zoom out" onClick={() => zoomBy(-0.6)} style={{ ...colBtn, background: "transparent", border: 0 }}><Minus size={16} weight="bold" /></Button>
               </div>
               {phone ? (
-                <button type="button" data-tour="legend" aria-label="Legends" aria-expanded={legendOpen} onClick={() => setLegendOpen((v) => !v)}
-                  style={{ ...groupStyle, ...colBtn, ...(legendOpen ? { background: "var(--pressed-bg)", color: "var(--ground)" } : {}) }}><Info size={16} weight="bold" /></button>
+                <Button variant="icon" type="button" data-tour="legend" aria-label="Legends" aria-expanded={legendOpen} onClick={() => setLegendOpen((v) => !v)}
+                  style={{ ...groupStyle, ...colBtn, ...(legendOpen ? { background: "var(--pressed-bg)", color: "var(--ground)" } : {}) }}><Info size={16} weight="bold" /></Button>
               ) : (
-                <UiTooltip text="Fullscreen"><button type="button" aria-label="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></button></UiTooltip>
+                <UiTooltip text="Fullscreen"><Button variant="icon" type="button" aria-label="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></Button></UiTooltip>
               )}
             </div>
             <div data-declutter-block style={{ position: "absolute", ...(phone ? (short ? { left: credW + 16, bottom: 8 } : { left: 12, bottom: aboveChip }) : { right: 72, bottom: viewState.coords ? aboveChip : 26 }), pointerEvents: "none" }}>
@@ -1528,14 +1512,14 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <div ref={rightGroup} data-declutter-block style={{ position: "absolute", right: 16, bottom: 26, display: "flex", alignItems: "flex-end", gap: 8, pointerEvents: "auto" }}>
           <ScaleBar nice={cam.nice} px={cam.px} />
           <div style={{ ...groupStyle, gap: 2 }}>
-            <button type="button" data-tour="plan" aria-pressed={view === "Plan"} onClick={() => pickView("Plan")} style={segBtn(view === "Plan", 24)}>2D</button>
-            <button type="button" aria-pressed={view === "Orbit"} onClick={() => pickView("Orbit")} style={segBtn(view === "Orbit", 24)}>3D</button>
+            <Button variant="segment" pressed={view === "Plan"} type="button" data-tour="plan" onClick={() => pickView("Plan")} style={{ height: 24 }}>2D</Button>
+            <Button variant="segment" pressed={view === "Orbit"} type="button" onClick={() => pickView("Orbit")} style={{ height: 24 }}>3D</Button>
           </div>
           <div style={{ ...groupStyle, padding: "0 8px 0 10px", gap: 6, fontSize: 12, ...FIG }} aria-label="Zoom">{cam.zoom.toFixed(1)}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></div>
-          <UiTooltip text="Fullscreen"><button type="button" aria-label="Fullscreen" onClick={fullscreen}
+          <UiTooltip text="Fullscreen"><Button variant="icon" type="button" aria-label="Fullscreen" onClick={fullscreen}
             style={{ ...groupStyle, width: 32, padding: 0, justifyContent: "center", color: "var(--ink)", font: "inherit", cursor: "pointer" }}>
             <ArrowsOut size={15} weight="bold" />
-          </button></UiTooltip>
+          </Button></UiTooltip>
         </div>
         )}
       </div>

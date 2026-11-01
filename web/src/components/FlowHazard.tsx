@@ -22,6 +22,7 @@ import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, FIG, raisedButton } from "./rev5";
 import { fmtT } from "./ds";
 import { Tooltip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 /** The ground point under a canvas pixel: the globe (terrain or the 3D tiles), else the ellipsoid where no tile has loaded. */
 function pickGround(viewer: Cesium.Viewer, x: number, y: number): Cesium.Cartesian3 | undefined {
@@ -66,11 +67,11 @@ export function FlowHazardCard() {
           ))}
           <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 30 }}>
             <Toggle on={lay.profile.on} label="Depth profile" onChange={(on) => { setLayer("profile", { on }); if (!on) flowStore.set({ drawing: null }); }} />
-            <button type="button" onClick={draw} aria-pressed={!!fh.drawing}
+            <Button variant="raised" type="button" onClick={draw} aria-pressed={!!fh.drawing}
               style={{ marginLeft: "auto", height: 30, display: "flex", alignItems: "center", gap: 7, padding: "0 12px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", cursor: "pointer",
                 ...(fh.drawing ? { outline: "var(--stroke-focus) solid var(--danfo)", outlineOffset: -1 } : {}) }}>
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 11 L12 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" /><circle cx="2.5" cy="10.5" r="1.8" fill="currentColor" /><circle cx="11.5" cy="3.5" r="1.8" fill="currentColor" /></svg>
-              {fh.drawing ? "Click the map" : fh.a && fh.b ? "Redraw" : "Draw a line"}</button>
+              {fh.drawing ? "Click the map" : fh.a && fh.b ? "Redraw" : "Draw a line"}</Button>
           </div>
         </div>
       </Card>

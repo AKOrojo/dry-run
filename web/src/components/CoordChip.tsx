@@ -10,6 +10,7 @@ import { FIG, mono } from "./rev5";
 import { getPointInfo } from "../lib/api";
 import { TextField } from "./controls/TextField";
 import { Tooltip } from "./controls/Tooltip";
+import { Button } from "./controls/Button";
 
 type Fmt = "DMS" | "Decimal";
 const FMT_KEY = "dr_coord_fmt";
@@ -166,15 +167,15 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds, bottom = 26, 
           <span data-testid="coord-text" style={{ fontFamily: mono, minWidth: fmt === "DMS" ? 168 : 128, ...FIG }}>{at ? formatLL(at.lat, at.lon, fmt) : "–"}</span>
           <span style={{ color: "var(--ink-muted)", ...FIG }}>ground {ground != null ? `${ground.toFixed(1)} m` : "–"}</span>
           <span role="group" aria-label="Coordinate format" style={{ display: "flex", padding: 2, gap: 2, ...tray }}>
-            <button type="button" aria-pressed={fmt === "DMS"} onClick={() => pickFmt("DMS")} style={seg(fmt === "DMS")}>DMS</button>
-            <button type="button" aria-pressed={fmt === "Decimal"} onClick={() => pickFmt("Decimal")} style={seg(fmt === "Decimal")}>Decimal</button>
+            <Button variant="segment" pressed={fmt === "DMS"} type="button" onClick={() => pickFmt("DMS")} style={seg(fmt === "DMS")}>DMS</Button>
+            <Button variant="segment" pressed={fmt === "Decimal"} type="button" onClick={() => pickFmt("Decimal")} style={seg(fmt === "Decimal")}>Decimal</Button>
           </span>
           <TextField value={text} onChange={(e) => { setText(e.target.value); setErr(null); }} onKeyDown={onKey} placeholder="Go to lat, lon…" aria-label="Go to latitude, longitude" aria-invalid={!!err}
             spellCheck={false} autoComplete="off"
             mono style={{ width: 150, flex: "0 1 150px", minWidth: 60, height: 24, padding: "0 8px", fontSize: 11 }} />
-          <Tooltip text={copied ? "Copied" : "Copy coordinates"}><button type="button" aria-label={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
+          <Tooltip text={copied ? "Copied" : "Copy coordinates"}><Button variant="icon" type="button" aria-label={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
             {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
-          </button></Tooltip>
+          </Button></Tooltip>
         </div>
       </div>
     </>

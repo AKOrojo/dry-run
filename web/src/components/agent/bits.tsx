@@ -1,6 +1,7 @@
 // Small shared pieces for the Agent panel (rev5 Agent.dc.html).
 import type { CSSProperties, ReactNode } from "react";
 import { raisedButton, mono } from "../rev5";
+import { Button } from "../controls/Button";
 
 const ghostButton: CSSProperties = { background: "transparent", color: "var(--ink-muted)", border: "1px solid transparent" };
 const btnBase: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 32, padding: "0 12px",
@@ -8,10 +9,12 @@ const btnBase: CSSProperties = { display: "inline-flex", alignItems: "center", j
 
 export function Btn({ kind, icon, children, ...rest }:
   { kind: "primary" | "raised" | "ghost"; icon?: ReactNode; children: ReactNode; onClick?: () => void; disabled?: boolean }) {
+  // The primary is a flat danfo fill with no shadow; the ghost is the text look with a transparent border.
   const look: CSSProperties = kind === "primary"
-    ? { background: "var(--danfo)", color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)", fontWeight: 600 }
+    ? { background: "var(--danfo)", color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)", boxShadow: "none", fontWeight: 600 }
     : kind === "raised" ? raisedButton : ghostButton;
-  return <button type="button" {...rest} style={{ ...btnBase, ...look, opacity: rest.disabled ? 0.5 : 1 }}>{icon}{children}</button>;
+  const variant = kind === "primary" ? "danfo" : kind === "raised" ? "raised" : "text";
+  return <Button variant={variant} {...rest} style={{ ...btnBase, ...look }}>{icon}{children}</Button>;
 }
 
 export function Badge({ children }: { children: ReactNode }) {
