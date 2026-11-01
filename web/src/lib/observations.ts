@@ -66,8 +66,8 @@ export function checkPhoto(f: { type: string; size: number }): UploadProblem | n
   return null;
 }
 
-/** "1.2" for 1.2 MB, one decimal. */
-export const sizeMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+/** "2.4 MB", one decimal; a file under a tenth of a megabyte says so instead of "0.0 MB". */
+export const sizeMB = (bytes: number) => (bytes < 0.05 * 1024 * 1024 ? "under 0.1 MB" : `${(bytes / (1024 * 1024)).toFixed(1)} MB`);
 
 /** HH:MM in local time, the given number of seconds after `now`. */
 export function retryAtText(retryAfterS: number | undefined, now: Date = new Date()): string {

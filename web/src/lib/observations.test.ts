@@ -59,8 +59,9 @@ describe("upload checks", () => {
     expect(checkPhoto({ type: "image/jpeg", size: PHOTO_MAX_BYTES + 1 })?.title).toBe("That photo is over 8 MB.");
   });
   it("prints the size to one decimal", () => {
-    expect(sizeMB(1.25 * 1024 * 1024)).toBe("1.3");
-    expect(sizeMB(2 * 1024 * 1024)).toBe("2.0");
+    expect(sizeMB(1.25 * 1024 * 1024)).toBe("1.3 MB");
+    expect(sizeMB(2 * 1024 * 1024)).toBe("2.0 MB");
+    expect(sizeMB(700)).toBe("under 0.1 MB");
   });
 });
 

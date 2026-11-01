@@ -57,12 +57,19 @@ export function ObservationPins({ viewer, scene, anchors, aoiId, list, hidden }:
               </Button>
               <span aria-hidden="true" style={{ ...pillStyle, pointerEvents: "none" }}>{pinLabel(o)}</span>
             </span>
-            {isOpen && picked && <ObservationCard o={picked} />}
+            {isOpen && picked && <ObservationCard o={picked} above={lowerHalf(scene, o)} />}
           </Anchored>
         );
       })}
     </>
   );
+}
+
+/** A pin in the lower half of the map opens its card upwards, so the card stays on the map. */
+function lowerHalf(scene: Cesium.Scene | undefined, o: Observation): boolean {
+  if (!scene || scene.isDestroyed()) return false;
+  const at = Cesium.SceneTransforms.worldToWindowCoordinates(scene, Cesium.Cartesian3.fromDegrees(o.lon, o.lat));
+  return !!at && at.y > scene.canvas.clientHeight / 2;
 }
 
 const row: CSSProperties = { display: "flex", justifyContent: "space-between", gap: 12 };
@@ -71,10 +78,10 @@ const value: CSSProperties = { fontWeight: 600, textAlign: "right", ...FIG };
 const note: CSSProperties = { fontSize: 12, lineHeight: "16px", color: "var(--ink-muted)" };
 
 /** The "Pin opened" card: the photo's water outline, what the photo measured and what the model has there. */
-function ObservationCard({ o }: { o: Observation }) {
+function ObservationCard({ o, above }: { o: Observation; above: boolean }) {
   const water = waterInPhoto(o);
   return (
-    <div style={{ position: "absolute", left: 16, top: -10, width: 300, pointerEvents: "auto", background: "var(--surface)", border: "1px solid var(--hairline)",
+    <div style={{ position: "absolute", left: 16, ...(above ? { bottom: -10 } : { top: -10 }), width: 300, pointerEvents: "auto", background: "var(--surface)", border: "1px solid var(--hairline)",
       borderRadius: 6, boxShadow: "var(--card-shadow)", overflow: "hidden", display: "flex", flexDirection: "column", fontSize: 13, lineHeight: "18px" }}>
       <div style={{ position: "relative", height: 150, background: "var(--ground)" }}>
         {o.mask_png != null && <img src={`${API}/api/observations/${encodeURIComponent(o.obs_id)}/mask.png`} alt="Water outline found in the photo"
@@ -214,7 +221,7 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
                 <img src={preview} alt="" style={{ width: 96, height: 64, flex: "none", objectFit: "cover", borderRadius: "var(--radius-sm)", background: "var(--ground)" }} />
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{file?.name}</span>
-                  <span style={note}>{`${sizeMB(file?.size ?? 0)} MB · only on this device until you send it`}</span>
+                  <span style={note}>{`${sizeMB(file?.size ?? 0)} · only on this device until you send it`}</span>
                   <div><Button variant="text" onClick={() => input.current?.click()} style={{ padding: 0, color: "var(--ink)" }}>Choose another</Button></div>
                 </div>
               </div>

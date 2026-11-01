@@ -31,7 +31,7 @@ import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 const DrainageCard = lazyNamed(() => import("./Drainage"), "DrainageCard");
 import { easeLeft } from "../lib/simbar";
-import { countNote, requestAddAtCentre, useObservations } from "../lib/observations";
+import { countNote, requestAddAtCentre, useObservations, useObsUi } from "../lib/observations";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
@@ -672,6 +672,8 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   }, [basemapFocus]);
   const safeStart = useSafeRoute().origin;
   useEffect(() => { if (safeStart) setTab("Inspect"); }, [safeStart]);
+  const obsSpot = useObsUi().spot;  // adding a photo of the water opens its card in Inspect
+  useEffect(() => { if (obsSpot) setTab("Inspect"); }, [obsSpot?.seq]);  // eslint-disable-line react-hooks/exhaustive-deps
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
