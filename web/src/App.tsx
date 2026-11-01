@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate, estimateSim, simulateStream, cancelSim } from "./lib/api";
 import type { ScenarioSpec, SimEstimate, SimProgress } from "./lib/api";
-import { getPresets } from "./lib/api";
+import { getPresets, getRender } from "./lib/api";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
 import { resolveLink } from "./lib/link";
+import { openLarge, RENDER_ID, useLarge } from "./lib/streetpic";
 import { mapImage, readSharedView, setView, sharedViewUrl, useView } from "./lib/view";
 import { MapStage } from "./components/MapStage";
 import { AgentPanel } from "./components/AgentPanel";
@@ -18,6 +19,8 @@ import * as CesiumNS from "cesium";
 import { AgentDock, AgentMapOverlay, BriefPlaceBars, deriveSession, RunsCard, usePlaceStat } from "./components/AgentMode";
 import type { CompareView } from "./components/Compare";
 import { lazyNamed } from "./lib/lazy";
+const StreetPictureCard = lazyNamed(() => import("./components/StreetPicture"), "StreetPictureCard");
+const StreetLarge = lazyNamed(() => import("./components/StreetPicture"), "StreetLarge");
 const ByPlace = lazyNamed(() => import("./components/Compare"), "ByPlace");
 const CompareCard = lazyNamed(() => import("./components/Compare"), "CompareCard");
 const CompareMapOverlay = lazyNamed(() => import("./components/Compare"), "CompareMapOverlay");
@@ -220,6 +223,12 @@ export default function App() {
     return () => { cancelled = true; };
   }, [runId]);
 
+  // A street picture link (?render=) opens that pair in the large view; a pair already made needs no key.
+  const large = useLarge();
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("render");
+    if (id && RENDER_ID.test(id)) getRender(id).then((r) => openLarge(r), () => {});
+  }, []);
   const [linkNote, setLinkNote] = useState<string | null>(null);
   // Set when the user picks an area: the link's (slower) answer must not override that choice.
   const picked = useRef(false);
@@ -598,7 +607,7 @@ export default function App() {
       <Sidebar {...(narrow ? { tab: sideTab, onTab: openSide } : {})} phone={bp === "phone"} timeline={bp === "tablet" && mainDock && view.timeline ? dock("extras") : undefined} aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={obsSpot ? <AddObservationSlot aoi={aoi} run={mapRun} /> : cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
-          inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
+          inspectAfter={pair || plan ? <>{pair && <StreetPictureCard aoi={aoi} a={pair.a} b={pair.b} />}{plan && <HowToInspectCard />}</> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>
             {agentList.length > 0 && <RunsCard runs={agentList} shown={run?.run_id} recommended={session.recommended} onShow={showAgentRun} />}
             <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onReplay={setReplayed} onEvents={setAgentEvents}
@@ -619,6 +628,7 @@ export default function App() {
       </ErrorBoundary>);
       return bp === "phone" ? (sheetBody ? createPortal(panel, sheetBody) : null) : panel; })()}
       </div>
+      {large && <StreetLarge />}
       {tour && <Tour onClose={() => setTour(false)} layout={bp} onStep={tourStep} />}
     </div>
     </ChartArea.Provider>
