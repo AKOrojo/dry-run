@@ -75,18 +75,50 @@ export function registerScene(s: Cesium.Scene, imagery: Cesium.ImageryLayerColle
  *  Cesium starts inertia on release from the last drag, even after the pointer paused, and a rest counted before the
  *  release would end there and start again. A wheel tick restarts the count too (zoom inertia). A move that follows no
  *  input (pointer, wheel or key in the last 500 ms) counts only once it goes past 1 m or 0.05°: Cesium nudges the camera
- *  by itself (terrain collision as tiles refine), and that is not the user moving. */
+ *  by itself (terrain collision as tiles refine), and that is not the user moving.
+ *  A drag or wheel arms the watch itself (a drag counts once it has moved the camera), not only Cesium's moveStart: while Cesium's own nudges keep its camera
+ *  "moving", no new moveStart comes for the next drag. Input on a live watch re-arms it (start() again if it had not
+ *  started). A watch with no input for MAX_WATCH_MS and the pointer up rests regardless. */
 const NUDGE_RAD = Cesium.Math.toRadians(0.05);
+const MAX_WATCH_MS = 10_000;
 
 export function watchMotion(scene: Cesium.Scene, start: () => void, rest: () => void, restMs = 300): () => void {
   const cam = scene.camera, el = scene.canvas;
   let held = 0, stillMs = 0, input = 0;
+  const pose = () => ({ pos: Cesium.Cartesian3.clone(cam.positionWC), dir: Cesium.Cartesian3.clone(cam.directionWC) });
+  const same = (a: ReturnType<typeof pose>, b: ReturnType<typeof pose>) =>
+    Cesium.Cartesian3.equalsEpsilon(a.pos, b.pos, 0, 0.01) && Cesium.Cartesian3.equalsEpsilon(a.dir, b.dir, 1e-7);
+  const far = (a: ReturnType<typeof pose>, b: ReturnType<typeof pose>) =>
+    Cesium.Cartesian3.distance(a.pos, b.pos) > 1 || Cesium.Cartesian3.angleBetween(a.dir, b.dir) > NUDGE_RAD;
+  let poll: ReturnType<typeof setInterval> | undefined;
+  let started = false, from = pose(), prev = from;
+  const end = () => { clearInterval(poll); poll = undefined; };
+  /** Start or re-arm the watch. byUser: the camera is surely moving (a wheel, or a moveStart right after input); otherwise
+   *  it starts once the pose passes 1 m or 0.05° from where the watch began (a click on the map moves nothing). */
+  const arm = (byUser: boolean) => {
+    if (scene.isDestroyed()) return;
+    if (!poll) { from = pose(); prev = from; }
+    stillMs = 0;
+    if (byUser && !started) { started = true; start(); }
+    if (poll) return;
+    poll = setInterval(() => {
+      if (scene.isDestroyed()) { end(); return; }
+      const now = pose();
+      if (!started && far(now, from)) { started = true; start(); }
+      stillMs = same(now, prev) && !held ? stillMs + 100 : 0;
+      prev = now;
+      const stale = !held && performance.now() - input > MAX_WATCH_MS;
+      if (stillMs < restMs && !stale) return;
+      end();
+      if (started) { started = false; rest(); }
+    }, 100);
+  };
   const touched = () => { input = performance.now(); };
   const down = () => { held++; touched(); };
   const up = () => { held = Math.max(0, held - 1); stillMs = 0; touched(); };
   const lost = () => { held = 0; stillMs = 0; };  // focus left mid-drag: the up never comes
-  const wheel = () => { stillMs = 0; touched(); };
-  const moveIn = () => { if (held) touched(); };
+  const wheel = () => { touched(); arm(true); };
+  const moveIn = () => { if (!held) return; touched(); arm(false); };
   el.addEventListener("pointerdown", down);
   el.addEventListener("pointermove", moveIn);
   window.addEventListener("pointerup", up);
@@ -94,32 +126,9 @@ export function watchMotion(scene: Cesium.Scene, start: () => void, rest: () => 
   window.addEventListener("blur", lost);
   window.addEventListener("keydown", touched);
   el.addEventListener("wheel", wheel, { passive: true });
-  const pose = () => ({ pos: Cesium.Cartesian3.clone(cam.positionWC), dir: Cesium.Cartesian3.clone(cam.directionWC) });
-  const same = (a: ReturnType<typeof pose>, b: ReturnType<typeof pose>) =>
-    Cesium.Cartesian3.equalsEpsilon(a.pos, b.pos, 0, 0.01) && Cesium.Cartesian3.equalsEpsilon(a.dir, b.dir, 1e-7);
-  let poll: ReturnType<typeof setInterval> | undefined;
-  const far = (a: ReturnType<typeof pose>, b: ReturnType<typeof pose>) =>
-    Cesium.Cartesian3.distance(a.pos, b.pos) > 1 || Cesium.Cartesian3.angleBetween(a.dir, b.dir) > NUDGE_RAD;
-  const off = cam.moveStart.addEventListener(() => {
-    if (poll) return;
-    const from = pose();
-    let started = performance.now() - input < 500;
-    if (started) start();
-    let prev = from;
-    stillMs = 0;
-    poll = setInterval(() => {
-      if (scene.isDestroyed()) { clearInterval(poll); poll = undefined; return; }
-      const now = pose();
-      if (!started && far(now, from)) { started = true; start(); }
-      stillMs = same(now, prev) && !held ? stillMs + 100 : 0;
-      prev = now;
-      if (stillMs < restMs) return;
-      clearInterval(poll); poll = undefined;
-      if (started) rest();
-    }, 100);
-  });
+  const off = cam.moveStart.addEventListener(() => { if (!poll) arm(performance.now() - input < 500); });
   return () => {
-    off(); clearInterval(poll); poll = undefined;
+    off(); end();
     el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", moveIn); window.removeEventListener("pointerup", up);
     window.removeEventListener("pointercancel", up); window.removeEventListener("blur", lost); window.removeEventListener("keydown", touched);
     el.removeEventListener("wheel", wheel);

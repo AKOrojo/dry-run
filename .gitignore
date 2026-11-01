@@ -55,3 +55,6 @@ Thumbs.db
 infra/env.sh
 
 # ---- Local agent working notes (not published) ----
+
+# tsc incremental build info
+*.tsbuildinfo

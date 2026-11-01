@@ -23,7 +23,7 @@ const ALL_STEPS = [
   { id: "coords", title: "Watch the storm", body: "While it simulates, the cloud and rain follow your storm. The coordinates show where you point; type a lat, lon to go there." },
   { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live, and how long until it starts when another run is ahead; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time." },
-  { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
+  { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it. Set the flight to Play with flight and the timeline's Play and Pause and the flight's move together." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline. Key events jump to the moment and place they happen. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { id: "marks", title: "Mark places and moments", body: "Right-click the map, or press Shift+F10 on it, to drop a waypoint; + Note pins a note at the playhead." },
   { id: "layers", title: "Choose the base map", body: "In Layers, switch between Photoreal 3D and Aerial. Aerial uses Bing; judges can switch it to Google with the judge key." },
@@ -42,7 +42,7 @@ type Step = { id: string; title: string; body: string; /** The element to ring, 
 const TOUCH_TEXT: Record<string, Partial<Step>> = {
   map: { body: "Tap anywhere for the depth there and how it changes over time." },
   marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
-  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along." },
+  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along; with Play with flight, the player and the flight play and pause together." },
 };
 const PHONE_STEPS: Step[] = [
   ALL_STEPS[0],
