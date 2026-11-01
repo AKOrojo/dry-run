@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import type { LonLat } from "../lib/flyroute";
-import { holdRendering } from "../lib/render";
+import { holdWhileMoving } from "../lib/render";
 
 const R = 6378137;
 const rad = Cesium.Math.toRadians;
@@ -53,9 +53,11 @@ function useLookDrag(viewer: Cesium.Viewer | undefined, active: boolean, onLook:
   }, [viewer, active]);
 }
 
-/** Held-key set, cleared on blur or when the mode ends. */
-function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
+/** Held-key set, cleared on blur or when the mode ends; onDown hears each handled key press. */
+function useHeldKeys(active: boolean, handled: ReadonlySet<string>, onDown?: () => void) {
   const keys = useRef(new Set<string>());
+  const cb = useRef(onDown);
+  cb.current = onDown;
   useEffect(() => {
     if (!active) return;
     const set = keys.current;
@@ -65,7 +67,7 @@ function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
       const k = name(e);
       set.add(k);
       if (e.shiftKey) set.add("shift");
-      if (handled.has(k)) e.preventDefault();
+      if (handled.has(k)) { e.preventDefault(); cb.current?.(); }
     };
     const up = (e: KeyboardEvent) => { set.delete(name(e)); if (!e.shiftKey) set.delete("shift"); };
     const clear = () => set.clear();
@@ -79,11 +81,13 @@ function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
 
 const FREE_KEYS = new Set(["w", "a", "s", "d", "e", "q", "c", "space"]);
 const FLY_KEYS = new Set(["e", "q"]);
+const holding = (keys: Set<string>, handled: ReadonlySet<string>) => [...keys].some((k) => handled.has(k));
 
 /** First-person flight: left-drag looks, WASD moves along the heading, E/Space up, Q/C down, Shift 4x, scroll sets speed. */
 export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean, onSpeed: (mul: number) => void) {
   const mul = useRef(1);
-  const keys = useHeldKeys(active, FREE_KEYS);
+  const hold = useRef<ReturnType<typeof holdWhileMoving> | null>(null);
+  const keys = useHeldKeys(active, FREE_KEYS, () => hold.current?.poke());
   useControllerLock(viewer, active);
   useEffect(() => { if (active) { mul.current = 1; onSpeed(1); } }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,9 +131,9 @@ export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean
       c.setView({ destination: Cesium.Cartesian3.fromRadians(lon, lat, height), orientation: { heading: h, pitch: c.pitch, roll: 0 } });
     };
     s.preRender.addEventListener(pre);
-    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
-    const release = holdRendering();
-    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // Held keys move the camera from preRender: frames run while one is down, then stop.
+    const h = (hold.current = holdWhileMoving(s, () => holding(keys.current, FREE_KEYS)));
+    return () => { h.stop(); hold.current = null; el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -172,7 +176,9 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
   }, [path, route]);
   atRef.current = at;
 
-  const keys = useHeldKeys(active, FLY_KEYS);
+  const hold = useRef<ReturnType<typeof holdWhileMoving> | null>(null);
+  const poke = () => hold.current?.poke();
+  const keys = useHeldKeys(active, FLY_KEYS, poke);
   useControllerLock(viewer, active);
 
   useEffect(() => {
@@ -185,6 +191,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
     const v = st.current;
     v.yaw += dx * 0.004;
     v.pitch = clamp(v.pitch - dy * 0.004, FLY_PITCH_LO, FLY_PITCH_HI);
+    poke();
   });
 
   useEffect(() => {
@@ -195,6 +202,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       const v = st.current;
       v.hAgl = clamp(v.hAgl - e.deltaY * 0.6, FLY_MIN_AGL, FLY_MAX_AGL);
       sync();
+      poke();
     };
     el.addEventListener("wheel", wheel, { passive: false });
     let last = performance.now(), lastHud = 0;
@@ -225,16 +233,18 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       if (ended || now - lastHud > 100) { lastHud = now; sync(); }
     };
     s.preRender.addEventListener(pre);
-    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
-    const release = holdRendering();
-    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // The flight, held keys and the easing after a turn or a height change move the camera from preRender: frames run
+    // while any of them does, then stop.
+    const h = (hold.current = holdWhileMoving(s, () => st.current.playing || holding(keys.current, FLY_KEYS)));
+    h.poke();
+    return () => { h.stop(); hold.current = null; el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active, path, at, sync, keys]);
 
   return {
     hud,
     /** Start or stop the flight; starting at the end restarts from the beginning. */
-    play: (on: boolean) => { const v = st.current; if (on && v.s >= path.len) v.s = 0; v.playing = on && path.len > 0; sync(); },
+    play: (on: boolean) => { const v = st.current; if (on && v.s >= path.len) v.s = 0; v.playing = on && path.len > 0; sync(); poke(); },
     setSpeed: (n: FlySpeed) => { st.current.speed = n; sync(); },
-    seek: (s: number) => { st.current.s = clamp(s, 0, path.len); sync(); },
+    seek: (s: number) => { st.current.s = clamp(s, 0, path.len); sync(); poke(); },
   };
 }
