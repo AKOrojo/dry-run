@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, downText, errorLine, isDown, LIMIT_WAIT_MS } from "./photoreal";
+import { classify, downText, errorLine, isDown, LIMIT_WAIT_MS, mayLoadPhotoreal } from "./photoreal";
 
 const now = 1_000_000;
 
@@ -24,6 +24,10 @@ describe("photoreal failure", () => {
     expect(isDown(d, d.retryAt)).toBe(false);
     expect(isDown(classify({ statusCode: 500 }, now), now)).toBe(false);
     expect(isDown(null)).toBe(false);
+  });
+  it("never loads again after any failure until Try 3D again clears it (area switches included)", () => {
+    for (const s of [500, 429, 403]) expect(mayLoadPhotoreal(classify({ statusCode: s }, now))).toBe(false);
+    expect(mayLoadPhotoreal(null)).toBe(true);
   });
   it("logs the status and Google's message, not a minified class name", () => {
     const line = errorLine({ statusCode: 429, response: '{"error": {"code": 429, "message": "Quota exceeded for quota metric \'3D Tiles root requests\'"}}' });

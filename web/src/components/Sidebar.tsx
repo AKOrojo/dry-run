@@ -172,7 +172,7 @@ function PhotorealDownRow({ down }: { down: PhotorealDown }) {
 
 function LayersCard() {
   const lay = useLayers();
-  const photorealOff = isDown(lay.photorealDown);
+  const photorealOff = !!lay.photorealDown;  // back only through Try 3D again
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
   const rainSet = useRain().mode !== "whole";

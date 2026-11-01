@@ -35,5 +35,9 @@ export function errorLine(err: unknown): string {
   return `Google Photorealistic 3D Tiles (tile.googleapis.com via Cesium ion): HTTP ${status}${msg ? `: ${msg}` : ""}`;
 }
 
-/** Still down at `now`: Photoreal is not requested again (area switches included) until this passes or the user retries. */
+/** Try 3D again is not offered yet at `now` (a 429 waits for Retry-After or 10 min; a refused key never). */
 export const isDown = (d: PhotorealDown | null, now = Date.now()) => !!d && now < d.retryAt;
+
+/** Photoreal is requested only with no failure on record: whatever the cause, nothing asks Google again (area switches
+ *  included) until the user presses Try 3D again, which clears it. */
+export const mayLoadPhotoreal = (d: PhotorealDown | null) => d === null;

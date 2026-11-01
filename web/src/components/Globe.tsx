@@ -6,7 +6,7 @@ import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
 import { layers, setAerial, setAerialNote, setBasemap, setPhotorealDown, useLayers } from "../lib/layers";
-import { classify, errorLine, isDown } from "../lib/photoreal";
+import { classify, errorLine, mayLoadPhotoreal } from "../lib/photoreal";
 import { ApiError, getGoogleTilesKey } from "../lib/api";
 import { areaCache } from "../lib/areaCache";
 import { CESIUM_CHECKED } from "../lib/cesiumPin";
@@ -526,9 +526,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   useEffect(() => {
     const v = viewer.current;
     if (!v || v.isDestroyed() || !token || layerState.basemap !== "photoreal") return;
-    // Failed earlier this session and not offered again yet (a 429 waits for Google's limit): stay on aerial without
-    // asking Google again, area switches included.
-    if (isDown(layers.get().photorealDown)) { setBasemap("aerial"); return; }
+    // Failed earlier this session: stay on aerial without asking Google again, area switches included, until Try 3D again.
+    if (!mayLoadPhotoreal(layers.get().photorealDown)) { setBasemap("aerial"); return; }
     let cancelled = false;
     let tiles: Cesium.Cesium3DTileset | undefined;
     const g = v.scene.globe;
