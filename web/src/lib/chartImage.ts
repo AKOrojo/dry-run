@@ -1,7 +1,7 @@
 // Saves a chart SVG as a PNG at 2x: the title and the area name above it, on the theme's ground colour. The SVG's CSS
 // variables are resolved from the page first, since an SVG drawn as an image cannot see the page's stylesheet, and the
 // fonts its text uses go in as data: URLs, since it cannot fetch them either.
-import { coversText, resolveVars } from "./chartdata";
+import { chartHeading, coversText, resolveVars } from "./chartdata";
 
 const fontData = new Map<string, Promise<string>>();
 const dataUrl = (url: string) => {
@@ -70,7 +70,7 @@ export async function chartPng({ svg, title, unit, area }: { svg: SVGSVGElement;
   if (!ctx) throw new Error("No 2D canvas");
   ctx.scale(scale, scale);
   const font = lookup("--font-sans") || "sans-serif";
-  const heading = `${title} (${unit})`;
+  const heading = chartHeading(title, unit);
   await Promise.all([document.fonts.load(`600 14px ${font}`, heading), document.fonts.load(`400 12px ${font}`, area)]).catch(() => {});
   ctx.fillStyle = lookup("--ground") || "#ffffff";
   ctx.fillRect(0, 0, cw, ch);
