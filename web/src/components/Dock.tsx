@@ -196,18 +196,19 @@ export function ChartFigure({ title, unit, now, nowAt, ab, last, series, empty, 
   const msgTimer = useRef<ReturnType<typeof setTimeout>>();
   // Header (board 13): the title takes the free width and truncates (full title in a tooltip), the value stays whole
   // on the right and drops its "at T+…" first; a cell under 240 px puts the value on a line of its own, 18 px taller.
-  const titleRef = useRef<HTMLSpanElement>(null), valRef = useRef<HTMLSpanElement>(null), atRef = useRef<HTMLSpanElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null), unitRef = useRef<HTMLSpanElement>(null), valRef = useRef<HTMLSpanElement>(null), atRef = useRef<HTMLSpanElement>(null);
   const [fit, setFit] = useState({ at: true, cut: false });
   const twoLine = !ab && w > 0 && w + 28 < 240;
   useLayoutEffect(() => {
     const t = titleRef.current;
     if (!t || !w) return;
     const GAP = 5, MENU = 18;
-    const titleW = t.scrollWidth, valW = valRef.current?.offsetWidth ?? 0, atW = nowAt && atRef.current ? atRef.current.offsetWidth + GAP : 0;
+    const titleW = t.scrollWidth, unitW = (unitRef.current?.offsetWidth ?? 0) + GAP;
+    const valW = valRef.current?.offsetWidth ?? 0, atW = nowAt && atRef.current ? atRef.current.offsetWidth + GAP : 0;
     let at: boolean, room: number;
-    if (ab) { at = false; room = w - MENU - GAP; }
-    else if (twoLine) { at = valW + atW <= w; room = w - MENU - GAP; }
-    else { at = titleW + valW + atW + MENU + 2 * GAP <= w; room = w - valW - (at ? atW : 0) - MENU - 2 * GAP; }
+    if (ab) { at = false; room = w - unitW - MENU - GAP; }
+    else if (twoLine) { at = valW + atW <= w; room = w - unitW - MENU - GAP; }
+    else { at = titleW + unitW + valW + atW + MENU + 2 * GAP <= w; room = w - unitW - valW - (at ? atW : 0) - MENU - 2 * GAP; }
     const cut = titleW > room + 0.5;
     if (at !== fit.at || cut !== fit.cut) setFit({ at, cut });
   });
@@ -252,13 +253,13 @@ export function ChartFigure({ title, unit, now, nowAt, ab, last, series, empty, 
     <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, overflow: "hidden", position: "relative", borderRight: last ? undefined : "1px solid var(--hairline)" }}>
       {nowAt && <span ref={atRef} aria-hidden="true" style={{ position: "absolute", visibility: "hidden", whiteSpace: "nowrap", pointerEvents: "none" }}>{nowAt}</span>}
       <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap", minWidth: 0 }}>
+        {/* Each piece of text is its own box: the title truncates itself, the unit stays whole beside it. */}
         <Tip text={fit.cut ? `${title} (${unit})` : null}>
-          <span ref={titleRef} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-            <span style={{ fontWeight: 600 }}>{title}</span> <span style={{ color: "var(--ink-muted)" }}>({unit})</span>
-          </span>
+          <span ref={titleRef} style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600 }}>{title}</span>
         </Tip>
-        {!ab && !twoLine && <span style={{ flex: "none", fontWeight: 600, ...FIG }}><span ref={valRef}>{now}</span>{nowAt && fit.at && <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}> {nowAt}</span>}</span>}
-        <span style={{ position: "relative", display: "flex", alignSelf: "center", flex: "none" }}>
+        <span ref={unitRef} style={{ flex: "none", color: "var(--ink-muted)" }}>({unit})</span>
+        {!ab && !twoLine && <span style={{ flex: "none", marginLeft: "auto", fontWeight: 600, ...FIG }}><span ref={valRef}>{now}</span>{nowAt && fit.at && <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}> {nowAt}</span>}</span>}
+        <span style={{ position: "relative", display: "flex", alignSelf: "center", flex: "none", marginLeft: ab || twoLine ? "auto" : undefined }}>
           <Menu label="Chart actions" items={actions}
             trigger={(p) => (
               <Button variant="icon" {...p} type="button" aria-label={menu ? "Choose chart" : "Chart actions"}

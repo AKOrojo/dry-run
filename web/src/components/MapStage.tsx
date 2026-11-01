@@ -588,14 +588,17 @@ function declutter(root: HTMLElement, phone = false) {
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
   const obstacles = kept.slice();
-  // On a desktop the close-up and GPU-box chips give way to the controls, the legends and the credits; one still shown
-  // then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
-  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
-    const r = el.getBoundingClientRect();
-    if (!(r.width > 0)) return;
-    if (under(r, obstacles)) el.style.visibility = "hidden";
-    else kept.push(r);
-  });
+  // On a desktop the close-up, GPU-box and rain chips give way to the controls, the legends and the credits; one still
+  // shown then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
+  // Among themselves the higher priority stays (data-declutter-phone; a tie keeps page order).
+  if (!phone) Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-phone]"))
+    .map((el) => ({ el, p: Number(el.dataset.declutterPhone) || 0, r: el.getBoundingClientRect() }))
+    .filter((c) => c.r.width > 0)
+    .sort((a, b) => b.p - a.p)
+    .forEach(({ el, r }) => {
+      if (under(r, kept)) el.style.visibility = "hidden";
+      else kept.push(r);
+    });
   for (const b of boxes) {
     const isPlace = "place" in b.el.dataset;
     const capped = phone && isPlace && places >= PHONE_PLACES;
