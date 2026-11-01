@@ -226,7 +226,7 @@ def load_run(run_id: str) -> RunManifest:
 
 
 def save_run(manifest: RunManifest) -> None:
-    jobs.on_save_run(manifest.run_id, manifest.status.value)
+    jobs.on_save_run(manifest.run_id, manifest.status.value, manifest.scenario)
     _DONE_RUNS.pop(manifest.run_id, None)
     _write_bytes(
         "runs", f"{manifest.run_id}/manifest.json",

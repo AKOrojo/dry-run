@@ -12,17 +12,24 @@ before the run finishes, the job is marked cancelled and the next hook raises Ca
   - on_save_run / on_write: called by dryrun.storage, so the queued -> solving -> saving phases and the save
     progress are visible (and a cancel stops the uploads) even before the solver hook exists.
 Progress is "measured" only from the solver hook; until then the solving fraction is elapsed / est_s.
+The engine solves one run at a time per instance, so a queued job also reports the wait ahead of it (queue_s, ahead):
+the time left on the job being solved, plus the estimates of jobs queued before it. Solves started outside a stream
+(POST /api/simulate, the agent) are seen through on_save_run and count too, timed with set_estimator's function.
 """
 from __future__ import annotations
 
 import contextvars
 import hmac
+import itertools
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 SOLVE_SHARE = 0.9  # share of the bar for solving; the rest is saving frames
 UNMEASURED_CAP = 0.95  # an estimate-driven bar never claims to be finished
+OTHER_MAX_AGE_S = 3600  # forget a non-stream solve that never wrote its final manifest
+_SEQ = itertools.count()
 
 
 class Cancelled(Exception):
@@ -45,8 +52,23 @@ class Job:
     finished: threading.Event = field(default_factory=threading.Event)
     manifest: object = None
     error: BaseException | None = None
+    seq: int = field(default_factory=lambda: next(_SEQ))  # attach order: the queue order behind the engine
 
     def progress(self) -> dict:
+        frac, eta, elapsed = self._own()
+        queue_s, ahead = queue_ahead(self) if self.phase == "queued" else (0.0, 0)
+        if self.phase == "queued":
+            eta = None if eta is None or queue_s is None else eta + queue_s
+        sim_t = self.sim_t_s if self.measured else (frac / SOLVE_SHARE * self.t_end_s if self.phase == "solving" else
+                                                    (self.t_end_s if self.phase == "saving" else 0.0))
+        return {"phase": self.phase, "sim_t_s": round(min(sim_t, self.t_end_s), 1), "t_end_s": self.t_end_s,
+                "fraction": round(frac, 3), "elapsed_s": round(elapsed, 1),
+                "eta_s": None if eta is None else round(max(0.0, eta), 1),
+                "queue_s": None if queue_s is None else round(queue_s, 1), "ahead": ahead,
+                "measured": self.measured or self.phase == "saving"}
+
+    def _own(self) -> tuple[float, float | None, float]:
+        """(fraction, seconds left on this job's own solve and save, elapsed), ignoring any queue ahead."""
         now = time.monotonic()
         elapsed = now - self.started
         if self.phase == "saving":
@@ -63,18 +85,63 @@ class Job:
             eta = elapsed / frac - elapsed
         else:
             eta = max(0.0, self.est_s - elapsed) if self.est_s else None
-        sim_t = self.sim_t_s if self.measured else (frac / SOLVE_SHARE * self.t_end_s if self.phase == "solving" else
-                                                    (self.t_end_s if self.phase == "saving" else 0.0))
-        return {"phase": self.phase, "sim_t_s": round(min(sim_t, self.t_end_s), 1), "t_end_s": self.t_end_s,
-                "fraction": round(frac, 3), "elapsed_s": round(elapsed, 1),
-                "eta_s": None if eta is None else round(max(0.0, eta), 1),
-                "measured": self.measured or self.phase == "saving"}
+        return frac, eta, elapsed
+
+
+@dataclass
+class _Other:
+    """A solve this instance is running for a caller without a stream (POST /api/simulate, the agent)."""
+    started: float
+    scenario: object
+    est_s: float | None = None
+    estimated: bool = False
 
 
 _JOBS: dict[str, Job] = {}
+_OTHER: dict[str, _Other] = {}
+_ESTIMATOR: Callable[[object], float | None] | None = None
 _WATCHERS: dict[str, tuple[Job, str]] = {}  # job_id (one per stream) -> (job, cancel token)
 _LOCK = threading.Lock()
 _current: contextvars.ContextVar[Job | None] = contextvars.ContextVar("dryrun_job", default=None)
+
+
+def set_estimator(fn: Callable[[object], float | None]) -> None:
+    """How long a ScenarioSpec takes to solve here (the simulate route's speed model), for non-stream solves."""
+    global _ESTIMATOR
+    _ESTIMATOR = fn
+
+
+def queue_ahead(job: Job | None = None) -> tuple[float | None, int]:
+    """(seconds until the engine is free for job, runs ahead of it) on this instance. job=None: a job attached now.
+    Seconds are None when a run ahead has no estimate."""
+    with _LOCK:
+        mine = None if job is None else job.seq
+        jobs_ahead = [j for j in _JOBS.values() if j is not job and not j.finished.is_set() and not j.cancelled
+                      and (j.phase != "queued" or mine is None or j.seq < mine)]
+        now = time.monotonic()
+        for rid, o in list(_OTHER.items()):
+            if now - o.started > OTHER_MAX_AGE_S:
+                del _OTHER[rid]
+        others = [o for rid, o in _OTHER.items() if rid not in _JOBS]
+    total, unknown = 0.0, False
+    for j in jobs_ahead:
+        left = j.est_s if j.phase == "queued" else j._own()[1]
+        if left is None:
+            unknown = True
+        else:
+            total += max(0.0, left)
+    for o in others:
+        if not o.estimated:  # outside _LOCK: the estimator reads storage
+            o.estimated = True
+            try:
+                o.est_s = _ESTIMATOR(o.scenario) if _ESTIMATOR is not None else None
+            except Exception:  # noqa: BLE001 - a queue hint must never break a progress event
+                o.est_s = None
+        if o.est_s is None:
+            unknown = True
+        else:
+            total += max(0.0, o.est_s - (time.monotonic() - o.started))
+    return (None if unknown else total), len(jobs_ahead) + len(others)
 
 
 def attach(run_id: str, t_end_s: int, est_s: float | None, writes_total: int) -> tuple[Job, bool]:
@@ -160,11 +227,18 @@ def tick(t_s: float, t_end_s: float) -> None:
         raise Cancelled(job.run_id)
 
 
-def on_save_run(run_id: str, status: str) -> None:
+def on_save_run(run_id: str, status: str, scenario: object = None) -> None:
     """storage.save_run hook: the engine writes the "running" manifest when it actually starts solving."""
     bound = _current.get()  # the engine thread carries its own job; prefer it over the newest job for this run_id
     job = bound if bound is not None and bound.run_id == run_id else _JOBS.get(run_id)
-    if job is None or status != "running":
+    if job is None:  # a solve without a stream: it still holds the engine, so queued jobs wait for it
+        with _LOCK:
+            if status == "running" and scenario is not None:
+                _OTHER[run_id] = _Other(time.monotonic(), scenario)
+            else:
+                _OTHER.pop(run_id, None)
+        return
+    if status != "running":
         return
     if job.cancelled:  # left while queued behind another solve: never start this one
         raise Cancelled(run_id)

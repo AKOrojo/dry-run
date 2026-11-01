@@ -2,12 +2,18 @@
 
 POST /api/simulate/estimate  ScenarioSpec ->
     {run_id, cached, status: done|running|failed|none, est_s, est_basis: cached|speed_model|history|null, t_end_s,
-     output_interval_s, frames_total, domain_cells, grid_cells, drainage}   (domain_cells == grid_cells: no speed-up;
-     drainage: the resolved {system, capacity_mm_h, blockage_pct, outfall}, or null = the constant drain sink)
+     output_interval_s, frames_total, domain_cells, grid_cells, drainage, queue_s, ahead}
+    (domain_cells == grid_cells: no speed-up; drainage: the resolved {system, capacity_mm_h, blockage_pct, outfall},
+     or null = the constant drain sink; est_s is the solve alone, queue_s the wait for the runs ahead on this instance
+     (the engine solves one at a time; null when one of them has no estimate), ahead how many there are)
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
-    started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total}
-    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, measured, joined}
-              (joined: this stream attached to a job another viewer had already started for the same run_id)
+    started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total,
+               queue_s, ahead}
+    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, queue_s, ahead,
+               measured, joined}
+              (joined: this stream attached to a job another viewer had already started for the same run_id;
+               while queued, eta_s = queue_s + est_s and ahead > 0 means "waiting for another run"; both are 0 once
+               solving)
     done      {manifest}                                              terminal
     cancelled {reason}                                                terminal
     error     {code, message, retryable}                              terminal
@@ -157,7 +163,23 @@ def _validate(spec: ScenarioSpec) -> None:
 def estimate(spec: ScenarioSpec, request: Request):
     limit(request, "simulate_estimate", per_hour=600)
     _validate(spec)
-    return estimate_for(spec)
+    return _with_queue(estimate_for(spec))
+
+
+def _with_queue(est: dict) -> dict:
+    """est plus the wait for the solves ahead on this instance (nothing to wait for when the run is cached)."""
+    if est["cached"]:
+        return {**est, "queue_s": 0.0, "ahead": 0}
+    queue_s, ahead = jobs.queue_ahead()
+    return {**est, "queue_s": None if queue_s is None else round(queue_s, 1), "ahead": ahead}
+
+
+def _solve_estimate(spec) -> float | None:
+    """jobs' estimator for solves started without a stream (POST /api/simulate, the agent)."""
+    return estimate_for(spec)["est_s"]
+
+
+jobs.set_estimator(_solve_estimate)
 
 
 def _work(job: jobs.Job, spec: ScenarioSpec) -> None:
@@ -195,33 +217,38 @@ async def stream(spec: ScenarioSpec, request: Request):
     async def sse():
         keys = ("run_id", "cached", "est_s", "est_basis", "t_end_s", "output_interval_s", "frames_total")
         started = {"job_id": job_id, "cancel_token": cancel_token, **{k: est[k] for k in keys}}
-        yield _event("started", started)
         if est["cached"]:
+            yield _event("started", {**started, "queue_s": 0.0, "ahead": 0})
             m = await asyncio.to_thread(storage.load_run, est["run_id"])
             yield _event("done", {"manifest": json.loads(m.model_dump_json())})
             return
         job, created = jobs.attach(est["run_id"], est["t_end_s"], est["est_s"], _writes_total(est["frames_total"]))
         joined = not created
         jobs.watch(job, job_id, cancel_token)
-        try:
+        try:  # from here on, every exit (including a disconnect at the first yield) releases this watcher
+            queue_s, ahead = await asyncio.to_thread(jobs.queue_ahead, job)
+            yield _event("started", {**started, "queue_s": None if queue_s is None else round(queue_s, 1),
+                                     "ahead": ahead})
             if created:
                 _WORK.submit(_work, job, spec)
             while not job.finished.is_set():
                 if not jobs.watching(job_id):  # this viewer cancelled (DELETE)
                     waited = 0.0
                     while job.cancelled and not job.finished.is_set() and waited < CANCEL_WAIT_S:
-                        yield _event("progress", {**job.progress(), "phase": "cancelling", "joined": joined})
+                        p = await asyncio.to_thread(job.progress)
+                        yield _event("progress", {**p, "phase": "cancelling", "joined": joined})
                         await asyncio.to_thread(job.finished.wait, TICK_S)
                         waited += TICK_S
                     yield _event("cancelled", {"reason": "cancelled by this client"})
                     return
-                yield _event("progress", {**job.progress(), "joined": joined})
+                p = await asyncio.to_thread(job.progress)  # off the loop: the queue estimate may read storage
+                yield _event("progress", {**p, "joined": joined})
                 if await request.is_disconnected():
                     return
                 await asyncio.to_thread(job.finished.wait, TICK_S)
             if job.manifest is not None:
-                yield _event("progress", {**job.progress(), "phase": "saving", "fraction": 1.0, "eta_s": 0.0,
-                                          "joined": joined})
+                p = await asyncio.to_thread(job.progress)
+                yield _event("progress", {**p, "phase": "saving", "fraction": 1.0, "eta_s": 0.0, "joined": joined})
                 yield _event("done", {"manifest": json.loads(job.manifest.model_dump_json())})
             elif isinstance(job.error, jobs.Cancelled):
                 yield _event("cancelled", {"reason": "every viewer of this run left"})

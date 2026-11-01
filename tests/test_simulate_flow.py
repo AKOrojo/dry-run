@@ -269,3 +269,90 @@ def test_second_viewer_is_marked_joined(client, monkeypatch):
     release.set()
     t1.join(5)
     assert first[1]["data"]["joined"] is False and second[1]["data"]["joined"] is True
+
+
+@pytest.fixture
+def empty_queue(monkeypatch):
+    """Earlier tests leave half-built jobs behind; give these an engine with nothing ahead."""
+    monkeypatch.setattr(jobs, "_JOBS", {})
+    monkeypatch.setattr(jobs, "_OTHER", {})
+
+
+def _done(*js):
+    for j in js:
+        jobs.finish(j)
+
+
+def test_a_queued_job_waits_for_the_solve_ahead(empty_queue, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(jobs.time, "monotonic", lambda: clock[0])
+    first, _ = jobs.attach("r_q1", 3600, 30.0, 4)
+    jobs.on_save_run("r_q1", "running")  # solving, 10 s in
+    clock[0] += 10
+    second, _ = jobs.attach("r_q2", 3600, 25.0, 4)
+    third, _ = jobs.attach("r_q3", 3600, 20.0, 4)
+    try:
+        p2, p3 = second.progress(), third.progress()
+        assert p2["phase"] == "queued" and p2["ahead"] == 1 and p2["queue_s"] == 20.0
+        assert p2["eta_s"] == 45.0  # 20 s left on the solve ahead + its own 25 s
+        assert p3["ahead"] == 2 and p3["queue_s"] == 45.0 and p3["eta_s"] == 65.0  # behind both
+        assert jobs.queue_ahead() == (65.0, 3)  # what /estimate reports for a new run
+        p1 = first.progress()
+        assert p1["queue_s"] == 0.0 and p1["ahead"] == 0 and p1["eta_s"] == 20.0  # solving: no queue
+    finally:
+        _done(first, second, third)
+    assert jobs.queue_ahead() == (0.0, 0)
+
+
+def test_unknown_estimate_ahead_gives_no_number(empty_queue):
+    first, _ = jobs.attach("r_u1", 3600, None, 4)
+    second, _ = jobs.attach("r_u2", 3600, 25.0, 4)
+    try:
+        p = second.progress()
+        assert p["ahead"] == 1 and p["queue_s"] is None and p["eta_s"] is None  # never a number that is too small
+    finally:
+        _done(first, second)
+
+
+def test_a_cancelled_job_is_not_ahead(empty_queue):
+    first, _ = jobs.attach("r_c1", 3600, 30.0, 4)
+    second, _ = jobs.attach("r_c2", 3600, 25.0, 4)
+    jobs.detach(first)  # its only viewer left
+    try:
+        assert second.progress()["ahead"] == 0
+    finally:
+        _done(first, second)
+
+
+def test_solves_without_a_stream_count_too(empty_queue, monkeypatch):
+    clock = [5000.0]
+    monkeypatch.setattr(jobs.time, "monotonic", lambda: clock[0])
+    seen = []
+    monkeypatch.setattr(jobs, "_ESTIMATOR", lambda sc: seen.append(sc) or 40.0)
+    s = ScenarioSpec(aoi_id=fixtures.AOI_ID, storm=Storm(total_mm=12, duration_h=1))
+    jobs.on_save_run("r_agent", "running", s)  # POST /api/simulate or the agent started solving
+    clock[0] += 15
+    job, _ = jobs.attach("r_after", 3600, 10.0, 4)
+    try:
+        p = job.progress()
+        assert p["ahead"] == 1 and p["queue_s"] == 25.0 and p["eta_s"] == 35.0
+        job.progress()
+        assert seen == [s]  # estimated once, not every tick
+        jobs.on_save_run("r_agent", "done", s)
+        assert job.progress()["ahead"] == 0
+    finally:
+        _done(job)
+
+
+def test_estimate_and_started_carry_the_queue(empty_queue, client):
+    e = client.post("/api/simulate/estimate", json=spec(43)).json()
+    assert e["queue_s"] == 0.0 and e["ahead"] == 0
+    held, _ = jobs.attach("r_hold", 3600, 50.0, 4)
+    try:
+        e = client.post("/api/simulate/estimate", json=spec(44)).json()
+        assert e["ahead"] == 1 and e["queue_s"] == 50.0
+    finally:
+        _done(held)
+    evs = events(client.post("/api/simulate/stream", json=spec(43)).text)
+    assert evs[0]["kind"] == "started" and evs[0]["data"]["queue_s"] == 0.0 and evs[0]["data"]["ahead"] == 0
+    assert all("queue_s" in ev["data"] for ev in evs if ev["kind"] == "progress")
