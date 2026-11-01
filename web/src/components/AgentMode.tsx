@@ -7,6 +7,7 @@ import type { AgentEvent, RunManifest } from "../lib/api";
 import { TOOLS } from "./agent/Steps";
 import { Band, Card, FIG, mono } from "./rev5";
 import { describeIv } from "./Sidebar";
+import { Tip } from "./controls/Tooltip";
 
 /** What the agent session produced, in order: run ids, the recommended run, the place it studied most. */
 export type Session = { runIds: string[]; recommended: string | null; place: string | null; calls: { name: string; args: any; runId?: string }[] };
@@ -146,7 +147,7 @@ function Bars({ bars, color, fmt, shown, recommended, onPick, labelled = false }
         const rec = b.id === recommended, on = b.id === shown;
         const pct = b.value == null ? 0 : (100 * b.value) / max;
         return (
-          <button key={b.id} type="button" onClick={() => onPick(b.id)} title={rec ? "Recommended run" : undefined}
+          <Tip key={b.id} text={rec ? "Recommended run" : undefined}><button type="button" onClick={() => onPick(b.id)}
             style={{ display: "grid", gridTemplateColumns: labelled ? "minmax(0, 1fr) auto" : "14px minmax(0, 1fr) auto", alignItems: "center", gap: labelled ? "3px 10px" : 10,
               padding: 0, border: 0, background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" }}>
             {labelled ? <span style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: on ? 600 : 400 }}>{b.label}</span>
@@ -157,7 +158,7 @@ function Bars({ bars, color, fmt, shown, recommended, onPick, labelled = false }
                 outline: rec ? "2px solid var(--danfo)" : undefined, outlineOffset: 1, opacity: on || !shown ? 1 : 0.75 }} />
             </span>
             {!labelled && <span style={{ minWidth: 52, textAlign: "right", fontSize: 13, fontWeight: rec ? 700 : 400, ...FIG }}>{b.value == null ? "…" : fmt(b.value)}</span>}
-          </button>
+          </button></Tip>
         );
       })}
     </div>

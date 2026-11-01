@@ -9,6 +9,7 @@ import type { Anchors } from "./Anchored";
 import { FIG, mono } from "./rev5";
 import { getPointInfo } from "../lib/api";
 import { TextField } from "./controls/TextField";
+import { Tooltip } from "./controls/Tooltip";
 
 type Fmt = "DMS" | "Decimal";
 const FMT_KEY = "dr_coord_fmt";
@@ -171,9 +172,9 @@ export function CoordChip({ viewer, scene, anchors, aoiId, bounds, bottom = 26, 
           <TextField value={text} onChange={(e) => { setText(e.target.value); setErr(null); }} onKeyDown={onKey} placeholder="Go to lat, lon…" aria-label="Go to latitude, longitude" aria-invalid={!!err}
             spellCheck={false} autoComplete="off"
             mono style={{ width: 150, flex: "0 1 150px", minWidth: 60, height: 24, padding: "0 8px", fontSize: 11 }} />
-          <button type="button" aria-label={copied ? "Copied" : "Copy coordinates"} title={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
+          <Tooltip text={copied ? "Copied" : "Copy coordinates"}><button type="button" aria-label={copied ? "Copied" : "Copy coordinates"} onClick={copy} style={iconBtn}>
             {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
-          </button>
+          </button></Tooltip>
         </div>
       </div>
     </>

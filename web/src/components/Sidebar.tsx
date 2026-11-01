@@ -32,6 +32,7 @@ import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
 import { TextField } from "./controls/TextField";
+import { Tooltip, Tip } from "./controls/Tooltip";
 const GpuCard = lazyNamed(() => import("./GpuCard"), "GpuCard");
 
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
@@ -121,9 +122,8 @@ function AerialSourceRow() {
         Aerial
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["bing", "google"] as const).map((a) => (
-            <button key={a} type="button" aria-pressed={lay.aerial === a} disabled={!aerial} onClick={() => pick(a)}
-              title={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"} style={seg(lay.aerial === a)}>
-              {a === "bing" ? "Bing" : "Google"}</button>
+            <Tooltip key={a} text={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"}><button type="button" aria-pressed={lay.aerial === a} disabled={!aerial} onClick={() => pick(a)} style={seg(lay.aerial === a)}>
+              {a === "bing" ? "Bing" : "Google"}</button></Tooltip>
           ))}
         </span>
       </div>
@@ -156,7 +156,7 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <div key={r.key} title={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+          <Tip key={r.key} text={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined}><div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
             <Switch fill on={on} onChange={(v) => setLayer(r.key, { on: v })} label={<><span aria-hidden="true" style={{ display: "flex", flex: "none", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></>} />
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -172,7 +172,7 @@ function LayersCard() {
                   Open</button>
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
             </span>
-          </div>
+          </div></Tip>
         );
       })}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
@@ -180,10 +180,9 @@ function LayersCard() {
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["photoreal", "aerial"] as const).map((m) => {
             const on = lay.basemap === m;
-            return <button key={m} type="button" aria-pressed={on} onClick={() => setBasemap(m)}
-              title={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}
+            return <Tooltip key={m} text={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}><button type="button" aria-pressed={on} onClick={() => setBasemap(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
-              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</button>;
+              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</button></Tooltip>;
           })}
         </span>
       </div>
@@ -225,8 +224,8 @@ function WaypointsCard() {
                 <WaypointDetails lon={w.lon} lat={w.lat} info={info[w.id]} />
               </span>
               <span style={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
-                <button type="button" aria-label={`Fly to waypoint ${w.n}`} title="Fly to" onClick={() => setFocus({ lon: w.lon, lat: w.lat })} style={ib}><Crosshair size={14} weight="bold" /></button>
-                <button type="button" aria-label={`Remove waypoint ${w.n}`} title="Remove" onClick={() => removeWaypoint(w.id)} style={ib}><X size={14} weight="bold" /></button>
+                <Tooltip text="Fly to"><button type="button" aria-label={`Fly to waypoint ${w.n}`} onClick={() => setFocus({ lon: w.lon, lat: w.lat })} style={ib}><Crosshair size={14} weight="bold" /></button></Tooltip>
+                <Tooltip text="Remove"><button type="button" aria-label={`Remove waypoint ${w.n}`} onClick={() => removeWaypoint(w.id)} style={ib}><X size={14} weight="bold" /></button></Tooltip>
               </span>
             </li>
           ))}

@@ -21,6 +21,7 @@ const WaterWent = lazyNamed(() => import("./Drainage"), "WaterWent");
 import { drainStats, FULL_PCT } from "../lib/drainage";
 import { Band, EVENT_ICON, EventKind, FIG, Glyph, raisedButton, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { TextField } from "./controls/TextField";
+import { Tooltip, Tip } from "./controls/Tooltip";
 
 type Ev = { id: string; kind: EventKind; label: string; i: number; t: number; point?: [number, number] | null; place?: string | null };
 type TS = NonNullable<RunManifest["timeseries"]>;
@@ -256,13 +257,13 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
             fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: "16px", fontWeight: 500, whiteSpace: "nowrap" }}>{fmtT(nowS)}</span>
           <div style={{ position: "absolute", left: 0, right: 0, top: 22, height: 4, background: "var(--ground)", borderRadius: "var(--radius-pill)", boxShadow: "var(--inset-shadow)" }} />
           <div style={{ position: "absolute", left: 0, width: `${ph}%`, top: 23, height: 2, background: "var(--ink)", borderRadius: "var(--radius-pill)", marginLeft: 1 }} />
-          <div title="Flooded area per frame" style={{ position: "absolute", left: 0, right: 0, top: 31, height: 4, borderRadius: "var(--radius-pill)", background: `linear-gradient(90deg, ${stops})` }} />
-          <div title={`Rain falling, T+00:00 to ${fmtT(rainStopS)}`} style={{ position: "absolute", left: 0, width: `${pct(rainStopS)}%`, top: 29, height: 5, borderBottom: "1px dashed var(--ink-muted)", opacity: 0.6 }} />
+          <Tooltip text="Flooded area per frame"><div style={{ position: "absolute", left: 0, right: 0, top: 31, height: 4, borderRadius: "var(--radius-pill)", background: `linear-gradient(90deg, ${stops})` }} /></Tooltip>
+          <Tooltip text={`Rain falling, T+00:00 to ${fmtT(rainStopS)}`}><div style={{ position: "absolute", left: 0, width: `${pct(rainStopS)}%`, top: 29, height: 5, borderBottom: "1px dashed var(--ink-muted)", opacity: 0.6 }} /></Tooltip>
           <span style={{ position: "absolute", left: `${ph}%`, top: 17, width: 14, height: 14, marginLeft: -7, borderRadius: "50%", background: "var(--ground)", border: "3px solid var(--danfo)",
             boxShadow: "0 0 0 4px color-mix(in srgb, var(--danfo) 22%, transparent), 0 2px 4px var(--elev-drop)" }} />
           <div style={{ position: "absolute", left: 0, right: 0, top: 38 }}>
             {events.filter((e) => e.kind !== "standing" && e.kind !== "peak").map((e) => (
-              <span key={e.id} title={e.label} style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span>
+              <Tip key={e.id} text={e.label}><span style={{ position: "absolute", left: `${pct(e.t)}%`, top: 0, transform: "translateX(-50%)", display: "flex" }}><Glyph kind={e.kind} muted={e.t > nowS} /></span></Tip>
             ))}
           </div>
           <div style={{ position: "absolute", left: 0, right: 0, top: 54 }}>
@@ -302,11 +303,11 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
   return (
     <div style={{ display: "flex", flexDirection: "column", borderLeft: "1px solid var(--hairline)", minHeight: 0, background: "var(--surface)" }}>
       <Band title="Key events" right={<>{extra}
-        <button type="button" data-tour="marks" disabled={!runId} title={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}
+        <Tooltip text={runId ? `Add a note at ${fmtT(nowS)}` : "Run a simulation to add notes"}><button type="button" data-tour="marks" disabled={!runId}
           onClick={() => { clock.set({ playing: false }); setDraft({ t: nowS, text: "" }); }}
           style={{ marginLeft: "auto", height: 26, display: "flex", alignItems: "center", gap: 5, padding: "0 9px 0 7px", ...raisedButton, borderRadius: "var(--radius-md)", font: "inherit", fontSize: 12, fontWeight: 500,
             ...(runId ? {} : { opacity: 0.45, cursor: "not-allowed" }) }}>
-          <Plus size={12} weight="bold" />Note</button></>} />
+          <Plus size={12} weight="bold" />Note</button></Tooltip></>} />
       {draft && (
         <div style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", minHeight: 36, padding: "0 12px 0 14px", borderBottom: "1px solid var(--hairline)" }}>
           <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
@@ -323,28 +324,28 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
           if ("n" in r && r.n) {
             const n = r.n, fut = n.t_s > nowS;
             return (
-              <li key={`note-${n.id}`} title={n.text} onClick={() => seek(n.t_s)}
+              <Tooltip key={`note-${n.id}`} text={n.text}><li className="dr-row" onClick={() => seek(n.t_s)}
                 style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto 20px", gap: 10, alignItems: "center", height: 32, padding: "0 8px 0 14px", cursor: "pointer",
                   ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
                 <NotePencil size={14} weight="bold" color="var(--ink-muted)" />
                 <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.text}</span>
                 <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(n.t_s)}</span>
-                <button type="button" aria-label={`Remove note at ${fmtT(n.t_s)}`} title="Remove note" onClick={(ev) => { ev.stopPropagation(); if (runId) removeNote(runId, n.id); }}
+                <Tooltip text="Remove note"><button type="button" aria-label={`Remove note at ${fmtT(n.t_s)}`} onClick={(ev) => { ev.stopPropagation(); if (runId) removeNote(runId, n.id); }}
                   style={{ width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
                   <X size={12} weight="bold" />
-                </button>
-              </li>
+                </button></Tooltip>
+              </li></Tooltip>
             );
           }
           const e = (r as { e: Ev }).e;
           const fut = e.t > nowS, on = e.id === sel;
           return (
-            <li key={e.id} title={e.place ?? undefined} onClick={() => { seek(e.t); if (e.point) setFocus({ lon: e.point[0], lat: e.point[1] }); }}
+            <Tip key={e.id} text={e.place ?? undefined}><li className="dr-row" onClick={() => { seek(e.t); if (e.point) setFocus({ lon: e.point[0], lat: e.point[1] }); }}
               style={{ display: "grid", gridTemplateColumns: "16px minmax(0, 1fr) auto", gap: 10, alignItems: "center", height: 32, padding: "0 12px 0 14px", cursor: "pointer",
                 ...(on ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--danfo), inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft)" } : {}), ...(fut ? { color: "var(--ink-muted)" } : {}) }}>
               <Glyph kind={e.kind} muted={fut} /><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...(on ? { fontWeight: 600 } : {}) }}>{e.label}</span>
               <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtT(e.t)}</span>
-            </li>
+            </li></Tip>
           );
         })}
       </ol>

@@ -46,6 +46,7 @@ import { listPatches, setCloseUp, useCloseUp } from "../lib/patch3d";
 import { requestRenderSoon } from "../lib/render";
 import type { Anchors } from "./Anchored";
 import { Slider } from "./controls/Slider";
+import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -167,7 +168,7 @@ async function fetchReading(runId: string, lon: number, lat: number, tS: number)
 function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => void }) {
   const rot = -headingDeg;
   return (
-    <button type="button" onClick={onReset} title="Reset to north" aria-label={`North, rotated ${Math.round(rot)} degrees. Click to reset.`}
+    <UiTooltip text="Reset to north"><button type="button" onClick={onReset} aria-label={`North, rotated ${Math.round(rot)} degrees. Click to reset.`}
       style={{ position: "absolute", top: 16, left: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: 0,
         background: "transparent", border: 0, font: "inherit", cursor: "pointer", pointerEvents: "auto" }}>
       <span className="dr-compass-n" style={{ fontSize: 10, lineHeight: "12px", fontWeight: 600, color: "var(--ink)", textShadow: "0 0 3px var(--ground)" }}>N</span>
@@ -180,7 +181,7 @@ function Compass({ headingDeg, onReset }: { headingDeg: number; onReset: () => v
           <path d="M18 8.5 18 21.5 13 25z" fill="var(--ink-muted)" />
         </g>
       </svg>
-    </button>
+    </button></UiTooltip>
   );
 }
 
@@ -201,7 +202,7 @@ function ViewSwitch({ active, onPick, canFly, compact = false, extra }: { active
         const disabled = it.name === "Fly along" && !canFly;
         if (compact && it.name === "Fly along" && !canFly) return <Fragment key="route">{extra}</Fragment>;
         const btn = (
-          <button key={it.name} type="button" disabled={disabled} title={disabled ? "Draw a route first" : it.name} aria-label={compact ? it.name : undefined}
+          <UiTooltip key={it.name} text={disabled ? "Draw a route first" : it.name}><button type="button" disabled={disabled} aria-label={compact ? it.name : undefined}
             aria-pressed={it.name === active} onClick={() => onPick(it.name)}
             style={{ height: compact ? 40 : 28, ...(compact ? { width: 40, justifyContent: "center", padding: 0 } : {}), display: "flex", alignItems: "center", gap: 6, padding: compact ? 0 : "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12,
               ...(it.name === active
@@ -209,7 +210,7 @@ function ViewSwitch({ active, onPick, canFly, compact = false, extra }: { active
                 : { background: "transparent", color: "var(--ink-muted)" }),
               ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}>
             {it.icon}{!compact && it.name}
-          </button>
+          </button></UiTooltip>
         );
         return compact && it.name === "Fly along" ? <Fragment key={it.name}>{extra}{btn}</Fragment> : btn;
       })}
@@ -240,11 +241,11 @@ function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, o
   if (compact) {
     return (
       <span style={{ position: "relative", display: "flex" }}>
-        <button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
-          aria-label={drawing ? "Cancel drawing" : "Draw route"} title={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
+        <UiTooltip text={drawing ? "Cancel drawing" : "Draw route"}><button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
+          aria-label={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
           style={{ ...segBtn(drawing, 40), width: 40, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <Path size={18} weight="bold" />
-        </button>
+        </button></UiTooltip>
         {menu}
       </span>
     );
@@ -253,11 +254,10 @@ function RouteButton({ drawing, menuOpen, hasRoute, hasEvac, onDraw, onCancel, o
     <div style={{ position: "relative", pointerEvents: "auto" }}>
       <div style={{ display: "flex", padding: 3, background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: 6,
         boxShadow: `inset 0 1px 0 ${elevHi}, var(--shadow-float)` }}>
-        <button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined}
-          title={drawing ? "Cancel drawing" : "Draw route"} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
+        <UiTooltip text={drawing ? "Cancel drawing" : "Draw route"}><button type="button" aria-pressed={drawing} aria-haspopup={extras ? "menu" : undefined} aria-expanded={extras ? menuOpen : undefined} onClick={drawing ? onCancel : extras ? onToggleMenu : onDraw}
           style={{ ...segBtn(drawing, 28), display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <Path size={14} weight="bold" />{drawing ? "Drawing" : short ? "Route" : "Draw route"}{extras && !drawing && <CaretDown size={11} weight="bold" />}
-        </button>
+        </button></UiTooltip>
       </div>
       {menu}
     </div>
@@ -326,27 +326,28 @@ function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed,
         <span style={{ fontWeight: 600 }}>Fly along</span>
         <span style={{ color: "var(--ink-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</span>
         <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>
-        <button type="button" aria-label="Exit fly along" title="Exit (Esc)" onClick={onExit} style={{ ...textBtn, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button>
+        <UiTooltip text="Exit (Esc)"><button type="button" aria-label="Exit fly along" onClick={onExit} style={{ ...textBtn, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></button></UiTooltip>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)" }}>
-        <button type="button" aria-label={hud.playing ? "Pause" : "Play"} title={hud.playing ? "Pause (Space)" : "Play (Space)"} onClick={() => onPlay(!hud.playing)}
+        <UiTooltip text={hud.playing ? "Pause (Space)" : "Play (Space)"}><button type="button" aria-label={hud.playing ? "Pause" : "Play"} onClick={() => onPlay(!hud.playing)}
           style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
             background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
           {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
-        </button>
+        </button></UiTooltip>
         <Slider bare label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)} text={fmtLen(hud.s)} onChange={onSeek} />
         <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>
-        <span style={{ fontSize: 12, ...FIG }} title="Height above ground (scroll or E / Q)">{Math.round(hud.hAgl)} m up</span>
+        <UiTooltip text="Height above ground (scroll or E / Q)"><span style={{ fontSize: 12, ...FIG }}>{Math.round(hud.hAgl)} m up</span></UiTooltip>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 12px 8px", background: "var(--surface)", fontSize: 12, color: "var(--ink-muted)" }}>
         Speed
         <div style={{ ...groupStyle, height: 26, gap: 2 }}>
-          {FLY_SPEEDS.map((n) => <button key={n} type="button" aria-pressed={hud.speed === n} title={`${n} m/s, ${Math.round(n * 3.6)} km/h`} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 20), cursor: "pointer" }}>{SPEED_NAME[n]}</button>)}
+          {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><button type="button" aria-pressed={hud.speed === n} onClick={() => onSpeed(n)} style={{ ...segBtn(hud.speed === n, 20), cursor: "pointer" }}>{SPEED_NAME[n]}</button></UiTooltip>)}
         </div>
         Flood
-        <div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }} title={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}>
-          {LINKS.map((l) => <button key={l.key} type="button" disabled={!canLink} aria-pressed={link === l.key} title={l.title} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button>)}
-        </div>
+        <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2, opacity: canLink ? 1 : 0.45 }}>
+          {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
+          {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><button type="button" disabled={!canLink} aria-pressed={link === l.key} onClick={() => onLink(l.key)} style={{ ...segBtn(link === l.key, 20), cursor: canLink ? "pointer" : "default" }}>{l.label}</button></UiTip>)}
+        </div></UiTip>
         {below && <span style={{ marginLeft: "auto", color: "var(--ink)", ...FIG }}>{below}</span>}
       </div>
     </div>
@@ -447,11 +448,11 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
           </span>
         )}
         {selected && (
-          <button type="button" aria-label={`Remove waypoint ${n}`} title="Remove waypoint (Delete)" onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          <UiTooltip text="Remove waypoint (Delete)"><button type="button" aria-label={`Remove waypoint ${n}`} onClick={(e) => { e.stopPropagation(); onRemove(); }}
             style={{ position: "absolute", top: -9, right: -9, width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
               background: "var(--surface-raised)", border: "1px solid var(--danfo)", borderRadius: "50%", color: "var(--ink)", boxShadow: "var(--shadow-float)", cursor: "pointer" }}>
             <X size={10} weight="bold" />
-          </button>
+          </button></UiTooltip>
         )}
       </span>
       <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true" style={{ marginTop: -1 }}><path d="M1 0h10L6 7z" fill="var(--surface-raised)" stroke="var(--danfo)" /></svg>
@@ -507,14 +508,14 @@ function Sparkline({ points }: { points: [number, number][] }) {
 /** River inflow source: name plus a hydrograph sparkline. */
 function InflowMarker({ name, hydrograph, units, title }: { name: string; hydrograph: [number, number][]; units: string; title?: string }) {
   return (
-    <div title={title} style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+    <UiTip text={title}><div style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
       <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--depth-3)", boxShadow: "0 0 0 2px var(--ground)" }} />
       <span style={cardStyle} data-declutter={4}>
         <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
         <Sparkline points={hydrograph} />
         <span style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px" }}>{units}</span>
       </span>
-    </div>
+    </div></UiTip>
   );
 }
 
@@ -1515,7 +1516,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
                 <button type="button" data-tour="legend" aria-label="Legends" aria-expanded={legendOpen} onClick={() => setLegendOpen((v) => !v)}
                   style={{ ...groupStyle, ...colBtn, ...(legendOpen ? { background: "var(--pressed-bg)", color: "var(--ground)" } : {}) }}><Info size={16} weight="bold" /></button>
               ) : (
-                <button type="button" aria-label="Fullscreen" title="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></button>
+                <UiTooltip text="Fullscreen"><button type="button" aria-label="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></button></UiTooltip>
               )}
             </div>
             <div data-declutter-block style={{ position: "absolute", ...(phone ? (short ? { left: credW + 16, bottom: 8 } : { left: 12, bottom: aboveChip }) : { right: 72, bottom: viewState.coords ? aboveChip : 26 }), pointerEvents: "none" }}>
@@ -1530,10 +1531,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             <button type="button" aria-pressed={view === "Orbit"} onClick={() => pickView("Orbit")} style={segBtn(view === "Orbit", 24)}>3D</button>
           </div>
           <div style={{ ...groupStyle, padding: "0 8px 0 10px", gap: 6, fontSize: 12, ...FIG }} aria-label="Zoom">{cam.zoom.toFixed(1)}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></div>
-          <button type="button" aria-label="Fullscreen" title="Fullscreen" onClick={fullscreen}
+          <UiTooltip text="Fullscreen"><button type="button" aria-label="Fullscreen" onClick={fullscreen}
             style={{ ...groupStyle, width: 32, padding: 0, justifyContent: "center", color: "var(--ink)", font: "inherit", cursor: "pointer" }}>
             <ArrowsOut size={15} weight="bold" />
-          </button>
+          </button></UiTooltip>
         </div>
         )}
       </div>

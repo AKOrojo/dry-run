@@ -3,6 +3,7 @@ import { Check, ChartBar, GitDiff, Info, Lightning, Path, Play, CircleNotch } fr
 import type { AgentEvent } from "../../lib/api";
 import { FIG, mono } from "../rev5";
 import { Badge } from "./bits";
+import { Tooltip } from "../controls/Tooltip";
 
 export const TOOLS: Record<string, { Icon: typeof Info; label: string }> = {
   get_aoi_info: { Icon: Info, label: "Read the study area" },
@@ -63,7 +64,7 @@ export function Stepper({ steps, running, thought, now, onRun }:
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <t.Icon size={14} weight="bold" aria-hidden="true" style={{ flex: "none", color: "var(--ink-muted)" }} />
-                <span style={{ fontSize: 14, lineHeight: "20px", fontWeight: active ? 600 : 400 }} title={s.name}>{t.label}</span>
+                <Tooltip text={s.name}><span style={{ fontSize: 14, lineHeight: "20px", fontWeight: active ? 600 : 400 }}>{t.label}</span></Tooltip>
                 <span style={{ ...FIG, marginLeft: "auto", fontSize: 13, color: "var(--ink-muted)" }}>{meta}</span>
               </div>
               {runId && (

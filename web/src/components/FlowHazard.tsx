@@ -21,6 +21,7 @@ import { buildingIndex, inRing, placesOf } from "./PlanView";
 import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, FIG, raisedButton } from "./rev5";
 import { fmtT } from "./ds";
+import { Tooltip } from "./controls/Tooltip";
 
 /** The ground point under a canvas pixel: the globe (terrain or the 3D tiles), else the ellipsoid where no tile has loaded. */
 function pickGround(viewer: Cesium.Viewer, x: number, y: number): Cesium.Cartesian3 | undefined {
@@ -378,9 +379,9 @@ function LoadChips({ scene, anchors, aoi, runId, buildingsUrl, onBuilding, viewe
     <>
       {chips.map((r) => (
         <Anchored key={r.id} anchors={anchors} scene={scene} lon={r.lon} lat={r.lat} dy={-6}>
-          <button type="button" title={`${r.place ? `${r.place} · ` : ""}${r.id}: ${Math.round(r.kN)} kN in all`} data-declutter={2} onClick={() => requestBuilding(r)}
+          <Tooltip text={`${r.place ? `${r.place} · ` : ""}${r.id}: ${Math.round(r.kN)} kN in all`}><button type="button" data-declutter={2} onClick={() => requestBuilding(r)}
             style={{ ...chip, position: "absolute", left: 0, top: 0, transform: "translate(-50%, -100%)", ...(fh.selectedId === r.id ? { borderColor: "var(--danfo)" } : {}) }}>
-            {fmtKNm(r.kNm)} kN/m</button>
+            {fmtKNm(r.kNm)} kN/m</button></Tooltip>
         </Anchored>
       ))}
     </>
@@ -399,13 +400,13 @@ export function LoadsPanel() {
         {rows?.slice(0, LIST_MAX).map((r) => {
           const on = fh.selectedId === r.id;
           return (
-            <li key={r.id} title={`${r.id} · peak at ${fmtT(r.t_s)}, ${r.depth.toFixed(2)} m deep, ${r.speed.toFixed(2)} m/s`} onClick={() => requestBuilding(r)}
+            <Tooltip key={r.id} text={`${r.id} · peak at ${fmtT(r.t_s)}, ${r.depth.toFixed(2)} m deep, ${r.speed.toFixed(2)} m/s`}><li className="dr-row" onClick={() => requestBuilding(r)}
               style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", columnGap: 10, alignItems: "center", padding: "7px 12px 7px 14px", cursor: "pointer",
                 ...(on ? { background: "var(--surface-raised)", boxShadow: "inset 3px 0 0 var(--danfo), inset 0 1px 0 var(--elev-hi), 0 1px 2px var(--elev-drop-soft)" } : {}) }}>
               <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.place ? <>{r.place}<span style={{ fontWeight: 400, color: "var(--ink-muted)" }}> · {r.id}</span></> : r.id}</span>
               <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtKNm(r.kNm)} kN/m</span>
               <span style={{ gridColumn: "1 / -1", fontSize: 12, color: "var(--ink-muted)" }}>{r.dominant} · H{r.cls}</span>
-            </li>
+            </li></Tooltip>
           );
         })}
         {rows && !rows.length && empty("No building carries a load in this run.")}

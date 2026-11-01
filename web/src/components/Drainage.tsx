@@ -17,6 +17,7 @@ import { Slider } from "./controls/Slider";
 import { Switch as Toggle } from "./controls/Switch";
 import { Band, Card, Field, FIG, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
+import { Tooltip, Tip } from "./controls/Tooltip";
 
 const hint: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
 const MM_PER_IN = 25.4;
@@ -80,10 +81,10 @@ export function DrainageCard({ aoi, run }: { aoi?: AOIManifest; run?: RunManifes
     : "Nothing leaves the drains: they fill and spill back onto the road.";
   return (
     <Card title="Drainage" right={
-      <span title={`${SYSTEM_LABEL[def.system as DrainSystem]} is the ${place} default`} style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+      <Tooltip text={`${SYSTEM_LABEL[def.system as DrainSystem]} is the ${place} default`}><span style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}>
         {d.touched ? <>{SYSTEM_SHORT[c.system]}<TextAction onClick={() => resetDrainage(aoi.aoi_id, def)}>Reset to default</TextAction></>
           : <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{SYSTEM_SHORT[c.system]} · {place} default</span>}
-      </span>}>
+      </span></Tooltip>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 14px 14px" }}>
         <Field label="System" hint={SYSTEM_EXPLAIN[c.system]}>
           <Segmented<DrainSystem> options={SYSTEMS} active={c.system} onChange={(system) => setDrainage({ system })} />
@@ -467,10 +468,10 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       })}
       {outfallChips.map((o) => (
         <Anchored key={o.id} anchors={anchors} scene={scene} lon={o.at[0]} lat={o.at[1]}>
-          <span data-declutter={2} data-flip-x="0" title={o.name ?? undefined} style={{ ...chip, position: "absolute", left: 12, right: "auto", top: -8 }}>
+          <Tip text={o.name ?? undefined}><span data-declutter={2} data-flip-x="0" style={{ ...chip, position: "absolute", left: 12, right: "auto", top: -8 }}>
             <span style={{ display: "block", fontWeight: 600 }}>Outfall to {o.receiving ?? recvDefault ?? "the receiving water"}</span>
             <span style={{ display: "block", color: "var(--ink-muted)" }}>{gatesOn(o) ? "gated" : "open mouth"}{level ? ` · ${level.boundary_level_m >= 0 ? "+" : "−"}${Math.abs(level.boundary_level_m).toFixed(1)} m` : ""}</span>
-          </span>
+          </span></Tip>
         </Anchored>
       ))}
       {chips.map(({ l, pct }) => (
@@ -542,10 +543,10 @@ const m3 = (v: number) => { const r = v >= 10000 ? 1000 : v >= 100 ? 10 : 1; ret
 export function SideSwitch({ to, onClick }: { to: "events" | "water"; onClick: () => void }) {
   const label = to === "events" ? "Key events" : "Where the water went";
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick}
+    <Tooltip text={label}><button type="button" aria-label={label} onClick={onClick}
       style={{ marginLeft: to === "events" ? "auto" : 0, width: 26, height: 26, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, ...raisedButton, borderRadius: "var(--radius-md)", cursor: "pointer" }}>
       {to === "events" ? <ListBullets size={14} weight="bold" /> : <Drop size={14} weight="bold" />}
-    </button>
+    </button></Tooltip>
   );
 }
 

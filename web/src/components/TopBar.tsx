@@ -12,6 +12,7 @@ import { applyTheme, getTheme, Theme } from "../lib/theme";
 import { setImageryMode, setLayer, useLayers } from "../lib/layers";
 import { setView, useView } from "../lib/view";
 import type { Breakpoint } from "../lib/breakpoint";
+import { Tooltip } from "./controls/Tooltip";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
 const PATTERN_TEXT = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" } as const;
@@ -80,10 +81,10 @@ function Menu({ name, Ic, iconOnly = false, tour, children }: { name: string; Ic
   return (
     <>
       {iconOnly ? (
-        <button ref={btn} type="button" data-tour={tour} aria-label={name} title={name} aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
+        <Tooltip text={name}><button ref={btn} type="button" data-tour={tour} aria-label={name} aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
           style={{ ...iconBtn, color: at ? "var(--ink)" : "var(--ink-muted)" }}>
           <Ic size={18} weight="bold" />
-        </button>
+        </button></Tooltip>
       ) : (
         <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={!!at} onClick={() => (at ? close(false) : open())}
           style={{ height: 30, display: "flex", alignItems: "center", gap: 6, padding: "0 6px", background: "transparent", border: 0, color: at ? "var(--ink)" : "var(--ink-muted)", font: "inherit", cursor: "pointer" }}>
@@ -258,10 +259,10 @@ export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rain
             <ModeTab name="Compare" Ic={Columns} active={mode === "Compare"} onClick={() => onMode("Compare")} h={40} />
             <ModeTab name="Agent" Ic={ChatTeardropText} active={mode === "Agent"} badge={agentRuns} onClick={() => onMode("Agent")} h={40} />
           </nav>
-          <button type="button" data-tour="viewshare" aria-label={drawerOpen ? "Hide the side panel" : "Show the side panel"} title="Side panel" aria-expanded={drawerOpen} onClick={onDrawer}
+          <Tooltip text="Side panel"><button type="button" data-tour="viewshare" aria-label={drawerOpen ? "Hide the side panel" : "Show the side panel"} aria-expanded={drawerOpen} onClick={onDrawer}
             style={{ ...iconBtn, ...(drawerOpen ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)" } : { color: "var(--ink-muted)" }) }}>
             <Layout size={18} weight="bold" />
-          </button>
+          </button></Tooltip>
         </>}
         <OverflowMenu layout={layout} mode={mode} onMode={onMode} agentRuns={agentRuns} storm={storm} theme={theme} onTheme={pickTheme} onTour={onTour}
           onCopyLink={onCopyLink} onSaveImage={onSaveImage} />
@@ -288,10 +289,10 @@ export function TopBar({ rainText, aois, aoiId, aoiName, defaultAoi, onAoi, rain
       <span data-tour="viewshare" style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <ViewMenu theme={theme} onTheme={pickTheme} onTour={onTour} /><ShareMenu onCopyLink={onCopyLink} onSaveImage={onSaveImage} />
       </span>{vr}
-      <button type="button" aria-label="Take the tour" title="Take the tour" onClick={onTour}
+      <Tooltip text="Take the tour"><button type="button" aria-label="Take the tour" onClick={onTour}
         style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)", padding: 0 }}>
         <Question size={16} weight="bold" />
-      </button>
+      </button></Tooltip>
       <button type="button" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} onClick={toggle}
         style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: 0, color: "var(--ink-muted)", padding: 0 }}>
         <Toggle size={16} weight="bold" />
