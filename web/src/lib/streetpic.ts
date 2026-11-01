@@ -14,13 +14,11 @@ export const MIN_WATER_M = 0.05;
 export const isDryInBoth = (maxA: number | null | undefined, maxB: number | null | undefined) =>
   maxA != null && maxB != null && maxA < MIN_WATER_M && maxB < MIN_WATER_M;
 
-/** A render takes one to one and a half minutes (two image calls and a vision check): the progress estimate's total. */
-export const EXPECT_S = 75;
-export const STEPS = ["Drawing the before picture", "Drawing the after picture", "Checking the water in both"] as const;
-/** Which step the elapsed time is in (the server does not stream progress; the steps follow the usual timing). */
-export const stepAt = (secs: number) => (secs < EXPECT_S * 0.45 ? 0 : secs < EXPECT_S * 0.85 ? 1 : 2);
-export const leftText = (secs: number) => (secs < EXPECT_S - 5 ? `about ${Math.round((EXPECT_S - secs) / 5) * 5} s left` : "almost done");
-export const progressOf = (secs: number) => Math.min(0.95, secs / EXPECT_S);
+/** A render usually takes 50–90 s (two image calls and a vision check); after that the card says it is taking longer. */
+export const USUAL_MAX_S = 90;
+/** The right-hand line under the bar while making: there is no progress stream, so no estimate, only the usual range. */
+export const makingNote = (secs: number) => (secs > USUAL_MAX_S ? "taking longer than usual" : "usually 50–90 s");
+export const clockText = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 
 export const metres = (v: number) => `${v.toFixed(2)} m`;
 export const aboutMetres = (v: number | null) => (v == null ? "not checked" : `about ${v.toFixed(2)} m`);
@@ -65,7 +63,7 @@ export function renderProblem(status: number, message: string, retryAfterS?: num
   if (status === 422 && /content filter/i.test(message)) return { title: "The image model declined this picture", detail: "Its content filter refused this street. Pick a spot a little further along.", action: "spot" };
   if (status === 400 && /no water/i.test(message)) return DRY;
   switch (status) {
-    case 429: return { title: "Too many pictures this hour", detail: `New pairs are capped each hour. ${retryIn(retryAfterS, now)}`, action: "ok" };
+    case 429: return { title: "Too many new pictures this hour", detail: `${retryIn(retryAfterS, now)} Pictures already made still open.`, action: "ok" };
     case 409: return { title: "This pair is being made right now", detail: "Someone asked for the same pictures a moment ago. Try again in a minute; it then opens at once.", action: "ok" };
     case 413: return { title: "That photo is over 8 MB", detail: "Choose a smaller one, or a screenshot of it.", action: "ok" };
     case 415: return { title: "That file isn't a JPEG, PNG or WebP photo", detail: "Choose a JPEG, PNG or WebP photo.", action: "ok" };

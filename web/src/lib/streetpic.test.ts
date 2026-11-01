@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aboutMetres, DRY, EXPECT_S, imageUrl, isDryInBoth, leftText, mismatchNote, progressOf, renderLink, renderProblem, retryIn, sourceNote, stepAt } from "./streetpic";
+import { aboutMetres, clockText, DRY, imageUrl, isDryInBoth, makingNote, mismatchNote, renderLink, renderProblem, retryIn, sourceNote, USUAL_MAX_S } from "./streetpic";
 
 const im = (depth_m: number, picture_depth_m: number | null, picture_matches: boolean | null) =>
   ({ url: "/api/render/v_0123456789abcdef/before.webp", run_id: "r_0123456789abcdef", depth_m, depth_text: "", picture_depth_m, picture_matches });
@@ -10,13 +10,10 @@ describe("street picture", () => {
     expect(isDryInBoth(0.01, 0.3)).toBe(false);
     expect(isDryInBoth(undefined, 0.01)).toBe(false);  // unknown: let the server decide
   });
-  it("walks the steps and the estimate with the elapsed time", () => {
-    expect(stepAt(0)).toBe(0);
-    expect(stepAt(EXPECT_S * 0.6)).toBe(1);
-    expect(stepAt(EXPECT_S)).toBe(2);
-    expect(leftText(EXPECT_S - 45)).toBe("about 45 s left");
-    expect(leftText(EXPECT_S + 10)).toBe("almost done");
-    expect(progressOf(EXPECT_S * 3)).toBeLessThan(1);
+  it("shows elapsed time and the usual range, never an estimate", () => {
+    expect(clockText(75)).toBe("1:15");
+    expect(makingNote(USUAL_MAX_S)).toBe("usually 50–90 s");
+    expect(makingNote(USUAL_MAX_S + 1)).toBe("taking longer than usual");
   });
   it("notes the first picture whose water is off the model", () => {
     expect(mismatchNote({ before: im(0.57, 0.25, false), after: im(0.12, 0.1, true) })).toEqual({ which: "before", shows: 0.25, model: 0.57 });
@@ -38,7 +35,7 @@ describe("street picture", () => {
     expect(renderProblem(429, "", 60, new Date(), true).action).toBe("key");  // a key lockout, not the hourly cap
     expect(renderProblem(422, "The image model's content filter declined this picture. Try another spot.").title).toBe("The image model declined this picture");
     expect(renderProblem(400, "no water at this spot in either run: pick a flooded street")).toBe(DRY);
-    expect(renderProblem(429, "", 14 * 60 - 20).detail).toBe("New pairs are capped each hour. Try again in 14 min.");
+    expect(renderProblem(429, "", 14 * 60 - 20)).toMatchObject({ title: "Too many new pictures this hour", detail: "Try again in 14 min. Pictures already made still open." });
     expect(renderProblem(503, "").title).toMatch(/not set up/);
     expect(retryIn(undefined)).toBe("Try again later.");
   });

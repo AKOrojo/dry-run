@@ -3,7 +3,7 @@
 // shows. The large view opens over the page, also from a copied link (?render=).
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ArrowsLeftRight, ArrowsOut, Camera, CheckCircle, Clock, Copy, Spinner, Square, Warning, X } from "@phosphor-icons/react";
+import { ArrowsLeftRight, ArrowsOut, Camera, Copy, Spinner, Square, Warning, X } from "@phosphor-icons/react";
 import { API, ApiError, getPointInfo, getPointSeries, getRun, postRender, setJudgeKey, getJudgeKey } from "../lib/api";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { requestUnpin, usePinnedSpot } from "../lib/inspect";
@@ -11,8 +11,8 @@ import { useLockout } from "../lib/lockout";
 import { useTouch } from "../lib/breakpoint";
 import { checkPhoto } from "../lib/observations";
 import {
-  aboutMetres, DRY, imageUrl, isDryInBoth, leftText, metres, mismatchNote, openLarge, progressOf, renderLink, renderProblem,
-  sourceNote, stepAt, STEPS, useLarge,
+  aboutMetres, clockText, DRY, imageUrl, isDryInBoth, makingNote, metres, mismatchNote, openLarge, renderLink, renderProblem,
+  sourceNote, useLarge,
 } from "../lib/streetpic";
 import type { RenderResult, RenderView, StreetProblem } from "../lib/streetpic";
 import { Card, FIG, Segmented, srOnly } from "./rev5";
@@ -27,7 +27,7 @@ const label: CSSProperties = { color: "var(--ink-muted)" };
 const value: CSSProperties = { fontWeight: 600, textAlign: "right", ...FIG };
 const note: CSSProperties = { fontSize: 12, lineHeight: "16px", color: "var(--ink-muted)" };
 const btn: CSSProperties = { height: 30, padding: "0 12px", display: "inline-flex", alignItems: "center", gap: 6 };
-const SPIN = "@keyframes dr-sp-spin{to{transform:rotate(360deg)}}";
+const SPIN = "@keyframes dr-sp-spin{to{transform:rotate(360deg)}}@keyframes dr-sp-indet{0%{left:-40%}100%{left:100%}}";
 const ACCEPT = "image/jpeg,image/png,image/webp";
 
 /** Before/after swipe: the after picture is drawn right of the divider. Drag it, or focus it and use the arrow keys. */
@@ -132,6 +132,8 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
   const [askKey, setAskKey] = useState(false);
   const [key, setKey] = useState(getJudgeKey);
   const [secs, setSecs] = useState(0);
+  // Stop only stops waiting: the server still finishes and caches the pair, so the next Make opens it at once.
+  const [stopped, setStopped] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const keyRef = useRef<HTMLInputElement>(null);
   const ctl = useRef<AbortController | null>(null);
@@ -140,7 +142,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
   // A new spot, runs or view starts over (and stops a pair being made for the old one).
   useEffect(() => {
     ctl.current?.abort();
-    setPhase("ready"); setResult(null); setProblem(null); setAskKey(false);
+    setPhase("ready"); setResult(null); setProblem(null); setAskKey(false); setStopped(false);
   }, [spot?.lon, spot?.lat, a.run_id, b.run_id, view]);
   useEffect(() => () => { ctl.current?.abort(); }, []);
   useEffect(() => {
@@ -163,7 +165,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
     lastPhoto.current = photo;
     const ac = new AbortController();
     ctl.current = ac;
-    setProblem(null); setAskKey(false); setSecs(0); setPhase("making");
+    setProblem(null); setAskKey(false); setStopped(false); setSecs(0); setPhase("making");
     try {
       // No water in either run: say so before asking for the key or spending an image call.
       const [sa, sb] = await Promise.all([getPointSeries(a.run_id, spot.lon, spot.lat), getPointSeries(b.run_id, spot.lon, spot.lat)]);
@@ -196,7 +198,6 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
   const useKey = () => { if (!key.trim() || lock) return; setJudgeKey(key.trim()); void make(lastPhoto.current); };
 
   const head = phase === "made" && result?.cached ? <span style={{ marginLeft: "auto", ...note }}>Made earlier · opened at once</span> : undefined;
-  const step = stepAt(secs);
   return (
     <div data-tour="street">
       <Card title="Street picture" right={head}>
@@ -206,22 +207,16 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
           ) : phase === "making" ? (
             <>
               <style>{SPIN}</style>
-              <ol style={{ display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" }}>
-                {STEPS.map((s, i) => (
-                  <li key={s} style={{ display: "flex", alignItems: "center", gap: 8, color: i > step ? "var(--ink-muted)" : "var(--ink)" }}>
-                    {i < step ? <CheckCircle size={16} aria-label="done" /> : i === step
-                      ? <span style={{ display: "flex", animation: "dr-sp-spin 1s linear infinite" }}><Spinner size={16} aria-label="in progress" /></span>
-                      : <Clock size={16} aria-label="next" />}
-                    {s}
-                  </li>
-                ))}
-              </ol>
-              <div role="progressbar" aria-label="Making the pictures" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressOf(secs) * 100)}
-                style={{ height: 4, borderRadius: 2, background: "var(--hairline)", overflow: "hidden" }}>
-                <div style={{ width: `${progressOf(secs) * 100}%`, height: "100%", background: "var(--depth-3)", transition: "width 1s linear" }} />
+              <div role="status" style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+                <span style={{ display: "flex", animation: "dr-sp-spin 1s linear infinite" }}><Spinner size={16} aria-hidden="true" /></span>
+                Making the pictures…
               </div>
-              <div style={{ ...row, ...note, ...FIG }}><span>{secs} s</span><span>{leftText(secs)}</span></div>
-              <div><Button variant="raised" onClick={() => ctl.current?.abort()} style={btn}><Square size={12} weight="fill" aria-hidden="true" />Stop</Button></div>
+              <div style={{ position: "relative", height: 4, overflow: "hidden", borderRadius: 2, background: "var(--hairline)" }}>
+                <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "var(--depth-3)", animation: "dr-sp-indet 1.4s ease-in-out infinite" }} />
+              </div>
+              <div style={{ ...row, ...note, ...FIG }}><span>{clockText(secs)}</span><span>{makingNote(secs)}</span></div>
+              <span style={note}>It draws the before picture, then the after picture, then checks the water in both against the model.</span>
+              <div><Button variant="raised" onClick={() => { setStopped(true); ctl.current?.abort(); }} style={btn}><Square size={12} weight="fill" aria-hidden="true" />Stop</Button></div>
             </>
           ) : phase === "made" && result ? (
             <Made r={result} a={a} b={b} />
@@ -235,6 +230,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
                 <span style={{ ...note, fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase" }}>View</span>
                 <Segmented<RenderView> options={[{ value: "street", label: "Street" }, { value: "window", label: "From a window" }]} active={view} onChange={setView} />
               </div>
+              {stopped && <span role="status" style={note}>Stopped waiting. If the pictures finish, Make the pictures opens them at once.</span>}
               {problem && (
                 <Notice message={problem.title} detail={problem.detail}>
                   {problem.action === "key" && askKey ? null : (
