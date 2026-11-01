@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { chartCsv, chartFilename, chartTable, csvCell, resolveVars, slug } from "./chartdata";
+import { chartCsv, chartFilename, chartTable, coversText, csvCell, resolveVars, slug } from "./chartdata";
 
 const time = (s: number) => `T+${String(s / 3600).padStart(2, "0")}:00`;
 
 describe("chartTable", () => {
   it("has one row per frame with the time, the value to the chart's decimals and the unit in the header", () => {
     const t = chartTable({ title: "Flooded area", unit: "km²", times: [0, 3600], series: [0, 1.2345], digits: 2, time });
-    expect(t.header).toEqual(["Time", "Flooded area (km²)"]);
+    expect(t.header).toEqual(["Time (T+hh:mm)", "Flooded area (km²)"]);
     expect(t.rows).toEqual([["T+00:00", "0.00"], ["T+01:00", "1.23"]]);
   });
 
   it("adds A and B columns when run A is drawn under the chart", () => {
     const t = chartTable({ title: "Flooded area", unit: "km²", times: [0, 3600], series: [0, 3], ghost: [0, 9], digits: 1, time });
-    expect(t.header).toEqual(["Time", "A (km²)", "B (km²)"]);
+    expect(t.header).toEqual(["Time (T+hh:mm)", "A (km²)", "B (km²)"]);
     expect(t.rows).toEqual([["T+00:00", "0.0", "0.0"], ["T+01:00", "9.0", "3.0"]]);
   });
 
   it("ignores a run A with fewer than two points, and leaves gaps empty", () => {
     const solo = chartTable({ title: "Depth", unit: "m", times: [0, 3600], series: [1, NaN], ghost: [5], digits: 0, time });
-    expect(solo.header).toEqual(["Time", "Depth (m)"]);
+    expect(solo.header).toEqual(["Time (T+hh:mm)", "Depth (m)"]);
     expect(solo.rows).toEqual([["T+00:00", "1"], ["T+01:00", ""]]);
   });
 });
@@ -63,5 +63,13 @@ describe("resolveVars", () => {
     expect(resolveVars("var(--alias)", lookup)).toBe("#111");
     expect(resolveVars("var(--missing, 10.5px)", lookup)).toBe("10.5px");
     expect(resolveVars("var(--missing)", lookup)).toBe("none");
+  });
+  it("matches a font's unicode-range against the chart's text", () => {
+    const latin = "U+0000-00FF,U+0131,U+2000-206F";
+    expect(coversText(latin, "T+02:00")).toBe(true);
+    expect(coversText(latin, "km²")).toBe(true);
+    expect(coversText("U+0460-052F,U+1C80-1C8A", "T+02:00")).toBe(false);
+    expect(coversText("U+04??", "Ж")).toBe(true);
+    expect(coversText("", "anything")).toBe(true);
   });
 });

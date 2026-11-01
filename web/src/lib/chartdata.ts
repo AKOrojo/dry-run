@@ -1,6 +1,9 @@
 // The ⋮ actions on a chart: the rows behind its table and CSV, the CSV text, the PNG's file name and the CSS variables
 // its SVG needs inlined. Pure, so the DOM work stays in the components.
 
+/** The time column says its format, so a pasted CSV reads on its own. */
+export const TIME = "Time (T+hh:mm)";
+
 export type ChartTable = { header: string[]; rows: string[][] };
 
 /** One row per frame: the time, then run A when it is compared, then the chart's own series, to `digits` decimals. */
@@ -10,7 +13,7 @@ export function chartTable({ title, unit, times, series, ghost, digits, time }: 
   const num = (v: number | undefined) => (v != null && Number.isFinite(v) ? v.toFixed(digits) : "");
   const at = (i: number) => (times[i] != null ? time(times[i]) : "");
   const compared = !!ghost && ghost.length > 1;
-  const header = compared ? ["Time", `A (${unit})`, `B (${unit})`] : ["Time", `${title} (${unit})`];
+  const header = compared ? [TIME, `A (${unit})`, `B (${unit})`] : [TIME, `${title} (${unit})`];
   const rows = series.map((v, i) => (compared
     ? [at(i), num(ghost?.[i]), num(v)]
     : [at(i), num(v)]));
@@ -40,4 +43,19 @@ export function resolveVars(text: string, lookup: (name: string) => string): str
     out = out.replace(/var\((--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, (_, name: string, fallback?: string) => lookup(name) || fallback?.trim() || "none");
   }
   return out;
+}
+
+/** Whether a @font-face unicode-range (e.g. "U+0000-00FF,U+0131") covers any character of `text`; no range covers all. */
+export function coversText(range: string, text: string): boolean {
+  if (!range.trim()) return true;
+  const spans = range.split(",").map((r) => {
+    const [a, b] = r.trim().replace(/^U\+/i, "").split("-");
+    const lo = parseInt(a.replace(/\?/g, "0"), 16), hi = b ? parseInt(b, 16) : parseInt(a.replace(/\?/g, "F"), 16);
+    return [lo, hi] as const;
+  });
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    if (spans.some(([lo, hi]) => c >= lo && c <= hi)) return true;
+  }
+  return false;
 }
