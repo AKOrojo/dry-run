@@ -9,7 +9,10 @@ import { setAerial, setAerialNote, setBasemap, useLayers } from "../lib/layers";
 import { ApiError, getGoogleTilesKey } from "../lib/api";
 import { areaCache } from "../lib/areaCache";
 import { CESIUM_CHECKED } from "../lib/cesiumPin";
+import { registerScene, requestRenderSoon, watchMotion } from "../lib/render";
 
+// Photoreal tile detail: Cesium's default at rest, coarser while the camera moves, back REST_MS after it stops.
+const TILES_REST_SSE = 16, TILES_MOVING_SSE = 24, REST_MS = 300;
 const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 // Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
 // with "The Resource is already being fetched" (React's dev double effect, quick basemap toggles).
@@ -99,6 +102,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     const [cw, cs, ce, cn] = aoi.grid.bounds_wgs84;
     const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(Cesium.Cartesian3.fromDegrees((cw + ce) / 2, (cs + cn) / 2), new Cesium.Cartesian3());
     p.modelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.multiplyByScalar(up, meshLift.current, up));
+    requestRenderSoon();
   };
   photorealBuildings.current = !!aoi.photoreal_buildings;
   const splitRef = useRef(split ?? 0.5);
@@ -132,6 +136,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       const attributes = current.primitive.getGeometryInstanceAttributes(id);
       if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
     }
+    requestRenderSoon();
   };
 
   useEffect(() => {
@@ -147,6 +152,9 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
       homeButton: false, sceneModePicker: false, fullscreenButton: false, navigationHelpButton: false, infoBox: false,
       shadows: true,
+      // Render on demand: an idle map draws nothing. Cesium renders for camera moves and tile loads; lib/render.ts asks
+      // for frames when our own state changes.
+      requestRenderMode: true, maximumRenderTimeChange: Infinity,
       ...(token ? { terrain: terrainRef.current } : {}),
       // Without an ion token fall back to OSM tiles (attribution shown by Cesium credits).
       ...(token ? {} : { baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })) }),
@@ -185,11 +193,21 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       console.error(`Cesium render error (area ${aoi.aoi_id}, basemap ${layerRef.current.basemap}):`, err);
       if (import.meta.env.DEV) { const w = window as unknown as { __renderErrors?: number }; w.__renderErrors = (w.__renderErrors ?? 0) + 1; }
     });
+    const unregister = registerScene(v.scene, v.imageryLayers);
+    // One more frame once the camera rests: overlays that sample the view on a throttle (scale bar, flow-arrow zoom,
+    // drain inlets) then see its final pose.
+    const offMotion = watchMotion(v.scene, () => {}, () => { if (!v.isDestroyed()) v.scene.requestRender(); }, REST_MS);
+    // Pointer input can change hover highlights drawn in the scene.
+    const node = el.current;
+    node.addEventListener("pointermove", requestRenderSoon);
+    node.addEventListener("pointerup", requestRenderSoon);
     viewer.current = v;
     if (import.meta.env.DEV) (window as unknown as { __viewer?: Cesium.Viewer }).__viewer = v;
     onViewer?.(v);
     return () => {
-      offRenderError();
+      offRenderError(); offMotion(); unregister();
+      node.removeEventListener("pointermove", requestRenderSoon);
+      node.removeEventListener("pointerup", requestRenderSoon);
       layer.current = undefined; viewer.current = undefined; onViewer?.(undefined);
       const scene = v.scene;
       const { frameState: frame, context } = scene as unknown as { frameState: Record<string, unknown>; context: object };  // 1.146 layout
@@ -380,6 +398,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       g.clip(); g.clearRect(0, 0, W, H); g.drawImage(a, 0, 0); g.restore();
       (d.prim.appearance as Cesium.MaterialAppearance).material.uniforms.image = canvas;
       d.url = undefined;
+      requestRenderSoon();
     }).catch(() => { /* frame image unavailable: keep the last drape */ });
   };
   useEffect(() => {
@@ -509,7 +528,12 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     let cancelled = false;
     let tiles: Cesium.Cesium3DTileset | undefined;
     const g = v.scene.globe;
-    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: 16 }));
+    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, {
+      maximumScreenSpaceError: TILES_REST_SSE,
+      // Coarser tiles toward the screen edges, and no requests for tiles that will be out of view once they arrive.
+      foveatedScreenSpaceError: true, cullRequestsWhileMoving: true,
+    }));
+    let offMotion: (() => void) | undefined;
     googleQueue = load.then(() => undefined, () => undefined);
     load.then((t) => {
       if (cancelled || v.isDestroyed()) { t.destroy(); return; }
@@ -517,6 +541,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       t.shadows = Cesium.ShadowMode.CAST_ONLY;  // receiving its own shadows gives moiré acne on the mesh
       v.scene.primitives.add(t);
       photoreal.current = t;
+      offMotion = watchMotion(v.scene, () => { if (!t.isDestroyed()) t.maximumScreenSpaceError = TILES_MOVING_SSE; },
+        () => { if (!t.isDestroyed()) { t.maximumScreenSpaceError = TILES_REST_SSE; v.scene.requestRender(); } }, REST_MS);
       if (import.meta.env.DEV) (window as unknown as { __tiles?: Cesium.Cesium3DTileset }).__tiles = t;
       const prim = new Cesium.GroundPrimitive({
         geometryInstances: new Cesium.GeometryInstance({ geometry: new Cesium.RectangleGeometry({ rectangle: rect, vertexFormat: Cesium.MaterialAppearance.MaterialSupport.TEXTURED.vertexFormat }) }),
@@ -556,12 +582,14 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
         // The hidden globe only serves heights and picking: no imagery downloads, coarser terrain.
         if (v.imageryLayers.length) v.imageryLayers.get(0).show = false;
         g.maximumScreenSpaceError = 4;
+        v.scene.requestRender();
       };
       const off = t.initialTilesLoaded.addEventListener(() => { off(); hideGlobe(); liftToMesh(); });
       recolour();
     }).catch((e) => console.warn("Photoreal 3D tiles unavailable, staying on aerial imagery:", e instanceof Error ? e.message : e));
     return () => {
       cancelled = true;
+      offMotion?.();
       photoreal.current = undefined;
       meshLift.current = 0;
       applyLift();
@@ -615,6 +643,9 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     });
     return () => { cancelled = true; };
   }, [frameUrl, frames]);
+
+  // Any change to the props or state above may change what the scene shows.
+  useEffect(() => { requestRenderSoon(); });
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>

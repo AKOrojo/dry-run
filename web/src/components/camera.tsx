@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import type { LonLat } from "../lib/flyroute";
+import { holdRendering } from "../lib/render";
 
 const R = 6378137;
 const rad = Cesium.Math.toRadians;
@@ -126,7 +127,9 @@ export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean
       c.setView({ destination: Cesium.Cartesian3.fromRadians(lon, lat, height), orientation: { heading: h, pitch: c.pitch, roll: 0 } });
     };
     s.preRender.addEventListener(pre);
-    return () => { el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
+    const release = holdRendering();
+    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -222,7 +225,9 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       if (ended || now - lastHud > 100) { lastHud = now; sync(); }
     };
     s.preRender.addEventListener(pre);
-    return () => { el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
+    const release = holdRendering();
+    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active, path, at, sync, keys]);
 
   return {

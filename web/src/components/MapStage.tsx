@@ -43,6 +43,7 @@ const CloseUpMap = lazyNamed(() => import("./CloseUp"), "CloseUpMap");
 import { GpuBoxMap } from "./GpuBoxMap";
 import { DomainMap, domainBbox, outsideDomain } from "./DomainMap";
 import { listPatches, setCloseUp, useCloseUp } from "../lib/patch3d";
+import { requestRenderSoon } from "../lib/render";
 import type { Anchors } from "./Anchored";
 import { Slider } from "./controls/Slider";
 
@@ -1289,6 +1290,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     return lines;
   };
   const baseline = !run?.scenario.interventions?.length;
+
+  // The map renders on demand (lib/render.ts): any change here may change what the scene shows.
+  useEffect(() => { requestRenderSoon(); });
 
   return (
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>

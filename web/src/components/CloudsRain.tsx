@@ -11,6 +11,7 @@ import { fmtT } from "./ds";
 import { FIG } from "./rev5";
 import { LonLat, metresBetween, offsetLL, rain as rainStore } from "../lib/rain";
 import { clock } from "../lib/clock";
+import { holdRendering } from "../lib/render";
 import { sim } from "../lib/simstate";
 import { liveModelT, weatherAt, weatherLabel, weatherSpec, useWeatherNow } from "../lib/weather";
 import type { WeatherSource, WeatherSpec } from "../lib/weather";
@@ -235,7 +236,9 @@ export function CloudsRain({ scene, anchors, src, hidden }: {
     const deck = buildDeck(scene, live.current, spec);
     const off = scene.preRender.addEventListener(deck.update);
     deck.update();
-    return () => { off(); deck.remove(); };
+    // The clouds drift and the rain falls every frame (the map otherwise renders on demand); held still with reduced motion.
+    const release = reducedMotion() ? () => {} : holdRendering();
+    return () => { release(); off(); deck.remove(); };
   }, [scene, specKey, src?.live]);
   if (!wx || !scene) return null;
   const { title, sub } = weatherLabel(wx.spec, wx.now, fmtT);
