@@ -29,6 +29,9 @@ from dataclasses import dataclass, field
 SOLVE_SHARE = 0.9  # share of the bar for solving; the rest is saving frames
 UNMEASURED_CAP = 0.95  # an estimate-driven bar never claims to be finished
 OTHER_MAX_AGE_S = 3600  # forget a non-stream solve that never wrote its final manifest
+# Early in a measured solve, elapsed / fraction swings (Eng E saw 181 s fall to 103 s in 3 s): below this share of
+# the solve, the time left is blended from the estimate towards the measured rate.
+BLEND_FRAC = 0.15
 _SEQ = itertools.count()
 
 
@@ -42,7 +45,8 @@ class Job:
     t_end_s: int
     est_s: float | None
     writes_total: int
-    started: float = field(default_factory=time.monotonic)
+    started: float = field(default_factory=time.monotonic)  # reset when solving begins: elapsed_s is solve-only
+    attached: float = field(default_factory=lambda: time.monotonic())  # total_s counts from here, across the queue wait
     phase: str = "queued"  # queued -> solving -> saving
     sim_t_s: float = 0.0
     measured: bool = False
@@ -63,6 +67,7 @@ class Job:
                                                     (self.t_end_s if self.phase == "saving" else 0.0))
         return {"phase": self.phase, "sim_t_s": round(min(sim_t, self.t_end_s), 1), "t_end_s": self.t_end_s,
                 "fraction": round(frac, 3), "elapsed_s": round(elapsed, 1),
+                "total_s": round(time.monotonic() - self.attached, 1),
                 "eta_s": None if eta is None else round(max(0.0, eta), 1),
                 "queue_s": None if queue_s is None else round(queue_s, 1), "ahead": ahead,
                 "measured": self.measured or self.phase == "saving"}
@@ -83,6 +88,9 @@ class Job:
             eta = self.est_s
         elif frac > 0.02 and (self.measured or self.phase == "saving"):
             eta = elapsed / frac - elapsed
+            w = min(1.0, frac / (SOLVE_SHARE * BLEND_FRAC)) ** 2  # squared: the first few % barely move it
+            if self.est_s and w < 1.0:
+                eta = w * eta + (1 - w) * max(0.0, self.est_s - elapsed)
         else:
             eta = max(0.0, self.est_s - elapsed) if self.est_s else None
         return frac, eta, elapsed

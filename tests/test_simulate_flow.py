@@ -356,3 +356,37 @@ def test_estimate_and_started_carry_the_queue(empty_queue, client):
     evs = events(client.post("/api/simulate/stream", json=spec(43)).text)
     assert evs[0]["kind"] == "started" and evs[0]["data"]["queue_s"] == 0.0 and evs[0]["data"]["ahead"] == 0
     assert all("queue_s" in ev["data"] for ev in evs if ev["kind"] == "progress")
+
+
+def test_early_measured_eta_leans_on_the_estimate(empty_queue, monkeypatch):
+    """At 2 % of a solve, elapsed / fraction alone would say 4 x too long; the blend stays near est_s - elapsed."""
+    clock = [2000.0]
+    monkeypatch.setattr(jobs.time, "monotonic", lambda: clock[0])
+    job, _ = jobs.attach("r_blend", 3600, 100.0, 4)
+    jobs.on_save_run("r_blend", "running")
+    token = jobs.bind(job)
+    try:
+        clock[0] += 9
+        jobs.tick(108, 3600)  # 3 % of the sim in 9 s: the raw rate says 291 s left
+        eta = job.progress()["eta_s"]
+        assert 91 <= eta < 110
+        clock[0] += 51
+        jobs.tick(1800, 3600)  # past the blend: the measured rate alone
+        assert job.progress()["eta_s"] == round(60 / 0.45 - 60, 1)
+    finally:
+        jobs.unbind(token)
+        _done(job)
+
+
+def test_total_s_spans_the_queue_wait(empty_queue, monkeypatch):
+    clock = [3000.0]
+    monkeypatch.setattr(jobs.time, "monotonic", lambda: clock[0])
+    job, _ = jobs.attach("r_total", 3600, 20.0, 4)
+    try:
+        clock[0] += 30  # waited behind another run
+        jobs.on_save_run("r_total", "running")
+        clock[0] += 5
+        p = job.progress()
+        assert p["elapsed_s"] == 5.0 and p["total_s"] == 35.0
+    finally:
+        _done(job)

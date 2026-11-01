@@ -9,11 +9,11 @@ POST /api/simulate/estimate  ScenarioSpec ->
 POST /api/simulate/stream    ScenarioSpec -> text/event-stream of {"kind", "data"}:
     started   {job_id, cancel_token, run_id, cached, est_s, est_basis, t_end_s, output_interval_s, frames_total,
                queue_s, ahead}
-    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, eta_s, queue_s, ahead,
-               measured, joined}
+    progress  {phase: queued|solving|saving|cancelling, sim_t_s, t_end_s, fraction, elapsed_s, total_s, eta_s, queue_s,
+               ahead, measured, joined}
               (joined: this stream attached to a job another viewer had already started for the same run_id;
                while queued, eta_s = queue_s + est_s and ahead > 0 means "waiting for another run"; both are 0 once
-               solving)
+               solving. elapsed_s restarts when solving begins; total_s counts from the job's creation, wait included)
     done      {manifest}                                              terminal
     cancelled {reason}                                                terminal
     error     {code, message, retryable}                              terminal
