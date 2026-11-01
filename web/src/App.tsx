@@ -31,6 +31,8 @@ import { ChartArea, Dock } from "./components/Dock";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { cachedBaseRun, isBase } from "./lib/areas";
 import { Failure, Pattern, Sidebar } from "./components/Sidebar";
+import { AddObservationSlot } from "./components/Observations";
+import { useObsUi } from "./lib/observations";
 import type { SimBar, Tab } from "./components/Sidebar";
 import { createPortal } from "react-dom";
 import { MiniPlayer, Sheet, TabBar } from "./components/phone/Phone";
@@ -519,6 +521,9 @@ export default function App() {
   // The "3D city unavailable" chip's Details opens Layers (the sheet on a phone, the drawer on a tablet).
   const basemapFocus = useLayers().basemapFocus;
   useEffect(() => { if (basemapFocus) openSide("Layers"); }, [basemapFocus]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // A photo of the water (map menu or Layers row) opens its card in the Inspect tab.
+  const obsSpot = useObsUi().spot;
+  useEffect(() => { if (obsSpot) openSide("Inspect"); }, [obsSpot?.seq]);  // eslint-disable-line react-hooks/exhaustive-deps
   /** The tour opens the sheet or drawer its step points into, and closes it for steps on the map or the header. */
   const tourStep = (id: string) => {
     const where: Record<string, PhoneTab> = { scenario: "Scenario", rain: "Scenario", "rain-domain": "Scenario", drainage: "Scenario", simulate: "Scenario", "sim-status": "Scenario",
@@ -589,7 +594,7 @@ export default function App() {
       {(() => { const panel = (
       <ErrorBoundary name="side panel" resetKey={aoi?.aoi_id} style={{ borderLeft: "1px solid var(--hairline)", minHeight: 0 }}>
       <Sidebar {...(narrow ? { tab: sideTab, onTab: openSide } : {})} phone={bp === "phone"} timeline={bp === "tablet" && mainDock && view.timeline ? dock("extras") : undefined} aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
-          inspect={cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
+          inspect={obsSpot ? <AddObservationSlot aoi={aoi} run={mapRun} /> : cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
           inspectAfter={plan ? <HowToInspectCard /> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>

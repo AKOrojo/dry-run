@@ -8,6 +8,7 @@ import type { DrainageDefault } from "../contracts/gen/AOIManifest";
 import type { Drainage } from "../contracts/gen/ScenarioSpec";
 import type { RouteRequest } from "../contracts/gen/RouteRequest";
 import type { RouteResult } from "../contracts/gen/RouteResult";
+import type { Observation } from "../contracts/gen/Observation";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -265,6 +266,15 @@ async function optional<T>(url: string): Promise<T | null> {
 export const getRunEvents = (runId: string) => optional<RunEvents>(`${API}/api/runs/${encodeURIComponent(runId)}/derived/events.json`);
 export const getBoundary = (aoiId: string) => optional<BoundaryCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/boundary.geojson`);
 export const getInflows = (aoiId: string) => optional<InflowCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/layer/inflows`);
+
+/** Uploaded observations in an area, newest first; sim_depth_m is the model at the observation for run_id when one is given. */
+export const getObservations = (aoiId: string, runId?: string, signal?: AbortSignal) =>
+  fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/observations${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { signal })
+    .then(j<{ aoi_id: string; observations: Observation[] }>).then((b) => b.observations);
+
+/** POST /api/observe: a photo of the water, multipart (file, lon, lat, t_s, run_id, source). Returns the saved observation; the judge key goes in the header as in askAgent. */
+export const postObservation = (form: FormData, signal?: AbortSignal) =>
+  fetch(`${API}/api/observe`, { method: "POST", headers: { ...team(), ...judge() }, body: form, signal }).then(j<Observation>);
 
 /** Callers debounce hover by this much before asking for a series. */
 export const SERIES_DEBOUNCE_MS = 200;

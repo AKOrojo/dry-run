@@ -1,5 +1,5 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Path, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -31,6 +31,7 @@ import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 const DrainageCard = lazyNamed(() => import("./Drainage"), "DrainageCard");
 import { easeLeft } from "../lib/simbar";
+import { countNote, requestAddAtCentre, useObservations } from "../lib/observations";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
@@ -94,7 +95,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "places", name: "Places", thumb: PLACES_T },
   { key: "arrival", name: "Time to flood", thumb: ARRIVAL_T, note: "Arrival map" },
   { key: "route", name: "Evacuation route", thumb: ROUTE_T },
-  { key: "photos", name: "Photo observations", thumb: PHOTO_T, note: "None yet" },
+  { key: "photos", name: "Observations", thumb: PHOTO_T, note: "None yet" },
   { key: "terrain", name: "Terrain (3D)", thumb: imgThumb("terrain") },
   { key: "imagery", name: "Aerial imagery", thumb: imgThumb("aerial"), slider: true },
   { key: "rain", name: "Rain area", thumb: RAIN_T, slider: true },
@@ -171,8 +172,9 @@ function PhotorealDownRow({ down }: { down: PhotorealDown }) {
   );
 }
 
-function LayersCard() {
+function LayersCard({ aoiId, runId }: { aoiId?: string; runId?: string }) {
   const lay = useLayers();
+  const obs = useObservations(aoiId, runId);
   const photorealOff = !!lay.photorealDown;  // back only through Try 3D again
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
@@ -186,7 +188,7 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <Tip key={r.key} text={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined}><div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+          <Fragment key={r.key}><Tip text={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined}><div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
             <Switch fill on={on} onChange={(v) => setLayer(r.key, { on: v })} label={<><span aria-hidden="true" style={{ display: "flex", flex: "none", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></>} />
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -200,9 +202,11 @@ function LayersCard() {
                 <CtlButton variant="raised" type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
                   style={{ height: 24, padding: "0 9px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
                   Open</CtlButton>
-              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
+              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.key === "photos" ? (obs ? countNote(obs.length) : "") : r.note ?? ""}</span>}
             </span>
           </div></Tip>
+          {r.key === "photos" && <div style={{ padding: "0 14px 6px" }}><CtlButton variant="text" type="button" onClick={() => requestAddAtCentre()} style={{ fontSize: 12, height: 26, color: "var(--ink)" }}>+ Add a photo of the water</CtlButton></div>}
+          </Fragment>
         );
       })}
       <div data-basemap-row="" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
@@ -732,7 +736,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
       <div ref={scroller} style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
-        {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
+        {tab === "Layers" && <><LayersCard aoiId={aoi?.aoi_id} runId={run?.run_id} /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
           <CtlButton variant="text" type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
             color: "var(--ink-muted)", font: "inherit", fontSize: 13, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>Sources and credits</CtlButton>

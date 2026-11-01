@@ -4,7 +4,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
-import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
+import { ArrowsOut, ArrowsOutCardinal, Camera, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
 import { useShort, useTouch } from "../lib/breakpoint";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
@@ -33,10 +33,12 @@ import type { RouteResult } from "../contracts/gen/RouteResult";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { lazyNamed } from "../lib/lazy";
+import { obsUi, startAddObservation, useObservations } from "../lib/observations";
 const FlowHazardMap = lazyNamed(() => import("./FlowHazard"), "FlowHazardMap");
 const FlowLegend = lazyNamed(() => import("./FlowHazard"), "FlowLegend");
 const DrainsLegend = lazyNamed(() => import("./Drainage"), "DrainsLegend");
 const DrainsMap = lazyNamed(() => import("./Drainage"), "DrainsMap");
+const ObservationPins = lazyNamed(() => import("./Observations"), "ObservationPins");
 import { flowStore } from "../lib/flowhazard";
 import { Anchored } from "./Anchored";
 import { CloudsRain } from "./CloudsRain";
@@ -620,6 +622,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
   const lay = useLayers();
+  const obsList = useObservations(aoi?.aoi_id, run?.run_id);
   const wps = useWaypoints();
   const rs = useRain();
   const simNow = useSim();
@@ -908,7 +911,17 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     canvas.style.userSelect = "none";
     canvas.addEventListener("keydown", onMenuKey);
     canvas.addEventListener("pointermove", onTouchMove);
+    // The Layers row asks for a photo at the map centre.
+    let lastReq = obsUi.get().centreRequest;
+    const unObs = obsUi.subscribe(() => {
+      const req = obsUi.get().centreRequest;
+      if (req === lastReq) return;
+      lastReq = req;
+      const p = pick(canvas.clientWidth / 2, canvas.clientHeight / 2);
+      if (p) startAddObservation(p.lon, p.lat);
+    });
     return () => {
+      unObs();
       clearTimeout(timer);
       clearTimeout(press);
       canvas.removeEventListener("pointermove", onTouchMove);
@@ -1465,6 +1478,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             { kind: "item", label: "Safe route from here", disabled: !doneRun || !inAoi(menu.lon, menu.lat),
               reason: !run ? "Simulate the area first to see a dry route." : !doneRun ? "Wait for the simulation to finish." : !inAoi(menu.lon, menu.lat) ? "Pick a spot inside the area." : undefined,
               onSelect: () => startSafeRoute([menu.lon, menu.lat]) },
+            { kind: "item", label: "Add a photo of the water here", icon: <Camera size={16} />, onSelect: () => startAddObservation(menu.lon, menu.lat) },
           ] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
@@ -1575,6 +1589,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         </div>
         </div>
         <DrainsMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} runsBase={runsBase} hidden={!!closeUp.active} />
+        <ObservationPins viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} list={obsList} hidden={!!closeUp.active} />
         {(lay.profile.on || (doneRun && (lay.flow.on || lay.hazard.on || lay.loads.on))) && <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />}
 
         {place && (
