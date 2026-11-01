@@ -27,7 +27,7 @@ import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
 import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
-import { firstDryAfter, fmtEta, fmtKm, nearestFrame, routeError, samePath, samplePath, wetRuns, safeRoute, setSafeRoute, startSafeRoute, useSafeRoute } from "../lib/saferoute";
+import { firstDryAfter, fmtEta, fmtKm, nearestFrame, routeError, samplePath, usualCut, wetRuns, safeRoute, setSafeRoute, startSafeRoute, useSafeRoute } from "../lib/saferoute";
 import type { Spot } from "../lib/saferoute";
 import type { RouteResult } from "../contracts/gen/RouteResult";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
@@ -1078,8 +1078,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // Safe route (board 12): the usual route at the dry start of the run; the route for the frame nearest the playhead, with
   // the first dry frame after it when none is dry; then the usual-route points that are under water at that frame.
   const srOrigin = sr.origin, srRoute = sr.route, srUsual = sr.usual, srBlocked = sr.blocked;
-  // The usual route is "now cut" only when the dry route had to leave it (or there is none).
-  const srCut = !!srUsual?.reachable && !!srRoute && (!srRoute.reachable || !samePath(srRoute.path, srUsual.path));
+  const srCut = usualCut(srRoute, srUsual);
   const srTimes = useMemo(() => (frames ?? []).map((f) => f.t_s), [frames]);
   const srTimesKey = srTimes.join(",");
   const srFrame = nearestFrame(srTimes, tS);
@@ -1164,7 +1163,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     }
     const mark = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${hazard.toCssHexString()}" stroke="${ground.toCssHexString()}" stroke-width="2"/><path d="M6 6l6 6M12 6l-6 6" stroke="${ground.toCssHexString()}" stroke-width="2" stroke-linecap="round"/></svg>`;
     const image = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mark)}`;
-    for (const [lon, lat] of srBlocked) {
+    for (const [lon, lat] of srCut ? srBlocked : []) {
       made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
         billboard: { image, width: 18, height: 18, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY } }));
     }
@@ -1555,7 +1554,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, pointerEvents: "auto" }}>
               {srRoute.reachable && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, height: 4, borderRadius: 2, background: "var(--verified)" }} />Dry route at {fmtT(srRoute.t_s)}</span>}
               {srCut && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, borderTop: "3px dashed var(--hazard)" }} />Usual route, now cut</span>}
-              {srBlocked.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--hazard)" }} />Road impassable (over {srPassM} m)</span>}
+              {srCut && srBlocked.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--hazard)" }} />Road impassable (over {srPassM} m)</span>}
             </div>
           )}
           {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}

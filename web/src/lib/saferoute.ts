@@ -113,3 +113,7 @@ export function wetRuns(samples: Spot[], wet: boolean[]): Spot[] {
 /** The card's error line: the API's "more than N m from any road" in plain words, anything else as a short failure. */
 export const routeError = (msg: string) => (/from any road/i.test(msg) ? "This spot is too far from a road. Pick one on or near a street."
   : "The route could not be worked out. Try again, or pick another start.");
+
+/** The usual route is "now cut" only when the dry route had to leave it, or there is no dry route. */
+export const usualCut = (route: RouteResult | null, usual: RouteResult | null) =>
+  !!usual?.reachable && !!route && (!route.reachable || !samePath(route.path, usual.path));

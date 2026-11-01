@@ -18,7 +18,7 @@ import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
 import { clock as playhead, useClock } from "../lib/clock";
-import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, shelterName, useSafeRoute } from "../lib/saferoute";
+import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, shelterName, usualCut, useSafeRoute } from "../lib/saferoute";
 import { useTouch } from "../lib/breakpoint";
 import { Card, CardLock, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
@@ -301,7 +301,9 @@ function SafeRouteCard({ passM }: { passM: number }) {
           {row("To", shelterName(r.destination_name))}
           {row("Distance", r.length_km != null ? fmtKm(r.length_km) : "n/a")}
           {row("Time", r.eta_min != null ? `${fmtEta(r.eta_min)} on foot` : "n/a")}
-          {row("Roads avoided", `${r.edges_removed} impassable at ${fmtT(s.t ?? 0)}`)}
+          {usualCut(r, s.usual)
+            ? row(`Flooded ${s.blocked.length === 1 ? "stretch" : "stretches"} avoided`, `${s.blocked.length} on the usual route at ${fmtT(s.t ?? 0)}`)
+            : <p style={{ margin: 0, fontWeight: 600 }}>Usual route is dry at {fmtT(s.t ?? 0)}</p>}
         </>}
         {r && !dry && <>
           <div style={{ display: "flex", gap: 8, padding: "8px 10px", borderLeft: "3px solid var(--hazard)", background: "color-mix(in srgb, var(--hazard) 10%, var(--surface))" }}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstDryAfter, fmtEta, fmtKm, framesAfter, nearestFrame, routeError, samePath, samplePath, shelterName, wetRuns } from "./saferoute";
+import { firstDryAfter, fmtEta, fmtKm, framesAfter, nearestFrame, routeError, samePath, samplePath, shelterName, usualCut, wetRuns } from "./saferoute";
 
 const times = [0, 600, 1200, 1800, 2400];
 
@@ -85,5 +85,13 @@ describe("formatting", () => {
   it("puts route errors in plain words", () => {
     expect(routeError("point (3.54500, 6.47419) is more than 300 m from any road")).toBe("This spot is too far from a road. Pick one on or near a street.");
     expect(routeError("500")).toMatch(/could not be worked out/);
+  });
+  it("calls the usual route cut only when the dry route left it", () => {
+    const r = (reachable: boolean, path: [number, number][]) => ({ run_id: "r", t_s: 0, reachable, path, edges_removed: 0 });
+    const a: [number, number][] = [[3.5, 6.4], [3.6, 6.5]], b: [number, number][] = [[3.5, 6.4], [3.55, 6.45], [3.6, 6.5]];
+    expect(usualCut(r(true, a), r(true, a))).toBe(false);
+    expect(usualCut(r(true, b), r(true, a))).toBe(true);
+    expect(usualCut(r(false, []), r(true, a))).toBe(true);
+    expect(usualCut(r(true, a), null)).toBe(false);
   });
 });
