@@ -8,7 +8,9 @@ import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
 import type { LevelSensitivity } from "../lib/api";
 import { lazyNamed } from "../lib/lazy";
 const FlowHazardCard = lazyNamed(() => import("./FlowHazard"), "FlowHazardCard");
-import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
+import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, setPhotorealDown, useLayers } from "../lib/layers";
+import { downText, isDown } from "../lib/photoreal";
+import type { PhotorealDown } from "../lib/photoreal";
 import type { AerialSource } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
 import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints";
@@ -143,8 +145,34 @@ function AerialSourceRow() {
   );
 }
 
+/** Under Base map when Google's 3D tiles failed: why the map is aerial, and Try 3D again once it may work (never for a
+ *  refused key; after Retry-After or 10 min for the daily limit; at once otherwise). */
+function PhotorealDownRow({ down }: { down: PhotorealDown }) {
+  const [, tick] = useState(0);
+  const wait = down.retryAt - Date.now();
+  useEffect(() => {
+    if (!(wait > 0) || !Number.isFinite(wait)) return;
+    const id = window.setTimeout(() => tick((n) => n + 1), Math.min(wait + 50, 2 ** 31 - 1));
+    return () => window.clearTimeout(id);
+  }, [down, wait]);
+  const ready = !isDown(down);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "6px 14px 0", fontSize: 12, lineHeight: "16px" }}>
+      <span role="status" style={{ color: "var(--ink)" }}>{downText(down.kind)}</span>
+      {down.kind !== "key" && (
+        <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)" }}>
+          <CtlButton variant="text" type="button" disabled={!ready} onClick={() => { setPhotorealDown(null); setBasemap("photoreal"); }}
+            style={{ padding: 0, border: 0, background: "transparent", font: "inherit", fontWeight: 600, color: ready ? "var(--ink)" : "var(--ink-muted)", cursor: ready ? "pointer" : "default" }}>Try 3D again</CtlButton>
+          {!ready && <span>from {new Date(down.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LayersCard() {
   const lay = useLayers();
+  const photorealOff = isDown(lay.photorealDown);
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
   const rainSet = useRain().mode !== "whole";
@@ -181,12 +209,14 @@ function LayersCard() {
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["photoreal", "aerial"] as const).map((m) => {
             const on = lay.basemap === m;
-            return <Tooltip key={m} text={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" onClick={() => setBasemap(m)}
+            const off = m === "photoreal" && photorealOff;
+            return <Tooltip key={m} text={m === "photoreal" ? (off && lay.photorealDown ? downText(lay.photorealDown.kind) : "Google Photorealistic 3D Tiles") : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" disabled={off} onClick={() => setBasemap(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
               {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</CtlButton></Tooltip>;
           })}
         </span>
       </div>
+      {lay.photorealDown && <PhotorealDownRow down={lay.photorealDown} />}
       {lay.googleAvailable && <AerialSourceRow />}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", fontSize: 12, color: "var(--ink-muted)", opacity: lay.basemap === "aerial" ? 1 : 0.45 }}>
         Imagery
