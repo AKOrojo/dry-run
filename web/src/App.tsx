@@ -246,7 +246,7 @@ export default function App() {
       if (u.toString() !== window.location.href) window.history.replaceState(null, "", u.toString());
       if (r.run) {
         setRun(r.run);
-        // Offered in Compare like any run of this session; it is A there until another A is picked.
+        // Offered in Compare like any run of this session; with no pair chosen it takes its slot there (lib/compare.ts pickPair).
         if (r.run.status === "done") setLinked((p) => new Set(p).add(r.run!.run_id));
         addRun(r.run);
         clock.set({ t_s: r.t ?? 0, max_s: r.run.frames.at(-1)?.t_s ?? 0, playing: false });
@@ -487,6 +487,7 @@ export default function App() {
     [mapRun, runsBase, pair?.a.run_id, cmpView, diff]);
   const framesB = useMemo(() => (pair && cmpView === "Swipe" ? framesOf(pair.b) : undefined), [pair?.b.run_id, cmpView, runsBase]);
   const side = !!pair && cmpView === "Side by side";
+  const [sideHost, setSideHost] = useState<HTMLDivElement | null>(null);
 
   // ---- Plan view: click a building (shift: a second one to compare); ?building=<id> selects one on load.
   const [plan, setPlan] = useState(false);
@@ -572,7 +573,7 @@ export default function App() {
             <ErrorBoundary name="map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
             {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase}
-              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} layout={bp} />}
+              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} layout={bp} controlsHost={side && bp === "phone" ? sideHost : null} />}
             </ErrorBoundary>
           </div>
           {side && aoi && pair && (
@@ -580,11 +581,13 @@ export default function App() {
               <ErrorBoundary name="second map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
               </ErrorBoundary>
+              {/* Phone: the map's buttons, once, here (MapStage portals them in; the cameras are synced). */}
+              <div ref={setSideHost} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
             </div>
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
-          {pair && <CompareMapOverlay a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
+          {pair && <CompareMapOverlay phone={bp === "phone"} a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
