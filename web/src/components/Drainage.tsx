@@ -6,6 +6,7 @@ import * as Cesium from "cesium";
 import { Info, ListBullets, Drop } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { useLayers } from "../lib/layers";
+import { perTheme, useTheme } from "../lib/theme";
 import {
   designMmH, drainStats, fillAt, fillTone, FULL_PCT, getDrainFill, getDrains, returnPeriods, setDrainage, resetDrainage,
   SYSTEM_EXPLAIN, SYSTEM_LABEL, SYSTEM_SHORT, useDrainage,
@@ -206,14 +207,7 @@ function densify(p: LL[]): LL[] {
 const llKey = (q: LL) => `${q[0].toFixed(6)},${q[1].toFixed(6)}`;
 
 // Token colours are read once per theme: a time step recolours hundreds of lines, and each style read can force a recalc.
-const tokenCache = { theme: undefined as string | undefined, colors: new Map<string, Cesium.Color>() };
-const cssColor = (name: string) => {
-  const theme = document.documentElement.dataset.theme;
-  if (theme !== tokenCache.theme) { tokenCache.theme = theme; tokenCache.colors.clear(); }
-  let c = tokenCache.colors.get(name);
-  if (!c) tokenCache.colors.set(name, c = Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim()));
-  return c;
-};
+const cssColor = perTheme((name) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim()));
 const toneColor = (pct: number | null | undefined) => { const t = fillTone(pct); return cssColor(t.token).withAlpha(t.alpha); };
 /** Tone bucket of a fill (0 = no fill yet): lines only rebuild when a bucket changes. */
 const bucketOf = (pct: number | null | undefined) => (pct == null ? 0 : pct < 40 ? 1 : pct < 80 ? 2 : pct < FULL_PCT ? 3 : 4);
@@ -334,11 +328,13 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const tone = useRef<{ apply: (pct: Map<string, number> | null) => void } | null>(null);
   const pctRef = useRef(pctOf);
   pctRef.current = pctOf;
+  // Line colours live in materials and instance attributes: a theme switch rebuilds the layer in the new tokens.
+  const theme = useTheme();
   useEffect(() => {
     const drop = () => { tone.current = null; if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
     if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
     if (photoreal && !heights) return;
-    let live = true;
+    let live = true, stop = () => {};
     const ready = photoreal ? Promise.resolve() : Promise.all([Cesium.GroundPolylinePrimitive.initializeTerrainHeights(), Cesium.GroundPrimitive.initializeTerrainHeights()]);
     ready.then(() => {
       if (!live || viewer.isDestroyed()) return;
@@ -434,6 +430,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       const items: Item[] = [...kinds.flatMap((k) => k.ls.map((l) => ({ id: l.id, k }))), ...zones.map((z) => ({ id: z.id, k: null }))];
       let target: Map<string, number> | null = null, cursor = 0, left = 0, budget = CHUNK_PLAY_MS, lastAt = -Infinity;
       let waiting: (() => void) | null = null, frame = 0;
+      stop = () => { if (frame) cancelAnimationFrame(frame); waiting?.(); waiting = null; };
       const write = (it: Item, pct: Map<string, number> | null) => {
         const b = bucketOf(pct?.get(it.id)), was = seen.get(it.id) ?? 0;
         if (was === b) return false;
@@ -485,8 +482,8 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       apply(pctRef.current);  // the fill may have moved on while this was building
       viewer.scene.requestRender();
     }).catch(() => { /* terrain heights unavailable: no drains drawn */ });
-    return () => { live = false; };
-  }, [show, viewer, lines, zones, basemap, heights]);  // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { live = false; stop(); };
+  }, [show, viewer, lines, zones, basemap, heights, theme]);  // eslint-disable-line react-hooks/exhaustive-deps
   // A time step: only the tones change.
   useEffect(() => { tone.current?.apply(pctOf); }, [toneKey]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); }, [viewer]);
@@ -516,7 +513,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     s.postRender.addEventListener(near);
     s.requestRender();
     return () => { if (!s.isDestroyed()) { s.postRender.removeEventListener(near); s.primitives.remove(pts); } };
-  }, [show, viewer, inlets, photoreal, heights]);
+  }, [show, viewer, inlets, photoreal, heights, theme]);
 
   // Outfall marks as billboards (hundreds of them; DOM marks would be re-placed every frame).
   useEffect(() => {
@@ -533,7 +530,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     s.primitives.add(bb);
     s.requestRender();
     return () => { if (!s.isDestroyed()) s.primitives.remove(bb); };
-  }, [show, viewer, outfalls, photoreal, heights]);
+  }, [show, viewer, outfalls, photoreal, heights, theme]);
 
   // The view (for labels and chips) and the zone under the cursor.
   const [cam, setCam] = useState<{ rect: [number, number, number, number] | null; h: number }>({ rect: null, h: Infinity });
