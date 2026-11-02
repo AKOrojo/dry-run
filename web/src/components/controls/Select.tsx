@@ -41,7 +41,7 @@ if (typeof window !== "undefined") {
 const caption: CSSProperties = { fontSize: 11, lineHeight: "14px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
   color: "var(--ink-muted)", padding: "8px 10px 4px" };
 const ellipsis: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
-/** The area list: a long name wraps to a second line, then ends in an ellipsis. */
+/** The area list, and every list on a phone: a long name wraps to a second line, then ends in an ellipsis. */
 const twoLines: CSSProperties = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "normal" };
 
 const useMedia = (q: string) => {
@@ -235,10 +235,10 @@ export function Select({ label, value, onChange, options, groups, variant = "fie
                 onClick={() => pick(i)} onMouseMove={() => { if (active !== i) setActive(i); }}
                 onPointerEnter={(e) => { if (e.pointerType !== "touch") hoverTip(e.currentTarget, o.label); }}
                 onPointerLeave={() => clearTimeout(tipTimer.current)}
-                style={{ display: "flex", alignItems: "center", gap: 10, minHeight: rowH(o), padding: header ? "4px 10px" : "0 10px", borderRadius: 4, cursor: "pointer", flex: "none",
+                style={{ display: "flex", alignItems: "center", gap: 10, minHeight: rowH(o), padding: header || sheet ? "4px 10px" : "0 10px", borderRadius: 4, cursor: "pointer", flex: "none",
                   background: on ? "color-mix(in srgb, var(--ink) 9%, transparent)" : undefined }}>
                 <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                  <span data-name="" style={{ ...(header ? twoLines : ellipsis), fontWeight: sel ? 600 : 400 }}>{o.label}</span>
+                  <span data-name="" style={{ ...(header || sheet ? twoLines : ellipsis), fontWeight: sel ? 600 : 400 }}>{o.label}</span>
                   {o.detail && <span style={{ ...ellipsis, fontSize: 12, lineHeight: "16px", color: "var(--ink-muted)", ...(o.detailMono ? { fontFamily: "var(--font-mono)" } : {}) }}>{o.detail}</span>}
                 </span>
                 {sel ? <Check size={14} weight="bold" color="var(--ink)" aria-hidden="true" style={{ marginLeft: "auto", flex: "none" }} />

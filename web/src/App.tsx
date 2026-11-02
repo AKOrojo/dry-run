@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentEvent, ApiError, AOIManifest, API, getAOI, getAOIs, getBoundary, getConfig, getInflows, getRun, getRunEvents, Intervention, RunManifest, runFileUrl, simulate, estimateSim, simulateStream, cancelSim } from "./lib/api";
 import type { ScenarioSpec, SimEstimate, SimProgress } from "./lib/api";
 import { getPresets, getRender } from "./lib/api";
+import { runLabels } from "./lib/runlabel";
 import { clock, useClock } from "./lib/clock";
 import { setExtras } from "./lib/extras";
 import { usePinnedSeries } from "./lib/inspect";
@@ -451,6 +452,9 @@ export default function App() {
   }, [comparing, here, cmp]);
   const aRun = here.find((r) => r.run_id === cmp.a), bRun = here.find((r) => r.run_id === cmp.b);
   const pair = comparing && aRun && bRun && aRun !== bRun ? { a: aRun, b: bRun } : undefined;
+  // Compare's run labels: what differs between the runs on offer, with short ids where two still read the same.
+  const labels = useMemo(() => runLabels(here, aoi?.drainage_default), [here, aoi?.drainage_default]);
+  const names = pair ? { a: labels.get(pair.a.run_id), b: labels.get(pair.b.run_id) } : undefined;
   const chartArea = { aoi: aoi?.aoi_id ?? "map", name: aoi?.name ?? "", run: pair ? (pair.b.status === "done" ? pair.b.run_id : undefined) : runId };
   useEffect(() => { if (pair) clock.set({ max_s: pair.b.frames.at(-1)?.t_s ?? 0 }); }, [pair?.b.run_id]);
   useEffect(() => { if (pair) adoptRun(pair.b); }, [pair?.b.run_id]);
@@ -551,7 +555,7 @@ export default function App() {
   };
   const playerRun = (pair ? pair.b : run);
   const mainDock = !cu.active && !buildingView && !agentView;
-  const dock = (layout: DockLayout) => (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
+  const dock = (layout: DockLayout) => (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} names={names} series={pinSeries ?? undefined}
           third={pair ? (menu) => <ByPlace rows={places} menu={menu} /> : undefined} thirdLabel="By place" side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} layout={layout} />);
   const narrow = bp !== "desktop";
@@ -580,7 +584,7 @@ export default function App() {
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
-          {pair && <CompareMapOverlay a={pair.a} b={pair.b} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
+          {pair && <CompareMapOverlay a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}
@@ -607,7 +611,7 @@ export default function App() {
       <Sidebar {...(narrow ? { tab: sideTab, onTab: openSide } : {})} phone={bp === "phone"} timeline={bp === "tablet" && mainDock && view.timeline ? dock("extras") : undefined} aoi={aoi} run={mapRun} buildingsUrl={aoiBuildingsUrl} onDemo={openDemo} sources={sources} inspectFocus={pick.id} closeup={!!cu.active}
           inspect={obsSpot ? <AddObservationSlot aoi={aoi} run={mapRun} /> : cu.active ? <CloseUpCards /> : sel ? <><SelectedBuildingCard sel={sel} second={sel2} onFly={() => flyTo(sel)} onClear={() => setPick({})} />
             {sel.place && <PlaceCard place={sel.place} runId={mapRun?.status === "done" ? mapRun.run_id : undefined} />}<HowToInspectCard /></> : undefined}
-          inspectAfter={pair || plan ? <>{pair && <StreetPictureCard aoi={aoi} a={pair.a} b={pair.b} />}{plan && <HowToInspectCard />}</> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
+          inspectAfter={pair || plan ? <>{pair && <StreetPictureCard aoi={aoi} a={pair.a} b={pair.b} names={names} />}{plan && <HowToInspectCard />}</> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>
             {agentList.length > 0 && <RunsCard runs={agentList} shown={run?.run_id} recommended={session.recommended} onShow={showAgentRun} />}
             <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onReplay={setReplayed} onEvents={setAgentEvents}
@@ -616,9 +620,9 @@ export default function App() {
           </>
         } compare={comparing ? (
           <>
-            <CompareCard runs={here} a={cmp.a} b={cmp.b} busy={baseBusy} onScenario={() => setMode("Scenario")}
+            <CompareCard runs={here} labels={labels} a={cmp.a} b={cmp.b} busy={baseBusy} onScenario={() => setMode("Scenario")}
               onA={(a) => setCmp((c) => ({ ...c, a }))} onB={(b) => setCmp((c) => ({ ...c, b }))} onSwap={() => setCmp((c) => ({ a: c.b, b: c.a }))} />
-            {pair && <><DeltaCard a={pair.a} b={pair.b} /><WaterBudgetCard a={pair.a} b={pair.b} /></>}
+            {pair && <><DeltaCard a={pair.a} b={pair.b} names={names} /><WaterBudgetCard a={pair.a} b={pair.b} /></>}
           </>
         ) : undefined} scenario={{
           rain, onRain: (v) => { touched.current = true; setRain(v); }, durationH, onDuration: (v) => { touched.current = true; setDurationH(v); },

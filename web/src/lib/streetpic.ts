@@ -83,12 +83,14 @@ export function fitBox(roomW: number, roomH: number, aspect: number): { w: numbe
   const w = Math.min(roomW, roomH * aspect);
   return { w: Math.floor(w), h: Math.floor(w / aspect) };
 }
-/** The phone legend under the picture: each side's run and model depth, in full ("A · Baseline · model 0.13 m"). */
+/** The phone legend under the picture: each side's run and model depth, in full ("A · Baseline · 120 mm / 3 h · model 0.13 m"). */
 export const legendLine = (letter: "A" | "B", what: string | undefined, depthM: number | null | undefined) =>
   `${letter}${what ? ` · ${what}` : ""}${depthM != null ? ` · model ${metres(depthM)}` : ""}`;
-export type LargeView = { r: RenderResult; a?: RunManifest; b?: RunManifest; /** focused when it opened: focus goes back there on close */ from: Element | null };
+/** Each side's run label as Compare shows it (lib/runlabel.ts), when the view opens from Compare. */
+export type RunNames = { a?: string; b?: string };
+export type LargeView = { r: RenderResult; a?: RunManifest; b?: RunManifest; names?: RunNames; /** focused when it opened: focus goes back there on close */ from: Element | null };
 let large: LargeView | null = null;
 const subs = new Set<() => void>();
 /** Open the large view (a and b: the runs, when known; a link loads them). */
-export const openLarge = (r: RenderResult | null, runs: { a?: RunManifest; b?: RunManifest } = {}) => { large = r ? { r, ...runs, from: typeof document === "undefined" ? null : document.activeElement } : null; subs.forEach((f) => f()); };
+export const openLarge = (r: RenderResult | null, runs: { a?: RunManifest; b?: RunManifest; names?: RunNames } = {}) => { large = r ? { r, ...runs, from: typeof document === "undefined" ? null : document.activeElement } : null; subs.forEach((f) => f()); };
 export const useLarge = () => useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => large);
