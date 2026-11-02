@@ -9,21 +9,25 @@ export const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
 export const sameStorm = (x: RunManifest, y: RunManifest) =>
   JSON.stringify([x.scenario.storm, x.scenario.sim_hours]) === JSON.stringify([y.scenario.storm, y.scenario.sim_hours]);
 
-/** Compare's A and B when the chosen ones are not both on offer (runs = this area's, most recent first). By default B is
- *  the latest run with a change and A its baseline. A run opened from elsewhere (a link, the agent, a replay) that is on
- *  screen becomes A when no A is chosen, so the run someone is looking at is the one compared. */
+/** Compare's A and B when the chosen pair is not on offer (runs = this area's, most recent first). The convention holds
+ *  everywhere: B is the change, A its baseline (the deltas and the Difference map are B minus A). A side the user chose
+ *  and still on offer stays, and only the other is filled. With neither chosen, a run on screen that came from elsewhere
+ *  (a link, the agent's) takes its slot: B if it has a change, A if it is a baseline. Otherwise B is the latest change. */
 export function pickPair(runs: RunManifest[], chosen: { a?: string; b?: string }, shown?: { id: string; fromElsewhere: boolean }): { a?: string; b?: string } {
-  const has = (id?: string) => runs.some((r) => r.run_id === id);
-  if (has(chosen.a) && has(chosen.b) && chosen.a !== chosen.b) return chosen;
-  if (!has(chosen.a) && shown?.fromElsewhere && has(shown.id)) {
-    const a = runs.find((r) => r.run_id === shown.id)!;
-    const b = has(chosen.b) && chosen.b !== a.run_id ? runs.find((r) => r.run_id === chosen.b)
-      : runs.find((r) => r !== a && isBaseline(r) && sameStorm(r, a)) ?? runs.find((r) => r !== a);
-    return { a: a.run_id, b: b?.run_id };
-  }
-  const b = runs.find((r) => !isBaseline(r)) ?? runs[0];
-  const a = b && (runs.find((r) => r !== b && isBaseline(r) && sameStorm(r, b)) ?? runs.find((r) => r !== b));
-  return { a: a?.run_id, b: b?.run_id };
+  const get = (id?: string) => runs.find((r) => r.run_id === id);
+  const other = (x: RunManifest) => runs.find((r) => r !== x);
+  /** A's partner for a B: its baseline on the same storm. B's partner for an A: the latest change on the same storm. */
+  const baselineFor = (x: RunManifest) => runs.find((r) => r !== x && isBaseline(r) && sameStorm(r, x)) ?? other(x);
+  const changeFor = (x: RunManifest) => runs.find((r) => r !== x && !isBaseline(r) && sameStorm(r, x)) ?? other(x);
+  let a = get(chosen.a), b = get(chosen.b);
+  if (a && b && a !== b) return { a: a.run_id, b: b.run_id };
+  if (a && b) b = undefined;  // the same run twice: keep A, fill B
+  if (a) return { a: a.run_id, b: changeFor(a)?.run_id };
+  if (b) return { a: baselineFor(b)?.run_id, b: b.run_id };
+  const on = shown?.fromElsewhere ? get(shown.id) : undefined;
+  if (on) return isBaseline(on) ? { a: on.run_id, b: changeFor(on)?.run_id } : { a: baselineFor(on)?.run_id, b: on.run_id };
+  b = runs.find((r) => !isBaseline(r)) ?? runs[0];
+  return { a: b && baselineFor(b)?.run_id, b: b?.run_id };
 }
 
 /** Road km impassable (run max) inside every named place, for runs A and B; largest first. */
