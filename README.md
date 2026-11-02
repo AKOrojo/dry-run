@@ -58,7 +58,7 @@ cells (~30.7 × 30.5 m). The Lagos Lagoon is along the north edge and the Atlant
 | Population | WorldPop R2025A (2025, constrained, alpha) | sum-resampled from 100 m; total conserved | ~470k people: constrained products count only mapped settlements, so likely low |
 | Buildings | Google Open Buildings v3 (tile 103b) | confidence ≥ 0.8, area ≥ 25 m²; 68,929 footprints | **every building is 6 m tall** (no 2.5D heights yet); centroid cell only |
 | Roads | OpenStreetMap (Geofabrik 2026-10-28) | simple graph, largest connected component; cells sampled ≤ ½ cell | unmapped or mis-tagged roads are missing; bridges come from tags |
-| Drains | OpenStreetMap waterway=drain/ditch/canal | v1 / v2: lines buffered 1 cell, 10 / 10 / 25 mm/h. v3: a channel network with a drain inferred along every drivable road (see model card) | sparse mapping (OSM has 2-3 % of roadside drains); many real drains are silted; drain sizes are assumptions |
+| Drains | OpenStreetMap waterway=drain/ditch/canal | v1 / v2: lines buffered 1 cell, 10 / 10 / 25 mm/h. v3: a channel network with a drain inferred along every drivable road (the app's "Add roadside gutters" switch; see model card) | sparse mapping (OSM has 2-3 % of roadside drains); many real drains are silted; drain sizes are assumptions |
 | Shelters | OpenStreetMap schools / places of worship / community centres | higher half of land, ≤ 300 m from a road | **candidates, assumed**: not official shelters; routing skips a shelter whose cell is flooded |
 | Places | OSM neighbourhoods, named roads, open land | polygons, or Voronoi cells of named points (≤ 1.5 km); ≤ 20 vertices | neighbourhood shapes are approximate, not official boundaries; protected sites never offered as open land |
 
