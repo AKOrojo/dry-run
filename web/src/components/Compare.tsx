@@ -278,6 +278,8 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   leader?: Cesium.Viewer;
 }) {
   const [v, setV] = useState<Cesium.Viewer>();
+  // Bumped by "Restart map" on this side only; the camera sync below follows the new viewer (and a restarted leader).
+  const [mapGen, setMapGen] = useState(0);
   useEffect(() => {
     if (!leader || !v) return;
     v.scene.screenSpaceCameraController.enableInputs = false;  // driven by the left map
@@ -300,7 +302,8 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   }, [leader, v]);
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--ground)" }}>
-      <Globe aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
+      <Globe key={mapGen} aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
+        onRestart={() => setMapGen((g) => g + 1)}
         buildingDepthsUrl={run.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined} />
     </div>
   );
