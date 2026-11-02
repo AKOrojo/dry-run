@@ -174,6 +174,9 @@ def observe(image_bytes: bytes, lon: float, lat: float, t_s: int | None, source:
         reference_object=depth["reference_object"], water_fraction=fraction,
         mask_png=f"/api/observations/{obs_id}/mask.png", model_notes=depth["notes"],
         sim_depth_m=_sim_depth(run_id, lon, lat) if run_id else None)
+    if fraction <= .01:
+        # No flood water: nothing to show on the map, so a resident's photo of a dry street is not kept at all.
+        return observation
     overlay = np.zeros((img.height, img.width, 4), dtype=np.uint8)
     overlay[water] = (0, 100, 255, 128)
     png = io.BytesIO()
