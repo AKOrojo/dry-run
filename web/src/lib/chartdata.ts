@@ -59,3 +59,6 @@ export function coversText(range: string, text: string): boolean {
   }
   return false;
 }
+
+/** The saved image's title line: "Flooded area (km²)", or just the title for a chart without a unit. */
+export const chartHeading = (title: string, unit?: string) => (unit?.trim() ? `${title} (${unit})` : title);

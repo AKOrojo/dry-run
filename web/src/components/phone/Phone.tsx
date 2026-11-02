@@ -7,6 +7,8 @@ import { ChartBar, ChatTeardropText, CloudRain, MapPin, MapTrifold, Pause, Play 
 import type { Icon } from "@phosphor-icons/react";
 import type { RunManifest } from "../../lib/api";
 import { clock, useClock } from "../../lib/clock";
+import { scrubKey } from "../../lib/scrub";
+import { sheetOpened } from "../../lib/sheet";
 import { fmtT } from "../ds";
 import { FIG, raisedButton } from "../rev5";
 import { Button } from "../controls/Button";
@@ -109,6 +111,7 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
     if (e.key === "ArrowUp") { e.preventDefault(); onSnap("full"); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (snap === "full" && !fullOnly) onSnap("half"); else onClose(); }
   };
+  useEffect(() => (hidden ? undefined : sheetOpened()), [hidden]);
   useEffect(() => {
     if (hidden) return;
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) onClose(); };
@@ -153,12 +156,9 @@ export function MiniPlayer({ run, inline = false }: { run: RunManifest; /** Insi
     const r = track.current!.getBoundingClientRect();
     clock.set({ t_s: Math.min(1, Math.max(0, (x - r.left) / r.width)) * durS, playing: false });
   };
-  const step = Math.max(60, durS / 36);
   const onKey = (e: ReactKeyboardEvent) => {
-    const k = { ArrowRight: step, ArrowUp: step, ArrowLeft: -step, ArrowDown: -step } as Record<string, number>;
-    if (e.key in k) { e.preventDefault(); clock.set({ t_s: t_s + k[e.key], playing: false }); }
-    else if (e.key === "Home") { e.preventDefault(); clock.set({ t_s: 0, playing: false }); }
-    else if (e.key === "End") { e.preventDefault(); clock.set({ t_s: durS, playing: false }); }
+    const to = scrubKey(e.key, t_s, durS);
+    if (to !== null) { e.preventDefault(); clock.set({ t_s: to, playing: false }); }
   };
   const shell: CSSProperties = inline
     ? { display: "flex", alignItems: "center", gap: 12, height: PLAYER_H, padding: "0 14px" }

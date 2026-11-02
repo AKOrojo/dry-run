@@ -6,6 +6,10 @@ import { noteLockout } from "./lockout";
 import type { LockScope } from "./lockout";
 import type { DrainageDefault } from "../contracts/gen/AOIManifest";
 import type { Drainage } from "../contracts/gen/ScenarioSpec";
+import type { RouteRequest } from "../contracts/gen/RouteRequest";
+import type { RouteResult } from "../contracts/gen/RouteResult";
+import type { Observation } from "../contracts/gen/Observation";
+import type { RenderResult } from "../contracts/gen/RenderResult";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -190,6 +194,9 @@ export const getPresets = (aoiId: string) =>
 export const getRainField = (aoiId: string, storm: Storm, signal?: AbortSignal) =>
   fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/rain_field`, { method: "POST", headers: JSONH(), body: JSON.stringify({ storm }), signal }).then(j<RainField>);
 export const getRun = (id: string) => fetch(`${API}/api/runs/${encodeURIComponent(id)}`).then(j<RunManifest>);
+/** POST /api/route (Safe route): the dry path from `origin` at `t_s`; destination null = the nearest shelter. */
+export const postRoute = (req: RouteRequest, signal?: AbortSignal) =>
+  fetch(`${API}/api/route`, { method: "POST", headers: JSONH(), body: JSON.stringify(req), signal }).then(j<RouteResult>);
 
 /** URL of a run file (frame PNG etc). runsBase comes from /api/config ("/runs" locally, GCS URL in prod). */
 export const runFileUrl = (runsBase: string, runId: string, rel: string) => `${runsBase.replace(/\/$/, "")}/${runId}/${rel}`;
@@ -260,6 +267,20 @@ async function optional<T>(url: string): Promise<T | null> {
 export const getRunEvents = (runId: string) => optional<RunEvents>(`${API}/api/runs/${encodeURIComponent(runId)}/derived/events.json`);
 export const getBoundary = (aoiId: string) => optional<BoundaryCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/boundary.geojson`);
 export const getInflows = (aoiId: string) => optional<InflowCollection>(`${API}/api/aoi/${encodeURIComponent(aoiId)}/layer/inflows`);
+
+/** Uploaded observations in an area, newest first; sim_depth_m is the model at the observation for run_id when one is given. */
+export const getObservations = (aoiId: string, runId?: string, signal?: AbortSignal) =>
+  fetch(`${API}/api/aoi/${encodeURIComponent(aoiId)}/observations${runId ? `?run_id=${encodeURIComponent(runId)}` : ""}`, { signal })
+    .then(j<{ aoi_id: string; observations: Observation[] }>).then((b) => b.observations);
+
+/** POST /api/observe: a photo of the water, multipart (file, lon, lat, t_s, run_id, source). Returns the saved observation; the judge key goes in the header as in askAgent. */
+export const postObservation = (form: FormData, signal?: AbortSignal) =>
+  fetch(`${API}/api/observe`, { method: "POST", headers: { ...team(), ...judge() }, body: form, signal }).then(j<Observation>);
+
+/** Street picture pair (board 12): a cached pair is free; a new one needs the judge key (Muse Image). */
+export const postRender = (form: FormData, signal?: AbortSignal) =>
+  fetch(`${API}/api/render`, { method: "POST", headers: { ...team(), ...judge() }, body: form, signal }).then(j<RenderResult>);
+export const getRender = (id: string) => fetch(`${API}/api/render/${encodeURIComponent(id)}`).then(j<RenderResult>);
 
 /** Callers debounce hover by this much before asking for a series. */
 export const SERIES_DEBOUNCE_MS = 200;

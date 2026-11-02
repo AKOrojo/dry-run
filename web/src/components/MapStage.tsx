@@ -4,19 +4,21 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import * as Cesium from "cesium";
-import { ArrowsOut, ArrowsOutCardinal, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
+import { ArrowsOut, ArrowsOutCardinal, Camera, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
 import { useShort, useTouch } from "../lib/breakpoint";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
 import { PhotorealChip } from "./PhotorealChip";
-import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
+import { API, getBuildingDepths, getPointInfo, getPointSeries, postRoute, SERIES_DEBOUNCE_MS } from "../lib/api";
 import type { AOIManifest, PointInfo, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
 import { setFocus, useFocus } from "../lib/focus";
 import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
-import { setInspect, setPinnedSeries } from "../lib/inspect";
+import { onUnpinRequest, setInspect, setPinnedSeries, setPinnedSpot } from "../lib/inspect";
+import { latestOnly } from "../lib/latest";
+import { useSheetOpen } from "../lib/sheet";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
@@ -27,13 +29,18 @@ import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
 import type { FlyHud, FlySpeed } from "./camera";
 import { clock } from "../lib/clock";
+import { firstDryAfter, fmtEta, fmtKm, nearestFrame, routeError, samplePath, usualCut, wetRuns, safeRoute, setSafeRoute, startSafeRoute, useSafeRoute } from "../lib/saferoute";
+import type { Spot } from "../lib/saferoute";
+import type { RouteResult } from "../contracts/gen/RouteResult";
 import { rain as rainStore, setRain, useRain } from "../lib/rain";
 import { RainMap } from "./RainMap";
 import { lazyNamed } from "../lib/lazy";
+import { obsUi, startAddObservation, useObservations } from "../lib/observations";
 const FlowHazardMap = lazyNamed(() => import("./FlowHazard"), "FlowHazardMap");
 const FlowLegend = lazyNamed(() => import("./FlowHazard"), "FlowLegend");
 const DrainsLegend = lazyNamed(() => import("./Drainage"), "DrainsLegend");
 const DrainsMap = lazyNamed(() => import("./Drainage"), "DrainsMap");
+const ObservationPins = lazyNamed(() => import("./Observations"), "ObservationPins");
 import { flowStore } from "../lib/flowhazard";
 import { Anchored } from "./Anchored";
 import { CloudsRain } from "./CloudsRain";
@@ -52,6 +59,7 @@ import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 import { Button } from "./controls/Button";
 import { labelWidth, thinTicks } from "../lib/ticks";
+import { PlaceLabel } from "./PlaceLabel";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -77,6 +85,12 @@ export type MapStageProps = {
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
 const LONG_PRESS_MS = 550;
+const PIN_TAP_PX = 24;  // a tap this close to the pinned point is a tap on the pin (a fingertip, WCAG target size)
+const PIN_CLICK_PX = 12;  // the same for a mouse: the dot and a little around it
+const SAFE_ROUTE_DEBOUNCE_MS = 250;
+/** Points sampled along the usual route (every ~30 m) to mark where it is under water: the road cuts are not in the API. */
+const SAFE_BLOCK_STEP_M = 30, SAFE_BLOCK_MIN = 12, SAFE_BLOCK_MAX = 40;
+const SAFE_LIFT_M = 3;
 const MIN_PITCH = Cesium.Math.toRadians(-90);
 const WET_M = 0.15;
 const IMPASSABLE_M = 0.3;
@@ -360,7 +374,7 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
 }
 
 function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = false }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties;
-  /** A finger: no Esc to clear, a tap elsewhere moves the pin. */ touch?: boolean;
+  /** A finger: no Esc; a tap on the point clears the pin, a tap elsewhere moves it. */ touch?: boolean;
   /** Beside its point on the map: declutter() keeps it clear of the bottom controls and the edges. */ clamp?: boolean }) {
   const ser = r.ser;
   const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
@@ -403,7 +417,7 @@ function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = 
         </div>
       )}
       <div style={{ padding: "5px 10px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11 }}>
-        {pinned ? `Pinned · ${touch ? "tap elsewhere to move it" : "Esc to clear"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
+        {pinned ? `Pinned · ${touch ? "tap it to clear, elsewhere to move" : "click it or Esc to clear, elsewhere to move"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
       </div>
     </div>
   );
@@ -445,23 +459,6 @@ function WaypointPin({ n, lon, lat, info, selected, onSelect, onRemove }: {
       <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden="true" style={{ marginTop: -1 }}><path d="M1 0h10L6 7z" fill="var(--surface-raised)" stroke="var(--danfo)" /></svg>
       <span style={{ width: 8, height: 8, marginTop: 1, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
     </div>
-  );
-}
-
-function PlaceLabel({ name, sub, selected, onClick }: { name: string; sub?: string[]; selected: boolean; onClick: () => void }) {
-  return (
-    // Only the chip takes clicks: the dot and the gap stay click-through, so a building under them can be picked.
-    <Button variant="text" type="button" className="dr-place-label" onClick={onClick} aria-pressed={selected}
-      style={{ position: "absolute", left: 0, top: 0, transform: "translate(-4px, -50%)", display: "flex", alignItems: "center", gap: 8, padding: 0, background: "transparent",
-        border: 0, font: "inherit", color: "var(--ink)", textAlign: "left", cursor: "pointer", pointerEvents: "none" }}>
-      <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--ink)", boxShadow: "0 0 0 2px var(--ground)" }} />
-      <span style={{ display: "flex", flexDirection: "column", padding: "4px 9px 5px", background: "color-mix(in srgb, var(--ground) 84%, transparent)", backdropFilter: "blur(6px)",
-        border: selected ? "1px solid var(--danfo)" : "1px solid color-mix(in srgb, var(--ink) 10%, transparent)", borderRadius: "var(--radius-md)",
-        boxShadow: "var(--shadow-float)", whiteSpace: "nowrap", pointerEvents: "auto" }} data-declutter={selected ? 5 : 1} data-place="">
-        <span style={{ fontSize: 12, lineHeight: "16px", fontWeight: 600 }}>{name}</span>
-        {sub?.map((l) => <span key={l} style={{ color: "var(--ink-muted)", fontSize: 11, lineHeight: "14px", ...FIG }}>{l}</span>)}
-      </span>
-    </Button>
   );
 }
 
@@ -625,10 +622,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
   const touch = useTouch();
+  const sheetOpen = useSheetOpen();
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
   const lay = useLayers();
+  const obsList = useObservations(aoi?.aoi_id, run?.run_id);
   const wps = useWaypoints();
   const rs = useRain();
   const simNow = useSim();
@@ -653,9 +652,12 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [mode, setMode] = useState<CamMode>("orbit");
   const modeRef = useRef<CamMode>("orbit");
   modeRef.current = mode;
+  // Bumped by "Restart map": a new Globe and viewer after the map stopped drawing.
+  const [mapGen, setMapGen] = useState(0);
   const [freeSpeed, setFreeSpeed] = useState(1);
   const route = useFlyRoute();
   const evac = useEvacLine();
+  const sr = useSafeRoute();
   const [drawing, setDrawing] = useState(false);
   const [drawPts, setDrawPts] = useState<LonLat[]>([]);
   const drawRef = useRef({ drawing: false, pts: [] as LonLat[] });
@@ -827,6 +829,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     const canvas = viewer.canvas, s = viewer.scene;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let seq = 0;
+    const pinTap = latestOnly();  // the touch pin's own guard: a tap also fires mouseleave, which bumps seq
     let down: { x: number; y: number } | null = null;
     const local = (e: MouseEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     // The menu opens at a viewport point (its position is fixed to the window).
@@ -882,21 +885,34 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       const moved = Math.hypot(x - down.x, y - down.y) > 4;
       down = null;
       if (moved) return;
+      if (safeRoute.get().picking) {
+        const p = pick(x, y);
+        if (p && inAoi(p.lon, p.lat)) startSafeRoute([p.lon, p.lat]);
+        return;
+      }
       if (viewRef.current === "Plan" && onBuildingRef.current) {
         const hit = s.pick(new Cesium.Cartesian2(x, y));
         if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
       }
-      // A finger has no hover: a tap reads the depth at that point and pins it (another tap moves the pin).
-      if ((e as PointerEvent).pointerType === "touch") {
+      // A click or tap on the pin clears it; anywhere else moves it. A finger has no hover, so a tap reads the depth at
+      // that point; so does a click while pinned (the hover is off then).
+      const finger = (e as PointerEvent).pointerType === "touch";
+      const cur = pinnedRef.current;
+      if (cur) {
+        const h = s.globe.getHeight(Cesium.Cartographic.fromDegrees(cur.lon, cur.lat)) ?? 0;
+        const at = s.cartesianToCanvasCoordinates(Cesium.Cartesian3.fromDegrees(cur.lon, cur.lat, h));
+        if (at && Math.hypot(at.x - x, at.y - y) <= (finger ? PIN_TAP_PX : PIN_CLICK_PX)) { pinTap(); seq++; setPinned(null); return; }
+      }
+      if (finger || cur) {
         const p = runId ? pick(x, y) : null;
-        const mine = ++seq;
+        const current = pinTap();
+        seq++;
         setHover(null);
         if (!p || !inAoi(p.lon, p.lat) || !runId) { setPinned(null); return; }
         setPinned({ depth: NaN, max: NaN, loading: true, ...p });
-        void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (mine === seq) setPinned(r ? { ...r, ...p } : null); }, () => { if (mine === seq) setPinned(null); });
+        void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (current()) setPinned(r ? { ...r, ...p } : null); }, () => { if (current()) setPinned(null); });
         return;
       }
-      if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
       if (h && !h.loading) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
     };
@@ -926,9 +942,22 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       if (p) setMenu({ ...toVp(x, y), ...p });
     };
     if (!canvas.hasAttribute("tabindex")) canvas.tabIndex = 0;
+    // A long press is ours: no iOS callout or text selection over the menu (onContext already stops Android's menu).
+    canvas.style.setProperty("-webkit-touch-callout", "none");
+    canvas.style.userSelect = "none";
     canvas.addEventListener("keydown", onMenuKey);
     canvas.addEventListener("pointermove", onTouchMove);
+    // The Layers row asks for a photo at the map centre.
+    let lastReq = obsUi.get().centreRequest;
+    const unObs = obsUi.subscribe(() => {
+      const req = obsUi.get().centreRequest;
+      if (req === lastReq) return;
+      lastReq = req;
+      const p = pick(canvas.clientWidth / 2, canvas.clientHeight / 2);
+      if (p) startAddObservation(p.lon, p.lat);
+    });
     return () => {
+      unObs();
       clearTimeout(timer);
       clearTimeout(press);
       canvas.removeEventListener("pointermove", onTouchMove);
@@ -1025,6 +1054,11 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // The pinned point's depth series feeds the dock chart.
   useEffect(() => { setPinnedSeries(pinned?.ser?.depth_m ?? null); }, [pinned?.ser]);
   useEffect(() => () => setPinnedSeries(null), []);
+  // The spot is known as soon as a tap lands: publishing it before the reading arrives keeps the street card from
+  // blinking back to "Tap a street" when a tap moves the pin.
+  useEffect(() => { setPinnedSpot(pinned ? { lon: pinned.lon, lat: pinned.lat } : null); }, [pinned?.lon, pinned?.lat]);
+  useEffect(() => () => setPinnedSpot(null), []);
+  useEffect(() => onUnpinRequest(() => setPinned(null)), []);
 
   // Hover tooltips stop while flying (free camera, playback) or drawing.
   useEffect(() => { if (mode === "free" || drawing || (mode === "fly" && fly.hud.playing)) setHover(null); }, [mode, drawing, fly.hud.playing]);
@@ -1097,6 +1131,101 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     }
     return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
   }, [viewer, drawing, drawPts, route]);
+
+  // Safe route (board 12): the usual route at the dry start of the run; the route for the frame nearest the playhead, with
+  // the first dry frame after it when none is dry; then the usual-route points that are under water at that frame.
+  const srOrigin = sr.origin, srRoute = sr.route, srUsual = sr.usual, srBlocked = sr.blocked;
+  const srCut = usualCut(srRoute, srUsual);
+  const srTimes = useMemo(() => (frames ?? []).map((f) => f.t_s), [frames]);
+  const srTimesKey = srTimes.join(",");
+  const srFrame = nearestFrame(srTimes, tS);
+  const srCache = useRef(new Map<string, Promise<RouteResult>>());
+  const srDepths = useRef(new Map<string, Promise<number | null>>());
+  const srPassM = typeof run?.stats?.passability_threshold_m === "number" ? run.stats.passability_threshold_m : IMPASSABLE_M;
+  useEffect(() => {
+    if (!srOrigin || !runId || !doneRun) return;
+    const ctl = new AbortController();
+    setSafeRoute({ usual: null });
+    postRoute({ run_id: runId, t_s: 0, origin: srOrigin, destination: null }, ctl.signal)
+      .then((usual) => { if (!ctl.signal.aborted) setSafeRoute({ usual }); }, () => { /* the playhead route reports errors */ });
+    return () => ctl.abort();
+  }, [srOrigin, runId, doneRun]);
+  useEffect(() => {
+    if (!srOrigin || !runId || !doneRun || srFrame == null) return;
+    const ctl = new AbortController(), t = srFrame;
+    // One request per run, start and frame: playback and scrubbing come back to the same frames.
+    const at = (f: number) => {
+      const k = `${runId}|${srOrigin.join(",")}|${f}`;
+      let p = srCache.current.get(k);
+      if (!p) {
+        p = postRoute({ run_id: runId, t_s: f, origin: srOrigin, destination: null });
+        p.catch(() => srCache.current.delete(k));
+        srCache.current.set(k, p);
+      }
+      return p.then((r) => { if (ctl.signal.aborted) throw new DOMException("aborted", "AbortError"); return r; });
+    };
+    const timer = setTimeout(() => {
+      setSafeRoute({ loading: true, error: null });
+      at(t)
+        .then(async (route) => {
+          const clearT = route.reachable ? null : await firstDryAfter(srTimes, t, (f) => at(f).then((x) => x.reachable), ctl.signal);
+          if (!ctl.signal.aborted) setSafeRoute({ t, route, clearT, loading: false });
+        })
+        .catch((e: unknown) => {
+          if (!ctl.signal.aborted) setSafeRoute({ t, route: null, clearT: null, loading: false, error: routeError(e) });
+        });
+    }, SAFE_ROUTE_DEBOUNCE_MS);
+    return () => { clearTimeout(timer); ctl.abort(); };
+  }, [srOrigin, runId, doneRun, srFrame, srTimesKey]);
+  useEffect(() => {
+    const path = srUsual?.path;
+    if (!runId || !doneRun || !srRoute || !path?.length || !srRoute.edges_removed) return;
+    const ctl = new AbortController(), t = srRoute.t_s;
+    const samples = samplePath(path, SAFE_BLOCK_STEP_M, SAFE_BLOCK_MIN, SAFE_BLOCK_MAX);
+    void Promise.all(samples.map(async ([lon, lat]) => {
+      const k = `${runId}|${t}|${lon.toFixed(6)},${lat.toFixed(6)}`;
+      let p = srDepths.current.get(k);
+      if (!p) { p = fetchDepth(runId, lon, lat, t).then((d) => (d ? d.depth : null)); srDepths.current.set(k, p); }
+      const d = await p;
+      return d != null && d >= srPassM;
+    })).then((wet) => { if (!ctl.signal.aborted) setSafeRoute({ blocked: wetRuns(samples, wet) }); });
+    return () => ctl.abort();
+  }, [srRoute, srUsual, runId, doneRun, srPassM]);
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !srOrigin) return;
+    const verified = cssColor("--verified"), hazard = cssColor("--hazard"), ground = cssColor("--ground"), ink = cssColor("--ink");
+    const label = { showBackground: true, backgroundColor: ground.withAlpha(0.86), fillColor: ink, font: "12px 'IBM Plex Sans', sans-serif",
+      pixelOffset: new Cesium.Cartesian2(0, -12), verticalOrigin: Cesium.VerticalOrigin.BOTTOM, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY };
+    // Lifted off the ground and seen through what covers it, so the drain lines and buildings don't hide the routes.
+    const globe = viewer.scene.globe;
+    const lifted = (path: Spot[]) => path.map(([lon, lat]) => Cesium.Cartesian3.fromDegrees(lon, lat, (globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0) + SAFE_LIFT_M));
+    const made: Cesium.Entity[] = [];
+    made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(srOrigin[0], srOrigin[1]),
+      point: { pixelSize: 16, color: ink, outlineColor: ground, outlineWidth: 3, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { ...label, text: "You picked here" } }));
+    if (srCut && srUsual?.path && srUsual.path.length >= 2) {
+      made.push(viewer.entities.add({ polyline: { positions: lifted(srUsual.path), width: 3, arcType: Cesium.ArcType.NONE,
+        material: new Cesium.PolylineDashMaterialProperty({ color: hazard, dashLength: 12 }),
+        depthFailMaterial: new Cesium.PolylineDashMaterialProperty({ color: hazard.withAlpha(0.45), dashLength: 12 }) } }));
+    }
+    if (srRoute?.reachable && srRoute.path && srRoute.path.length >= 2) {
+      made.push(viewer.entities.add({ polyline: { positions: lifted(srRoute.path), width: 5, arcType: Cesium.ArcType.NONE, material: verified,
+        depthFailMaterial: new Cesium.ColorMaterialProperty(verified.withAlpha(0.45)) } }));
+      const end = srRoute.path[srRoute.path.length - 1];
+      const details = ["shelter", ...(srRoute.length_km != null ? [fmtKm(srRoute.length_km)] : []), ...(srRoute.eta_min != null ? [fmtEta(srRoute.eta_min)] : [])];
+      made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(end[0], end[1]),
+        label: { ...label, text: [srRoute.destination_name ?? "Nearest shelter", details.join(" · ")].join("\n") } }));
+    }
+    const mark = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8" fill="${hazard.toCssHexString()}" stroke="${ground.toCssHexString()}" stroke-width="2"/><path d="M6 6l6 6M12 6l-6 6" stroke="${ground.toCssHexString()}" stroke-width="2" stroke-linecap="round"/></svg>`;
+    const image = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mark)}`;
+    for (const [lon, lat] of srCut ? srBlocked : []) {
+      made.push(viewer.entities.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat),
+        billboard: { image, width: 18, height: 18, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY } }));
+    }
+    return () => { if (!viewer.isDestroyed()) made.forEach((e) => viewer.entities.remove(e)); };
+  }, [viewer, srOrigin, srRoute, srUsual, srBlocked, srCut]);
 
   const dropWaypoint = useCallback((lon: number, lat: number) => {
     if (!inAoi(lon, lat)) return;
@@ -1321,9 +1450,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
   return (
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
-      {aoi && <Globe aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
+      {aoi && <Globe key={mapGen} aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
-        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} />}
+        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} onRestart={() => setMapGen((g) => g + 1)} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {underlay}
         {lay.places.on && places.map((p) => {
@@ -1361,17 +1490,21 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </Anchored>
         ))}
 
-        {pinned && !phone && (
-          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
-            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} clamp />
+        {/* The pinned point gets a dot: a click or tap on it clears the pin. */}
+        {pinned && (
+          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
+            <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)", pointerEvents: "none" }} />
           </Anchored>
         )}
-        {/* Phone: a 236 px card beside the point would run off a 390 px screen. The point gets a dot; the reading sits
-            bottom-left with a close button. */}
-        {pinned && phone && <>
-          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
-            <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
+        {/* The reading cards have no controls: clicks pass through to the map, so a click beside the dot moves the pin. */}
+        {pinned && !phone && (
+          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "none" }} clamp />
           </Anchored>
+        )}
+        {/* Phone: a 236 px card beside the point would run off a 390 px screen. The reading sits bottom-left with a close
+            button, hidden while a sheet covers it (Inspect shows the same reading; a tap on the dot still clears it). */}
+        {pinned && phone && !sheetOpen && <>
           <div style={{ position: "absolute", ...(short ? { right: 64, bottom: aboveCredits } : { left: 12, bottom: aboveChip + 30 }), display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
             <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} />
             <Button variant="icon" type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
@@ -1379,13 +1512,19 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         </>}
         {!pinned && hover && (
-          <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10 }}>
+          <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10, pointerEvents: "none" }}>
             <Tooltip r={hover} tS={tS} cellM={cellM} pinned={false} outside={outsideDomain(run, hover.lon, hover.lat, aoi?.grid.bounds_wgs84)} />
           </div>
         )}
 
         <Menu label="Map" at={menu ? { x: menu.x, y: menu.y } : null} onClose={() => setMenu(null)} returnFocus={() => (viewer && !viewer.isDestroyed() ? viewer.canvas : null)}
-          items={menu ? [{ kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) }] : []} />
+          items={menu ? [
+            { kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) },
+            { kind: "item", label: "Safe route from here", disabled: !doneRun || !inAoi(menu.lon, menu.lat),
+              reason: !run ? "Simulate the area first to see a dry route." : !doneRun ? "Wait for the simulation to finish." : !inAoi(menu.lon, menu.lat) ? "Pick a spot inside the area." : undefined,
+              onSelect: () => startSafeRoute([menu.lon, menu.lat]) },
+            { kind: "item", label: "Add a photo of the water here", icon: <Camera size={16} />, onSelect: () => startAddObservation(menu.lon, menu.lat) },
+          ] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {/* Top-left chip stack: the run's badge, then the "3D city unavailable" chip when Google's tiles failed. */}
@@ -1471,6 +1610,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         <div ref={legendBox} data-declutter-block className={phone ? "dr-legends-phone" : undefined} style={phone
           ? { minHeight: 0, overflowY: "auto", display: legendEmpty ? "none" : "flex", flexDirection: "column", alignItems: "stretch", gap: 8, padding: 10 }
           : { position: "absolute", left: 16, bottom: viewState.coords ? Math.max(layout === "tablet" ? 0 : 84, aboveChip + 8) : Math.max(44, aboveCredits + 4), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8, pointerEvents: "none" }}>
+          {srOrigin && srRoute && (
+            <div role="group" aria-label="Safe route legend" style={{ display: "flex", flexDirection: "column", gap: 5,
+              padding: "8px 10px", background: "color-mix(in srgb, var(--ground) 86%, transparent)", backdropFilter: "blur(6px)", border: "1px solid var(--hairline)",
+              borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12, pointerEvents: "auto" }}>
+              {srRoute.reachable && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, height: 4, borderRadius: 2, background: "var(--verified)" }} />Dry route at {fmtT(srRoute.t_s)}</span>}
+              {srCut && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 22, borderTop: "3px dashed var(--hazard)" }} />Usual route, now cut</span>}
+              {srCut && srBlocked.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--hazard)" }} />Road impassable (over {srPassM} m)</span>}
+            </div>
+          )}
           {legend && arrivalOn && <ArrivalLegendBox legend={legend} />}
         {rs.visible && rs.preview && (
           <div className="ft-legend" style={{ pointerEvents: "none", boxShadow: "var(--shadow-float)" }}>
@@ -1486,6 +1634,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         </div>
         </div>
         <DrainsMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} runsBase={runsBase} hidden={!!closeUp.active} />
+        <ObservationPins viewer={viewer} scene={scene} anchors={anchors} aoiId={aoi?.aoi_id} list={obsList} hidden={!!closeUp.active} />
         {(lay.profile.on || (doneRun && (lay.flow.on || lay.hazard.on || lay.loads.on))) && <FlowHazardMap viewer={viewer} scene={scene} anchors={anchors} aoi={aoi} run={run} tS={tS} basemap={lay.basemap} frames={frames} buildingsUrl={buildingsUrl} onBuilding={onBuilding} />}
 
         {place && (

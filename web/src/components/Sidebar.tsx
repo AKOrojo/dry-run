@@ -1,7 +1,7 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
+import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Path, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
@@ -17,7 +17,8 @@ import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints"
 import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
-import { useClock } from "../lib/clock";
+import { clock as playhead, useClock } from "../lib/clock";
+import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, shelterName, usualCut, useSafeRoute } from "../lib/saferoute";
 import { useTouch } from "../lib/breakpoint";
 import { Card, CardLock, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
@@ -30,6 +31,7 @@ import { Button } from "./ds";
 import { RainAreaCard, RainPreviewCard } from "./RainCards";
 const DrainageCard = lazyNamed(() => import("./Drainage"), "DrainageCard");
 import { easeLeft } from "../lib/simbar";
+import { countNote, noWater, requestAddAtCentre, useObservations, useObsUi } from "../lib/observations";
 import { useDrainage } from "../lib/drainage";
 import { useRain } from "../lib/rain";
 import { setCloseUp, useCloseUp } from "../lib/patch3d";
@@ -93,7 +95,7 @@ const ROWS: { key: LayerKey; name: string; thumb: ReactNode; slider?: boolean; n
   { key: "places", name: "Places", thumb: PLACES_T },
   { key: "arrival", name: "Time to flood", thumb: ARRIVAL_T, note: "Arrival map" },
   { key: "route", name: "Evacuation route", thumb: ROUTE_T },
-  { key: "photos", name: "Photo observations", thumb: PHOTO_T, note: "None yet" },
+  { key: "photos", name: "Observations", thumb: PHOTO_T, note: "None yet" },
   { key: "terrain", name: "Terrain (3D)", thumb: imgThumb("terrain") },
   { key: "imagery", name: "Aerial imagery", thumb: imgThumb("aerial"), slider: true },
   { key: "rain", name: "Rain area", thumb: RAIN_T, slider: true },
@@ -170,8 +172,9 @@ function PhotorealDownRow({ down }: { down: PhotorealDown }) {
   );
 }
 
-function LayersCard() {
+function LayersCard({ aoiId, runId }: { aoiId?: string; runId?: string }) {
   const lay = useLayers();
+  const obs = useObservations(aoiId, runId);
   const photorealOff = !!lay.photorealDown;  // back only through Try 3D again
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
@@ -185,7 +188,7 @@ function LayersCard() {
         const { on, opacity } = lay[r.key];
         const pct = Math.round(opacity * 100);
         return (
-          <Tip key={r.key} text={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined}><div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
+          <Fragment key={r.key}><Tip text={r.key === "boundary" ? boundary?.features[0]?.properties.note : undefined}><div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, minHeight: 38, padding: "0 14px", color: on ? undefined : "var(--ink-muted)" }}>
             <Switch fill on={on} onChange={(v) => setLayer(r.key, { on: v })} label={<><span aria-hidden="true" style={{ display: "flex", flex: "none", opacity: on ? 1 : 0.45 }}>{r.thumb}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span></>} />
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -199,9 +202,11 @@ function LayersCard() {
                 <CtlButton variant="raised" type="button" onClick={(e) => { e.preventDefault(); setCloseUp({ active: patches[0].patch_id }); }}
                   style={{ height: 24, padding: "0 9px", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)", background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", font: "inherit", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
                   Open</CtlButton>
-              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.note ?? ""}</span>}
+              ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.key === "photos" ? (obs ? countNote(obs.filter((o) => !noWater(o)).length) : "") : r.note ?? ""}</span>}
             </span>
           </div></Tip>
+          {r.key === "photos" && <div style={{ padding: "0 14px 6px" }}><CtlButton variant="text" type="button" onClick={() => requestAddAtCentre()} data-obs-add="" style={{ fontSize: 12, height: 26, color: "var(--ink)" }}>+ Add a photo of the water</CtlButton></div>}
+          </Fragment>
         );
       })}
       <div data-basemap-row="" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
@@ -279,6 +284,53 @@ function Metric({ Ic, label, value, sub, color = "var(--ink)" }: { Ic: Icon; lab
   );
 }
 const m2 = (v: number | null) => (v == null ? "n/a" : `${v.toFixed(2)} m`);
+
+/** Safe route (board 12): the dry route to the nearest shelter for the frame the playhead is on. Shown once a spot is picked. */
+function SafeRouteCard({ passM }: { passM: number }) {
+  const s = useSafeRoute();
+  if (!s.origin) return null;
+  const r = s.route, dry = !!r?.reachable;
+  const muted: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" };
+  const row = (k: string, v: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ color: "var(--ink-muted)" }}>{k}</span>
+      <span style={{ fontWeight: 600, textAlign: "right", ...FIG }}>{v}</span>
+    </div>
+  );
+  const btn: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 8, height: 32, padding: "0 12px", fontWeight: 600 };
+  return (
+    <Card title="Safe route">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px" }}>
+        {r && dry && <>
+          {row("To", shelterName(r.destination_name))}
+          {row("Distance", r.length_km != null ? fmtKm(r.length_km) : "n/a")}
+          {row("Time", r.eta_min != null ? `${fmtEta(r.eta_min)} on foot` : "n/a")}
+          {usualCut(r, s.usual)
+            ? row(`Flooded ${s.blocked.length === 1 ? "stretch" : "stretches"} avoided`, `${s.blocked.length} on the usual route at ${fmtT(s.t ?? 0)}`)
+            : <p style={{ margin: 0, fontWeight: 600 }}>Usual route is dry at {fmtT(s.t ?? 0)}</p>}
+        </>}
+        {r && !dry && <>
+          <div style={{ display: "flex", gap: 8, padding: "8px 10px", borderLeft: "3px solid var(--hazard)", background: "color-mix(in srgb, var(--hazard) 10%, var(--surface))" }}>
+            <span style={{ fontSize: 13 }}><b>No dry route at {fmtT(s.t ?? 0)}.</b> Every road out of this spot is over {passM} m deep.{s.clearT != null && ` The first one clears at ${fmtT(s.clearT)}.`}</span>
+          </div>
+          {s.clearT != null && <CtlButton variant="raised" type="button" onClick={() => playhead.set({ t_s: s.clearT ?? 0 })} style={{ ...btn, alignSelf: "flex-start" }}>Jump to {fmtT(s.clearT)}</CtlButton>}
+        </>}
+        {!r && !s.error && <p style={muted}>Finding the route…</p>}
+        {s.error && <p style={{ ...muted, color: "var(--hazard)" }}>{s.error}</p>}
+        <p style={muted}>The route follows the playhead: move the timeline and it is recomputed for that moment.</p>
+        {s.picking && <p style={muted}>Click the map to set the start.</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <CtlButton variant="raised" type="button" aria-pressed={s.picking} onClick={() => setSafeRoute({ picking: !s.picking })} style={btn}>
+            <Path size={14} weight="bold" />Pick another start
+          </CtlButton>
+          <CtlButton variant="raised" type="button" onClick={clearSafeRoute} style={btn}>
+            <X size={14} weight="bold" />Clear route
+          </CtlButton>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   const touch = useTouch();
@@ -618,6 +670,24 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     raf = requestAnimationFrame(find);
     return () => cancelAnimationFrame(raf);
   }, [basemapFocus]);
+  const safeStart = useSafeRoute().origin;
+  useEffect(() => { if (safeStart) setTab("Inspect"); }, [safeStart]);
+  const obsSpot = useObsUi().spot;  // adding a photo of the water opens its card in Inspect
+  useEffect(() => { if (obsSpot) setTab("Inspect"); }, [obsSpot?.seq]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Closing an add card started from the Layers row: back to Layers, focus on that row's button (it mounts a few frames later).
+  const layersBack = useObsUi().layersBack;
+  useEffect(() => {
+    if (!layersBack) return;
+    setTab("Layers");
+    let tries = 0, raf = 0;
+    const find = () => {
+      const b = document.querySelector<HTMLElement>("[data-obs-add]");
+      if (b) { b.focus(); return; }
+      if (++tries < 60) raf = requestAnimationFrame(find);
+    };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [layersBack]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
@@ -682,14 +752,14 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
       <div ref={scroller} style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
-        {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
+        {tab === "Layers" && <><LayersCard aoiId={aoi?.aoi_id} runId={run?.run_id} /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
           <CtlButton variant="text" type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
             color: "var(--ink-muted)", font: "inherit", fontSize: 13, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>Sources and credits</CtlButton>
         )}
         {tab === "Timeline" && timeline}
         {tab === "Inspect" && inspect}
-        {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
+        {tab === "Inspect" && !inspect && <><SafeRouteCard passM={passM} /><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
             {scenario.linkNote && (

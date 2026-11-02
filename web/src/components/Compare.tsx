@@ -19,9 +19,10 @@ import type { ChartPick } from "./Dock";
 
 export type CompareView = "A" | "B" | "Swipe" | "Side by side" | "Difference";
 
-const what = (m: RunManifest) => (m.scenario.interventions?.length ? m.scenario.interventions.map(describeIv).join(", ") : "Baseline");
+/** "Baseline" or the run's interventions. */
+export const runWhat = (m: RunManifest) => (m.scenario.interventions?.length ? m.scenario.interventions.map(describeIv).join(", ") : "Baseline");
 /** "Baseline" or the interventions, then the storm: what a run is, in words. */
-export const runLabel = (m: RunManifest) => `${what(m)} · ${m.scenario.storm.total_mm} mm / ${m.scenario.storm.duration_h} h`;
+export const runLabel = (m: RunManifest) => `${runWhat(m)} · ${m.scenario.storm.total_mm} mm / ${m.scenario.storm.duration_h} h`;
 
 /** Change of B against A as a signed percentage, e.g. "−82%"; lower is better for every compared stat. */
 export const pctChange = (a: number, b: number) => {
@@ -151,7 +152,7 @@ function RunTag({ l, m, origin, style }: { l: "A" | "B"; m: RunManifest; origin:
   return (
     <div style={{ position: "absolute", zIndex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px", maxWidth: 360, background: "var(--surface-raised)",
       border: `1px solid ${l === "B" ? "var(--danfo)" : "var(--hairline)"}`, borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none", ...style }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Letter l={l} size={18} />{what(m)}</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Letter l={l} size={18} />{runWhat(m)}</span>
       <span style={{ color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}><span style={{ fontFamily: mono, fontSize: 11 }}>{m.run_id}</span> · {origin}</span>
     </div>
   );
@@ -278,6 +279,8 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   leader?: Cesium.Viewer;
 }) {
   const [v, setV] = useState<Cesium.Viewer>();
+  // Bumped by "Restart map" on this side only; the camera sync below follows the new viewer (and a restarted leader).
+  const [mapGen, setMapGen] = useState(0);
   useEffect(() => {
     if (!leader || !v) return;
     v.scene.screenSpaceCameraController.enableInputs = false;  // driven by the left map
@@ -300,7 +303,8 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   }, [leader, v]);
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--ground)" }}>
-      <Globe aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
+      <Globe key={mapGen} aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
+        onRestart={() => setMapGen((g) => g + 1)}
         buildingDepthsUrl={run.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined} />
     </div>
   );

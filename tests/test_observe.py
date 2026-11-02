@@ -132,7 +132,8 @@ def test_observe(monkeypatch, sam_text, photo, wet):
     import re
 
     assert re.fullmatch(r"ob_[0-9a-f]{12}", result.obs_id)
-    assert result.mask_png == f"/api/observations/{result.obs_id}/mask.png"
+    # A dry photo stores no mask, so it points at none (the URL would 404).
+    assert result.mask_png == (f"/api/observations/{result.obs_id}/mask.png" if wet else None)
     assert result.water_fraction == pytest.approx(.078 if wet else 0, abs=.01)
     assert [b["input"][0]["content"][0]["text"] for p, b in calls if p == "/responses"] == list(observe.PROMPTS)
     if wet:
@@ -140,6 +141,10 @@ def test_observe(monkeypatch, sam_text, photo, wet):
     else:
         assert result.est_depth_m is None and result.model_notes == "no flood water detected"
         assert all(path != "/chat/completions" for path, _ in calls)
+        # A photo without flood water writes nothing: no photo, mask or record in storage.
+        assert not any(p.is_file() for p in storage.LOCAL_DATA.rglob("*"))
+        assert not any(p.is_file() for p in storage.LOCAL_RUNS.rglob("*"))
+        return
     prefix = f"observations/{result.obs_id}"
     assert not Image.open(io.BytesIO(storage.read_upload(f"{prefix}/photo.jpg"))).getexif()
     mask = Image.open(io.BytesIO(storage.read_upload(f"{prefix}/mask.png")))
