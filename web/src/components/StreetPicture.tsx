@@ -48,6 +48,8 @@ function useImageAspect(url: string) {
 function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: RenderResult; beforeLabel: string; afterLabel: string; large?: boolean; size?: { w: number; h: number } }) {
   const [split, setSplit] = useState(0.5);
   const aspect = useImageAspect(imageUrl(API, r.before.url));
+  // In the card the picture is at most this tall (full size is for Open large); its width follows the aspect.
+  const cap = useBreakpoint() === "phone" ? "min(50vh, 420px)" : "360px";
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
   const at = (x: number) => { const b = box.current?.getBoundingClientRect(); if (b) setSplit(Math.min(1, Math.max(0, (x - b.left) / b.width))); };
@@ -63,9 +65,9 @@ function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: R
     color: "var(--ink)", fontSize: large ? 12 : 11, lineHeight: "16px", fontWeight: 600, whiteSpace: "nowrap", pointerEvents: "none", ...FIG,
     // Each label keeps to its half, so the two never run into each other; an ellipsis is the last resort.
     maxWidth: "calc(50% - 12px)", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" };
-  return (
+  const swipe = (
     <div ref={box} onPointerDown={onDown} onPointerMove={(e) => { if (drag.current) at(e.clientX); }} onPointerUp={() => { drag.current = false; }} onPointerCancel={() => { drag.current = false; }}
-      style={{ position: "relative", ...(size ? { width: size.w, height: size.h, flex: "none" } : { width: "100%", aspectRatio: String(aspect) }), overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
+      style={{ position: "relative", ...(size ? { width: size.w, height: size.h, flex: "none" } : { width: "100%", maxWidth: `calc(${cap} * ${aspect})`, aspectRatio: String(aspect) }), overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
       <img src={imageUrl(API, r.before.url)} alt={`Before: ${beforeLabel}`} draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
       <img src={imageUrl(API, r.after.url)} alt={`After: ${afterLabel}`} draggable={false}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", clipPath: `inset(0 0 0 ${split * 100}%)` }} />
@@ -80,6 +82,7 @@ function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: R
       </div>
     </div>
   );
+  return size ? swipe : <div style={{ display: "flex", justifyContent: "center", borderRadius: "var(--radius-sm)", background: "var(--ground)" }}>{swipe}</div>;
 }
 
 /** "A · Baseline" from the run, or "A" while the run is loading (a link opened without Compare). */

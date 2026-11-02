@@ -8,6 +8,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { RunManifest } from "../../lib/api";
 import { clock, useClock } from "../../lib/clock";
 import { scrubKey } from "../../lib/scrub";
+import { sheetOpened } from "../../lib/sheet";
 import { fmtT } from "../ds";
 import { FIG, raisedButton } from "../rev5";
 import { Button } from "../controls/Button";
@@ -110,6 +111,7 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
     if (e.key === "ArrowUp") { e.preventDefault(); onSnap("full"); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (snap === "full" && !fullOnly) onSnap("half"); else onClose(); }
   };
+  useEffect(() => (hidden ? undefined : sheetOpened()), [hidden]);
   useEffect(() => {
     if (hidden) return;
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) onClose(); };

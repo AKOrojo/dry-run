@@ -18,6 +18,7 @@ import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { onUnpinRequest, setInspect, setPinnedSeries, setPinnedSpot } from "../lib/inspect";
 import { latestOnly } from "../lib/latest";
+import { useSheetOpen } from "../lib/sheet";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
@@ -85,6 +86,7 @@ export type MapStageProps = {
 const MAX_PITCH = Cesium.Math.toRadians(-12);
 const LONG_PRESS_MS = 550;
 const PIN_TAP_PX = 24;  // a tap this close to the pinned point is a tap on the pin (a fingertip, WCAG target size)
+const PIN_CLICK_PX = 12;  // the same for a mouse: the dot and a little around it
 const SAFE_ROUTE_DEBOUNCE_MS = 250;
 /** Points sampled along the usual route (every ~30 m) to mark where it is under water: the road cuts are not in the API. */
 const SAFE_BLOCK_STEP_M = 30, SAFE_BLOCK_MIN = 12, SAFE_BLOCK_MAX = 40;
@@ -415,7 +417,7 @@ function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = 
         </div>
       )}
       <div style={{ padding: "5px 10px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11 }}>
-        {pinned ? `Pinned · ${touch ? "tap it to clear, elsewhere to move" : "Esc to clear"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
+        {pinned ? `Pinned · ${touch ? "tap it to clear, elsewhere to move" : "click it or Esc to clear, elsewhere to move"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
       </div>
     </div>
   );
@@ -620,6 +622,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
   const touch = useTouch();
+  const sheetOpen = useSheetOpen();
   const stage = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<Cesium.Viewer>();
   const anchors = useRef<Anchors>(new Set());
@@ -869,15 +872,16 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         const hit = s.pick(new Cesium.Cartesian2(x, y));
         if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
       }
-      // A finger has no hover: a tap reads the depth at that point and pins it. A tap on the pin clears it; a tap
-      // anywhere else moves it.
-      if ((e as PointerEvent).pointerType === "touch") {
-        const cur = pinnedRef.current;
-        if (cur) {
-          const h = s.globe.getHeight(Cesium.Cartographic.fromDegrees(cur.lon, cur.lat)) ?? 0;
-          const at = s.cartesianToCanvasCoordinates(Cesium.Cartesian3.fromDegrees(cur.lon, cur.lat, h));
-          if (at && Math.hypot(at.x - x, at.y - y) <= PIN_TAP_PX) { pinTap(); seq++; setPinned(null); return; }
-        }
+      // A click or tap on the pin clears it; anywhere else moves it. A finger has no hover, so a tap reads the depth at
+      // that point; so does a click while pinned (the hover is off then).
+      const finger = (e as PointerEvent).pointerType === "touch";
+      const cur = pinnedRef.current;
+      if (cur) {
+        const h = s.globe.getHeight(Cesium.Cartographic.fromDegrees(cur.lon, cur.lat)) ?? 0;
+        const at = s.cartesianToCanvasCoordinates(Cesium.Cartesian3.fromDegrees(cur.lon, cur.lat, h));
+        if (at && Math.hypot(at.x - x, at.y - y) <= (finger ? PIN_TAP_PX : PIN_CLICK_PX)) { pinTap(); seq++; setPinned(null); return; }
+      }
+      if (finger || cur) {
         const p = runId ? pick(x, y) : null;
         const current = pinTap();
         seq++;
@@ -887,7 +891,6 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (current()) setPinned(r ? { ...r, ...p } : null); }, () => { if (current()) setPinned(null); });
         return;
       }
-      if (pinnedRef.current) { setPinned(null); return; }
       const h = hoverRef.current;
       if (h && !h.loading) { setPinned({ depth: h.depth, max: h.max, ser: h.ser, lon: h.lon, lat: h.lat }); setHover(null); }
     };
@@ -1465,17 +1468,20 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </Anchored>
         ))}
 
+        {/* The pinned point gets a dot: a click or tap on it clears the pin. */}
+        {pinned && (
+          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
+            <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)", pointerEvents: "none" }} />
+          </Anchored>
+        )}
         {pinned && !phone && (
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
             <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} clamp />
           </Anchored>
         )}
-        {/* Phone: a 236 px card beside the point would run off a 390 px screen. The point gets a dot; the reading sits
-            bottom-left with a close button. */}
-        {pinned && phone && <>
-          <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat}>
-            <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)" }} />
-          </Anchored>
+        {/* Phone: a 236 px card beside the point would run off a 390 px screen. The reading sits bottom-left with a close
+            button, hidden while a sheet covers it (Inspect shows the same reading; a tap on the dot still clears it). */}
+        {pinned && phone && !sheetOpen && <>
           <div style={{ position: "absolute", ...(short ? { right: 64, bottom: aboveCredits } : { left: 12, bottom: aboveChip + 30 }), display: "flex", alignItems: "flex-start", gap: 4, pointerEvents: "auto", maxWidth: "calc(100% - 72px)" }}>
             <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} />
             <Button variant="icon" type="button" aria-label="Clear the pinned point" onClick={() => setPinned(null)}
