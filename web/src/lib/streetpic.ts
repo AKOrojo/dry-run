@@ -76,6 +76,16 @@ export function renderProblem(status: number, message: string, retryAfterS?: num
 export const DRY: StreetProblem = { title: "Dry here in both runs", detail: "There is no water to draw at this spot. Pick a spot that floods in A or B.", action: "spot" };
 
 // ---------------------------------------------------------------- large view
+/** The phone's large view: the picture at its own aspect ratio, as large as the room allows (by width, or by height when
+ *  that is the tighter side), never cropped. */
+export function fitBox(roomW: number, roomH: number, aspect: number): { w: number; h: number } {
+  if (!(roomW > 0) || !(roomH > 0) || !(aspect > 0)) return { w: Math.max(0, roomW), h: Math.max(0, roomW) / (aspect > 0 ? aspect : 16 / 9) };
+  const w = Math.min(roomW, roomH * aspect);
+  return { w: Math.floor(w), h: Math.floor(w / aspect) };
+}
+/** The phone legend under the picture: each side's run and model depth, in full ("A · Baseline · model 0.13 m"). */
+export const legendLine = (letter: "A" | "B", what: string | undefined, depthM: number | null | undefined) =>
+  `${letter}${what ? ` · ${what}` : ""}${depthM != null ? ` · model ${metres(depthM)}` : ""}`;
 export type LargeView = { r: RenderResult; a?: RunManifest; b?: RunManifest; /** focused when it opened: focus goes back there on close */ from: Element | null };
 let large: LargeView | null = null;
 const subs = new Set<() => void>();

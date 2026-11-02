@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aboutMetres, clockText, DRY, imageUrl, isDryInBoth, makingNote, mismatchNote, renderLink, renderProblem, retryIn, sourceNote, USUAL_MAX_S } from "./streetpic";
+import { aboutMetres, clockText, DRY, fitBox, imageUrl, legendLine, isDryInBoth, makingNote, mismatchNote, renderLink, renderProblem, retryIn, sourceNote, USUAL_MAX_S } from "./streetpic";
 
 const im = (depth_m: number, picture_depth_m: number | null, picture_matches: boolean | null) =>
   ({ url: "/api/render/v_0123456789abcdef/before.webp", run_id: "r_0123456789abcdef", depth_m, depth_text: "", picture_depth_m, picture_matches });
@@ -38,5 +38,19 @@ describe("street picture", () => {
     expect(renderProblem(429, "", 14 * 60 - 20)).toMatchObject({ title: "Too many new pictures this hour", detail: "Try again in 14 min. Pictures already made still open." });
     expect(renderProblem(503, "").title).toMatch(/not set up/);
     expect(retryIn(undefined)).toBe("Try again later.");
+  });
+});
+
+describe("phone large view", () => {
+  it("fits by width when the room is tall, by height when it is short, never cropping", () => {
+    expect(fitBox(358, 600, 1.6)).toEqual({ w: 358, h: 223 });   // a 640×400 picture on a 390 px phone: full width
+    expect(fitBox(358, 600, 0.75)).toEqual({ w: 358, h: 477 });  // a tall picture that still fits by width
+    expect(fitBox(358, 400, 0.75)).toEqual({ w: 300, h: 400 });  // too tall for the room: fits by height
+    expect(fitBox(800, 300, 1.6)).toEqual({ w: 480, h: 300 });   // a wide, short room: by height
+  });
+  it("says each side's run and model depth in full in the legend", () => {
+    expect(legendLine("A", "Baseline", 0.13)).toBe("A · Baseline · model 0.13 m");
+    expect(legendLine("B", "Baseline", 0.48)).toBe("B · Baseline · model 0.48 m");
+    expect(legendLine("A", undefined, 0.13)).toBe("A · model 0.13 m");  // a link opened before the runs load
   });
 });

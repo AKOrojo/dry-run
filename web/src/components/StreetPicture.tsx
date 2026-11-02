@@ -8,10 +8,10 @@ import { API, ApiError, getPointInfo, getPointSeries, getRun, postRender, setJud
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { requestUnpin, usePinnedSpot } from "../lib/inspect";
 import { useLockout } from "../lib/lockout";
-import { useTouch } from "../lib/breakpoint";
+import { useBreakpoint, useTouch } from "../lib/breakpoint";
 import { checkPhoto } from "../lib/observations";
 import {
-  aboutMetres, clockText, DRY, imageUrl, isDryInBoth, makingNote, metres, mismatchNote, openLarge, renderLink, renderProblem,
+  aboutMetres, clockText, DRY, fitBox, imageUrl, isDryInBoth, legendLine, makingNote, metres, mismatchNote, openLarge, renderLink, renderProblem,
   sourceNote, useLarge,
 } from "../lib/streetpic";
 import type { RenderResult, RenderView, StreetProblem } from "../lib/streetpic";
@@ -30,8 +30,9 @@ const btn: CSSProperties = { height: 30, padding: "0 12px", display: "inline-fle
 const SPIN = "@keyframes dr-sp-spin{to{transform:rotate(360deg)}}@keyframes dr-sp-indet{0%{left:-40%}100%{left:100%}}";
 const ACCEPT = "image/jpeg,image/png,image/webp";
 
-/** Before/after swipe: the after picture is drawn right of the divider. Drag it, or focus it and use the arrow keys. */
-function BeforeAfter({ r, beforeLabel, afterLabel, large = false }: { r: RenderResult; beforeLabel: string; afterLabel: string; large?: boolean }) {
+/** Before/after swipe: the after picture is drawn right of the divider. Drag it, or focus it and use the arrow keys.
+ *  `size` sets the box in px (the phone's large view, at the picture's own aspect ratio); otherwise it is 16:9 at full width. */
+function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: RenderResult; beforeLabel: string; afterLabel: string; large?: boolean; size?: { w: number; h: number } }) {
   const [split, setSplit] = useState(0.5);
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
@@ -45,10 +46,12 @@ function BeforeAfter({ r, beforeLabel, afterLabel, large = false }: { r: RenderR
     setSplit(Math.min(1, Math.max(0, next)));
   };
   const tag: CSSProperties = { position: "absolute", top: 8, padding: "2px 7px", borderRadius: "var(--radius-sm)", background: "color-mix(in srgb, var(--ground) 82%, transparent)",
-    color: "var(--ink)", fontSize: large ? 12 : 11, lineHeight: "16px", fontWeight: 600, whiteSpace: "nowrap", pointerEvents: "none", ...FIG };
+    color: "var(--ink)", fontSize: large ? 12 : 11, lineHeight: "16px", fontWeight: 600, whiteSpace: "nowrap", pointerEvents: "none", ...FIG,
+    // Each label keeps to its half, so the two never run into each other; an ellipsis is the last resort.
+    maxWidth: "calc(50% - 12px)", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" };
   return (
     <div ref={box} onPointerDown={onDown} onPointerMove={(e) => { if (drag.current) at(e.clientX); }} onPointerUp={() => { drag.current = false; }} onPointerCancel={() => { drag.current = false; }}
-      style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
+      style={{ position: "relative", ...(size ? { width: size.w, height: size.h, flex: "none" } : { width: "100%", aspectRatio: "16 / 9" }), overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
       <img src={imageUrl(API, r.before.url)} alt={`Before: ${beforeLabel}`} draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
       <img src={imageUrl(API, r.after.url)} alt={`After: ${afterLabel}`} draggable={false}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 0 0 ${split * 100}%)` }} />
@@ -112,7 +115,7 @@ function Made({ r, a, b }: { r: RenderResult; a?: RunManifest; b?: RunManifest }
         </ul>
       )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <Button variant="raised" onClick={() => openLarge(r, { a, b })} style={btn}><ArrowsOut size={14} aria-hidden="true" />Open large</Button>
+        <Button variant="raised" data-street-main="" onClick={() => openLarge(r, { a, b })} style={btn}><ArrowsOut size={14} aria-hidden="true" />Open large</Button>
         <Button variant="raised" onClick={copy} style={btn}><Copy size={14} aria-hidden="true" />Copy link</Button>
         <span role="status" style={note}>{copied === "yes" ? "Link copied" : copied === "no" ? "Could not copy the link" : ""}</span>
       </div>
@@ -158,6 +161,14 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
     return () => window.clearInterval(id);
   }, [phase]);
   useEffect(() => { if (askKey) keyRef.current?.focus(); }, [askKey]);
+  // Each change of state brings its main action ([data-street-main]: Make, Stop or Open large) into view, so a line that
+  // appears above it (Stopped waiting…, a problem) never leaves it under a phone's tab bar or a sheet's edge.
+  const card = useRef<HTMLDivElement>(null);
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!shown.current) { shown.current = true; return; }
+    requestAnimationFrame(() => card.current?.querySelector<HTMLElement>("[data-street-main]")?.scrollIntoView({ block: "nearest" }));
+  }, [phase, stopped, problem, askKey]);
 
   const make = async (photo: File | null) => {
     if (!spot) return;
@@ -199,7 +210,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
 
   const head = phase === "made" && result?.cached ? <span style={{ marginLeft: "auto", ...note }}>Made earlier · opened at once</span> : undefined;
   return (
-    <div data-tour="street">
+    <div data-tour="street" ref={card}>
       <Card title="Street picture" right={head}>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px", fontSize: 13, lineHeight: "18px" }}>
           {!spot ? (
@@ -216,7 +227,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
               </div>
               <div style={{ ...row, ...note, ...FIG }}><span>{clockText(secs)}</span><span>{makingNote(secs)}</span></div>
               <span style={note}>It draws the before picture, then the after picture, then checks the water in both against the model.</span>
-              <div><Button variant="raised" onClick={() => { setStopped(true); ctl.current?.abort(); }} style={btn}><Square size={12} weight="fill" aria-hidden="true" />Stop</Button></div>
+              <div><Button variant="raised" data-street-main="" onClick={() => { setStopped(true); ctl.current?.abort(); }} style={btn}><Square size={12} weight="fill" aria-hidden="true" />Stop</Button></div>
             </>
           ) : phase === "made" && result ? (
             <Made r={result} a={a} b={b} />
@@ -242,13 +253,13 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
                 <form onSubmit={(e) => { e.preventDefault(); useKey(); }} style={{ display: "flex", gap: 6 }}>
                   <TextField ref={keyRef} type="password" autoComplete="off" placeholder="Paste the judge key" aria-label="Judge key" value={key} onChange={(e) => setKey(e.target.value)}
                     style={{ flex: 1, height: 30, padding: "0 8px", fontSize: 12 }} />
-                  <Button variant="raised" type="submit" disabled={!key.trim() || !!lock} style={btn}>Make the pictures</Button>
+                  <Button variant="raised" type="submit" data-street-main="" disabled={!key.trim() || !!lock} style={btn}>Make the pictures</Button>
                 </form>
               )}
               {askKey && lock && <LockoutNote lock={lock} />}
               {!askKey && (
                 <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                  <Button variant="danfo" onClick={() => void make(null)} style={btn}><Camera size={16} aria-hidden="true" />Make the pictures</Button>
+                  <Button variant="danfo" data-street-main="" onClick={() => void make(null)} style={btn}><Camera size={16} aria-hidden="true" />Make the pictures</Button>
                   <Button variant="text" onClick={() => input.current?.click()} style={{ padding: 0, color: "var(--ink-muted)" }}>Use my own photo</Button>
                 </div>
               )}
@@ -267,6 +278,7 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
 export function StreetLarge() {
   const open = useLarge();
   const r = open?.r;
+  const phone = useBreakpoint() === "phone";
   const [runs, setRuns] = useState<{ a?: RunManifest; b?: RunManifest }>({});
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -282,6 +294,13 @@ export function StreetLarge() {
     window.addEventListener("keydown", onKey, true);
     return () => { off = true; window.removeEventListener("keydown", onKey, true); };
   }, [r?.render_id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // The phone view covers the page: the page under it does not scroll while it is open.
+  useEffect(() => {
+    if (!r || !phone) return;
+    const was = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = was; };
+  }, [r?.render_id, phone]);  // eslint-disable-line react-hooks/exhaustive-deps
   if (!r) return null;
   function shut() {
     openLarge(null);
@@ -292,6 +311,7 @@ export function StreetLarge() {
     if (from?.isConnected) from.focus();
   }
   const where = r!.place ?? "This spot";
+  if (phone) return <PhoneLarge r={r} runs={runs} where={where} close={close} shut={shut} />;
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) shut(); }}
       style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
@@ -310,6 +330,52 @@ export function StreetLarge() {
             afterLabel={`After · ${side("B", runs.b)} · model ${metres(r.after.depth_m)}`} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The phone's large view: the whole screen on the ground colour, the title and Close on top, the picture as large as it
+ *  fits at its own aspect ratio (short side labels on it), and each side's run and model depth in a legend under it. */
+function PhoneLarge({ r, runs, where, close, shut }: {
+  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
+}) {
+  const room = useRef<HTMLDivElement>(null);
+  const [roomSize, setRoomSize] = useState({ w: 0, h: 0 });
+  const [aspect, setAspect] = useState(16 / 9);
+  useEffect(() => {
+    const el = room.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setRoomSize({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // The picture's own shape, from the before image (both are drawn at the same size).
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => { if (img.naturalWidth && img.naturalHeight) setAspect(img.naturalWidth / img.naturalHeight); };
+    img.src = imageUrl(API, r.before.url);
+  }, [r.before.url]);
+  const size = fitBox(roomSize.w, roomSize.h, aspect);
+  const legend: CSSProperties = { ...FIG, fontSize: 13, lineHeight: "18px", color: "var(--ink)", overflowWrap: "anywhere" };
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`${where} · street picture`}
+      style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", background: "var(--ground)",
+        padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 4px 0 16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0, paddingTop: 10 }}>
+          <span style={{ fontWeight: 600, fontSize: 15, lineHeight: "20px" }}>{where} · street picture</span>
+          <span style={note}>{r.label ?? "AI illustration, not a measurement"}</span>
+        </div>
+        <Button ref={close} variant="icon" aria-label="Close" onClick={shut}
+          style={{ flex: "none", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink)" }}><X size={20} aria-hidden="true" /></Button>
+      </div>
+      <div ref={room} style={{ flex: "1 1 auto", minHeight: 0, margin: "12px 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {size.w > 0 && <BeforeAfter large r={r} size={size} beforeLabel="Before · A" afterLabel="After · B" />}
+      </div>
+      <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 10px", margin: "0 16px 16px" }}>
+        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>Before</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("A", runs.a && runWhat(runs.a), r.before.depth_m)}</dd>
+        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>After</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("B", runs.b && runWhat(runs.b), r.after.depth_m)}</dd>
+      </dl>
     </div>
   );
 }
