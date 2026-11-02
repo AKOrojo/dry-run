@@ -85,6 +85,11 @@ describe("formatting", () => {
   it("puts route errors in plain words", () => {
     expect(routeError("point (3.54500, 6.47419) is more than 300 m from any road")).toBe("This spot is too far from a road. Pick one on or near a street.");
     expect(routeError("500")).toMatch(/could not be worked out/);
+    // The hourly limit: when to try again, from Retry-After (an ApiError carries status and retryAfterS).
+    expect(routeError(Object.assign(new Error("rate limited"), { status: 429, retryAfterS: 60 }))).toBe("Too many routes asked for from this connection. Try again in 1 min.");
+    expect(routeError(Object.assign(new Error("rate limited"), { status: 429, retryAfterS: 1500 }))).toMatch(/Try again in 25 min\.$/);
+    expect(routeError(Object.assign(new Error("rate limited"), { status: 429 }))).toMatch(/Try again in a few minutes\.$/);
+    expect(routeError(Object.assign(new Error("point is more than 300 m from any road"), { status: 400 }))).toMatch(/too far from a road/);
   });
   it("calls the usual route cut only when the dry route left it", () => {
     const r = (reachable: boolean, path: [number, number][]) => ({ run_id: "r", t_s: 0, reachable, path, edges_removed: 0 });

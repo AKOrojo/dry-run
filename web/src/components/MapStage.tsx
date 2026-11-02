@@ -1118,7 +1118,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           if (!ctl.signal.aborted) setSafeRoute({ t, route, clearT, loading: false });
         })
         .catch((e: unknown) => {
-          if (!ctl.signal.aborted) setSafeRoute({ t, route: null, clearT: null, loading: false, error: routeError(e instanceof Error ? e.message : "") });
+          if (!ctl.signal.aborted) setSafeRoute({ t, route: null, clearT: null, loading: false, error: routeError(e) });
         });
     }, SAFE_ROUTE_DEBOUNCE_MS);
     return () => { clearTimeout(timer); ctl.abort(); };

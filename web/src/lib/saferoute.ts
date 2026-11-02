@@ -110,9 +110,18 @@ export function wetRuns(samples: Spot[], wet: boolean[]): Spot[] {
   return out;
 }
 
-/** The card's error line: the API's "more than N m from any road" in plain words, anything else as a short failure. */
-export const routeError = (msg: string) => (/from any road/i.test(msg) ? "This spot is too far from a road. Pick one on or near a street."
-  : "The route could not be worked out. Try again, or pick another start.");
+/** The card's error line for a failed /api/route (an ApiError or a message): the hourly limit (429) says when to try
+ *  again from its Retry-After, "more than N m from any road" is said in plain words, anything else is a short failure. */
+export const routeError = (e: unknown) => {
+  const err = (e ?? {}) as { status?: number; retryAfterS?: number; message?: string };
+  if (err.status === 429) {
+    const min = err.retryAfterS ? Math.max(1, Math.ceil(err.retryAfterS / 60)) : null;
+    return `Too many routes asked for from this connection. Try again ${min ? `in ${min} min` : "in a few minutes"}.`;
+  }
+  const msg = typeof e === "string" ? e : err.message ?? "";
+  return /from any road/i.test(msg) ? "This spot is too far from a road. Pick one on or near a street."
+    : "The route could not be worked out. Try again, or pick another start.";
+};
 
 /** The usual route is "now cut" only when the dry route had to leave it, or there is no dry route. */
 export const usualCut = (route: RouteResult | null, usual: RouteResult | null) =>
