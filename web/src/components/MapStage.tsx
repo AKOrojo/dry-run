@@ -1474,9 +1474,10 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             <span aria-hidden="true" style={{ position: "absolute", left: -6, top: -6, width: 12, height: 12, borderRadius: "50%", background: "var(--danfo)", boxShadow: "0 0 0 2px var(--ground)", pointerEvents: "none" }} />
           </Anchored>
         )}
+        {/* The reading cards have no controls: clicks pass through to the map, so a click beside the dot moves the pin. */}
         {pinned && !phone && (
           <Anchored anchors={anchors} scene={scene} lon={pinned.lon} lat={pinned.lat} dx={16} dy={-10}>
-            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "auto" }} clamp />
+            <Tooltip r={pinned} tS={tS} cellM={cellM} pinned touch={touch} outside={outsideDomain(run, pinned.lon, pinned.lat, aoi?.grid.bounds_wgs84)} style={{ pointerEvents: "none" }} clamp />
           </Anchored>
         )}
         {/* Phone: a 236 px card beside the point would run off a 390 px screen. The reading sits bottom-left with a close
@@ -1489,7 +1490,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           </div>
         </>}
         {!pinned && hover && (
-          <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10 }}>
+          <div ref={tipEl} style={{ position: "absolute", left: tooltipLeft(hover.x), top: hover.y - 10, pointerEvents: "none" }}>
             <Tooltip r={hover} tS={tS} cellM={cellM} pinned={false} outside={outsideDomain(run, hover.lon, hover.lat, aoi?.grid.bounds_wgs84)} />
           </div>
         )}
