@@ -8,6 +8,7 @@ import { lockoutText, useLockout } from "../lib/lockout";
 import { LockoutNote } from "./LockoutNote";
 import { Notice } from "./Notice";
 import { Card, Field, Segmented, FIG, hintText } from "./rev5";
+import { replayHint } from "../lib/replay";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
@@ -120,6 +121,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
     </Field>
   );
   const nearMax = q.length > QUESTION_MAX * 0.9;  // the counter shows only near the limit
+  const offRecord = replayHint(provider, q, replays.map((r) => r.question));
   const canAsk = !busy && q.trim() !== "" && !(needsKey && !key.trim()) && !(keyProvider && lock) && !(provider === "replay" && !replay);
   const copy = () => { if (brief) navigator.clipboard?.writeText(briefText(brief)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {}); };
 
@@ -143,6 +145,8 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
             {voiceProblem && <span role="status" style={{ ...hintText, marginTop: -6, color: "var(--ink)" }}>{voiceProblem.text}</span>}
             {nearMax && <span id="goal-count" style={{ ...hintText, marginTop: -6 }}>
               <span style={FIG}>{q.length}</span> of <span style={FIG}>{QUESTION_MAX}</span> characters{q.length >= QUESTION_MAX ? ", the most a question can have." : "."}</span>}
+            {offRecord && <span id="replay-hint" role="status" style={{ ...hintText, marginTop: -6 }}>
+              Replay plays only the recorded questions below. Pick one, or set Model to Live (needs the judge key) or Fake to ask your own.</span>}
             <Field label="Model" hint="Live answers need the judge key. Replay and Fake are open to everyone.">
               <Segmented<Mode> active={mode} onChange={(m) => setProvider(m === "live" ? liveProv : m)}
                 options={[{ value: "live", label: "Live" }, { value: "replay", label: "Replay" }, { value: "fake", label: "Fake" }]} />
@@ -173,7 +177,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
             ))}
           </Card>
         )}
-        <Footer><span style={{ flex: 1 }} /><Btn kind="primary" icon={<PaperPlaneTilt size={16} weight="bold" aria-hidden="true" />} disabled={!canAsk} onClick={() => ask()}>Ask</Btn></Footer>
+        <Footer><span style={{ flex: 1 }} /><Btn kind="primary" icon={<PaperPlaneTilt size={16} weight="bold" aria-hidden="true" />} disabled={!canAsk} aria-describedby={offRecord ? "replay-hint" : undefined} onClick={() => ask()}>Ask</Btn></Footer>
       </div>
     );
   }
