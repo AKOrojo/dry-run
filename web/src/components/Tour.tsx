@@ -35,7 +35,7 @@ const ALL_STEPS = [
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map. Each run's name shows what differs from the others: the time pattern, where the rain fell and the drainage." },
   { id: "street", anchor: "compare", title: "See a spot as a street picture", body: "In Compare, click a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
-  { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check. Without the judge key, pick a recorded question to replay a real session." },
+  { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check. Without the judge key, pick a recorded question to replay a real session. With it, Live can also run on Muse Glimmer 30B, an open-weights model on our own GPU." },
   { id: "voice", anchor: "agent", title: "Say it instead of typing", body: "In Agent, press the mic in the goal box and speak; pause or press it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ] as const;
 type Step = { id: string; title: string; body: string; /** The element to ring, when it is not [data-tour=id]. */ anchor?: string };

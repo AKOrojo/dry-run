@@ -22,7 +22,7 @@ type Failure = { code: string; message: string; retryable: boolean; retry_after_
 type Mode = "live" | "replay" | "fake";
 
 const SUGGESTIONS = ["Which places flood first?", "Compare new drains with green space in Lekki Phase 1", "Is Admiralty Way passable at the peak?"];
-const MODEL_NAME: Record<string, string> = { meta: "Muse Spark 1.3", openrouter: "Muse Spark Open" };
+const MODEL_NAME: Record<string, string> = { meta: "Muse Spark 1.3", openrouter: "Muse Spark Open", modal: "Muse Glimmer 30B" };
 const CSS = `@keyframes dr-spin{to{transform:rotate(360deg)}}@keyframes dr-indet{0%{margin-left:-40%}100%{margin-left:100%}}
 .dr-spin{animation:dr-spin 1s linear infinite}.dr-indet{animation:dr-indet 1.4s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.dr-spin,.dr-indet{animation:none}}`;
@@ -30,17 +30,22 @@ const CSS = `@keyframes dr-spin{to{transform:rotate(360deg)}}@keyframes dr-indet
 const inputBox = { background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
   boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit" } as const;
 
-export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defaultProvider, aoiId, judgeKeyRequired = false }:
+export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defaultProvider, aoiId, judgeKeyRequired = false, glimmerAvailable = false }:
   { onRun: (runId: string) => void; onAoi?: (aoiId: string) => void; onReplay?: (replayed: boolean) => void;
     /** The session's events so far (Agent mode's runs card, dock charts and log read them). */
     onEvents?: (events: AgentEvent[]) => void;
     /** Shown under the brief (the per-run bars for the studied place). */
     briefExtra?: ReactNode;
-    defaultProvider: string; aoiId?: string; judgeKeyRequired?: boolean }) {
+    defaultProvider: string; aoiId?: string; judgeKeyRequired?: boolean;
+    /** The server can reach Muse Glimmer 30B on our Modal app: Live offers it beside the default live model. */ glimmerAvailable?: boolean }) {
   const [q, setQ] = useState("");
   const [provider, setProvider] = useState(defaultProvider);
   useEffect(() => setProvider(defaultProvider), [defaultProvider]);
-  const liveProv = provider === "fake" || provider === "replay" ? (defaultProvider === "fake" || defaultProvider === "replay" ? "meta" : defaultProvider) : provider;
+  const baseLive = defaultProvider === "fake" || defaultProvider === "replay" ? "meta" : defaultProvider;
+  // The live model last picked (the default one, or Muse Glimmer 30B), kept while Replay or Fake is on.
+  const [lastLive, setLastLive] = useState(baseLive);
+  useEffect(() => setLastLive(baseLive), [baseLive]);
+  const liveProv = provider === "fake" || provider === "replay" ? lastLive : provider;
   const mode: Mode = provider === "replay" ? "replay" : provider === "fake" ? "fake" : "live";
   const [events, setEvents] = useState<AgentEvent[]>([]);
   useEffect(() => { onEvents?.(events); }, [events]);
@@ -153,6 +158,12 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
               <Segmented<Mode> active={mode} onChange={(m) => setProvider(m === "live" ? liveProv : m)}
                 options={[{ value: "live", label: "Live" }, { value: "replay", label: "Replay" }, { value: "fake", label: "Fake" }]} />
             </Field>
+            {glimmerAvailable && mode === "live" && (
+              <Field label="Live model" hint="Muse Glimmer 30B has open weights and runs on our own GPU, which sleeps when idle: its first answer can take a few minutes.">
+                <Segmented<string> active={liveProv} onChange={(v) => { setLastLive(v); setProvider(v); }}
+                  options={[{ value: baseLive, label: MODEL_NAME[baseLive] ?? baseLive }, { value: "modal", label: MODEL_NAME.modal }]} />
+              </Field>
+            )}
             {(needsKey || voiceProblem?.key) && keyField}
             <Field label="Try">
               {SUGGESTIONS.map((s) => (

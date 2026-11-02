@@ -285,6 +285,10 @@ def tools_dispatch(name, args):
     ("baseten", {"X-Judge-Key": "judge"}, 200),
     ("openrouter", None, 403),
     ("openrouter", {"X-Judge-Key": "judge"}, 200),
+    ("modal", None, 403),
+    ("modal", {"X-Judge-Key": "wrong"}, 403),
+    ("modal", {"X-Judge-Key": "judge"}, 200),
+    ("modal", {"X-Team-Token": "team"}, 200),
     ("meta", {"X-Team-Token": "team"}, 200),
     ("meta", {"X-Judge-Key": "team"}, 403),
 ])
@@ -292,6 +296,75 @@ def test_paid_providers_need_a_judge_key(client, monkeypatch, provider, headers,
     monkeypatch.setattr(ratelimit, "_JUDGE", "judge")
     monkeypatch.setattr(ratelimit, "_TEAM", "team")
     assert post(client, headers, provider) == status
+
+
+def test_modal_is_reached_only_with_a_judge_key_or_the_team_token(client, monkeypatch):
+    """Replay, Fake and visitors never start a session on the Modal provider; a judge or the team does."""
+    from dryrun.agent import replay
+
+    made = []
+
+    def run(question, provider_name="meta", aoi_id=None):
+        made.append(provider_name)
+        yield AgentEvent(kind="done", data={})
+
+    monkeypatch.setattr(loop, "run", run)
+    monkeypatch.setattr(ratelimit, "_JUDGE", "judge")
+    monkeypatch.setattr(ratelimit, "_TEAM", "team")
+    monkeypatch.setattr(replay, "recordings", lambda: [REC])
+    monkeypatch.setattr(replay.time, "sleep", lambda s: None)
+    monkeypatch.setenv("DRYRUN_AGENT_PER_HOUR", "100")
+    assert client.post("/api/agent", json={"question": "replay me", "provider": "replay"}).status_code == 200
+    assert post(client, None, "fake") == 200
+    assert post(client, None, "modal") == 403
+    assert post(client, {"X-Judge-Key": "wrong"}, "modal") == 403
+    assert post(client, {"X-Judge-Key": "team"}, "modal") == 403
+    assert made == ["fake"]
+    assert post(client, {"X-Judge-Key": "judge"}, "modal") == 200
+    assert post(client, {"X-Team-Token": "team"}, "modal") == 200
+    assert made == ["fake", "modal", "modal"]
+
+
+def test_modal_provider_sends_the_proxy_token_not_a_bearer_key(monkeypatch):
+    import httpx
+
+    from dryrun.meta import providers
+
+    monkeypatch.setitem(providers.DEFAULTS["modal"], "base_url", "https://example.modal.run/v1")
+    monkeypatch.setenv("MODAL_PROXY_TOKEN_ID", "wk-test")
+    monkeypatch.setenv("MODAL_PROXY_TOKEN_SECRET", "ws-test")
+    sent = {}
+
+    class R:
+        status_code = 200
+        text = ""
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"id": "x", "choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, json, timeout, headers, follow_redirects=False):
+        sent.update(url=url, timeout=timeout, headers=headers, follow=follow_redirects)
+        return R()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    p = providers.get_provider("modal")
+    assert p.chat([{"role": "user", "content": "hi"}]).content == "ok"
+    assert sent["url"] == "https://example.modal.run/v1/chat/completions"
+    assert sent["headers"] == {"Modal-Key": "wk-test", "Modal-Secret": "ws-test"}
+    assert sent["timeout"] > 60 and p.wakes and sent["follow"]  # Modal's 303 for a request past 150 s is followed
+
+
+def test_modal_without_its_url_or_secret_is_not_configured(monkeypatch):
+    from dryrun.meta import providers
+
+    monkeypatch.setitem(providers.DEFAULTS["modal"], "base_url", "")
+    monkeypatch.setenv("MODAL_PROXY_TOKEN_ID", "wk-test")
+    monkeypatch.setenv("MODAL_PROXY_TOKEN_SECRET", "ws-test")
+    events = list(loop.run("question", provider_name="modal"))
+    assert [e.kind for e in events] == ["error", "done"] and events[0].data["code"] == "llm_not_configured"
 
 
 def test_unset_judge_key_opens_nothing(client):

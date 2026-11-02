@@ -25,7 +25,7 @@ make web          # :5173 (proxies /api and /runs to :8080)
 ```
 web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-inertial solver)
         |                              |                 --> routing (NetworkX on OSM)
-        |                              |                 --> agent (Muse Spark 1.3 / Spark Open)
+        |                              |                 --> agent (Muse Spark 1.3 / Spark Open / Glimmer 30B)
         +-- frames (PNG) <-- GCS runs bucket <-- run outputs (content-addressed by run_id)
                                GCS data bucket <-- offline open-data + OSM pipeline
 ```
@@ -34,6 +34,7 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 |---|---|
 | Muse Spark 1.3 | Planner agent: tool calls over the simulator, verified briefs; vision depth estimates |
 | Muse Spark Open (served through OpenRouter) | "Sovereign mode": same agent on open weights |
+| Muse Glimmer 30B (open weights, vLLM on our Modal app) | Judge-only sovereign mode on an inference partner; scales to zero, behind the judge key |
 | SAM 3.1 | Flood-water / reference-object masks from citizen photos |
 | Muse Voice Transcribe | Hands-free responder queries, biased to Lagos place names |
 | Muse Image | Before/after illustrations of interventions (labelled AI illustration) |

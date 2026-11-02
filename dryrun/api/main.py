@@ -265,6 +265,8 @@ def config():
             "agent_provider": os.getenv("DRYRUN_AGENT_PROVIDER", "replay"),
             # Sovereign mode = Muse Spark Open, via OpenRouter (prod) or Baseten (hackathon partner, pending approval).
             "sovereign_provider_available": bool(_secret("OPENROUTER_API_KEY") or _secret("BASETEN_API_KEY")),
+            # Muse Glimmer 30B on our Modal app (judges only): the agent panel offers it as a live model.
+            "glimmer_available": bool(os.getenv("MODAL_BASE_URL") and _secret("MODAL_PROXY_TOKEN_ID") and _secret("MODAL_PROXY_TOKEN_SECRET")),
             # Paid providers need X-Judge-Key (or the team token): the UI shows a key box when this is true.
             "judge_key_required": ratelimit.paid_access_configured(),
             # Cesium ion tokens are public client tokens (restrict allowed URLs in the ion dashboard);

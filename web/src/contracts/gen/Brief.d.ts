@@ -32,7 +32,7 @@ export type Verified = boolean;
 export type Claims = Claim[];
 export type RecommendedRunId = string | null;
 export type Model = string;
-export type Provider = "meta" | "baseten" | "openrouter" | "fake";
+export type Provider = "meta" | "baseten" | "openrouter" | "modal" | "fake";
 
 export interface Brief {
   title: Title;
