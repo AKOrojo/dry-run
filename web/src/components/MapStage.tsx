@@ -23,7 +23,7 @@ import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../l
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
 import { setMapViewer, useView } from "../lib/view";
-import { clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
+import { belowFetchDue, clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
 import type { LonLat } from "../lib/flyroute";
 import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
@@ -721,15 +721,17 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // Water below the camera: the point series at the camera's ground position, refetched every ~60 m.
   const [belowSeries, setBelowSeries] = useState<PointSeries | null>(null);
   const belowAt = useRef<LonLat | null>(null);
+  // Latest-wins, not an effect cleanup: the HUD moves every 100 ms, which would drop every fetch slower than that.
+  const belowLatest = useMemo(latestOnly, []);
+  useEffect(() => { belowLatest(); belowAt.current = null; setBelowSeries(null); }, [mode, runDone, run, belowLatest]);
   useEffect(() => {
-    if (mode !== "fly" || !runDone || !run) { setBelowSeries(null); belowAt.current = null; return; }
-    const [lon, lat] = fly.hud.at, prev = belowAt.current;
-    if (prev && Math.hypot((lon - prev[0]) * 111320 * Math.cos((lat * Math.PI) / 180), (lat - prev[1]) * 110540) < 60) return;
+    if (mode !== "fly" || !runDone || !run) return;
+    const [lon, lat] = fly.hud.at;
+    if (!belowFetchDue([lon, lat], belowAt.current, aoi?.grid.bounds_wgs84)) return;
     belowAt.current = [lon, lat];
-    let live = true;
-    getPointSeries(run.run_id, lon, lat).then((ser) => { if (live) setBelowSeries(ser); }).catch(() => {});
-    return () => { live = false; };
-  }, [mode, runDone, run, fly.hud.at]);
+    const current = belowLatest();
+    getPointSeries(run.run_id, lon, lat).then((ser) => { if (current()) setBelowSeries(ser); }).catch(() => {});
+  }, [mode, runDone, run, fly.hud.at, aoi?.grid.bounds_wgs84, belowLatest]);
   useFreeCamera(viewer, mode === "free", setFreeSpeed);
 
   // ----- camera state -----

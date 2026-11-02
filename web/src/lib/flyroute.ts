@@ -39,3 +39,11 @@ export const evacLine = {
 };
 export const useEvacLine = () => useSyncExternalStore(evacLine.subscribe, evacLine.get);
 export function setEvacLine(pts: LonLat[] | null) { evac = pts && pts.length >= 2 ? pts : null; evacSubs.forEach((f) => f()); }
+
+/** Whether the water-below-the-camera series should be fetched at `at`: only inside the area's bounds [w, s, e, n]
+ *  (the HUD starts at [0, 0], and a camera over the sea has no series) and once it is ~60 m from the last fetch. */
+export function belowFetchDue(at: LonLat, prev: LonLat | null, bounds: readonly number[] | undefined): boolean {
+  const [lon, lat] = at;
+  if (!bounds || lon < bounds[0] || lon > bounds[2] || lat < bounds[1] || lat > bounds[3]) return false;
+  return !prev || Math.hypot((lon - prev[0]) * 111320 * Math.cos((lat * Math.PI) / 180), (lat - prev[1]) * 110540) >= 60;
+}
