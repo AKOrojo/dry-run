@@ -65,20 +65,43 @@ export function setDrainage(patch: Partial<DrainCard>) {
   state = { ...state, card: { ...state.card, ...patch }, touched: true, sent: null };
   emit();
 }
+/** A scenario's drainage block as the card shows it: each field it leaves out is the area's default. */
+export function cardFromSpec(def: DrainageDefault, d: Drainage): DrainCard {
+  const base = cardFromDefault(def);
+  // Neither capacity field: the area's design storm, as the server ran it.
+  const rp = d.return_period_yr ?? (d.capacity_mm_h == null ? base.returnPeriod : null);
+  return {
+    system: (d.system as DrainSystem) ?? base.system, returnPeriod: rp,
+    capacityMmH: d.capacity_mm_h ?? (rp != null ? designMmH(def, rp) ?? base.capacityMmH : base.capacityMmH),
+    blockagePct: d.blockage_pct ?? base.blockagePct, outfall: (d.outfall as Outfall) ?? base.outfall,
+    flapGates: d.flap_gates ?? base.flapGates, roadsideGutters: d.roadside_gutters ?? base.roadsideGutters,
+  };
+}
+
 /** A loaded run's own drainage (shared link, agent run): shown in the card, as sent. */
 export function adoptDrainage(d: Drainage | null | undefined) {
   if (!state.def) return;
   if (!d) { resetDrainage(state.aoiId, state.def); return; }
-  const base = cardFromDefault(state.def);
-  // Neither capacity field: the area's design storm, as the server ran it.
-  const rp = d.return_period_yr ?? (d.capacity_mm_h == null ? base.returnPeriod : null);
-  state = { ...state, touched: true, sent: d, card: {
-    system: (d.system as DrainSystem) ?? base.system, returnPeriod: rp,
-    capacityMmH: d.capacity_mm_h ?? (rp != null ? designMmH(state.def, rp) ?? base.capacityMmH : base.capacityMmH),
-    blockagePct: d.blockage_pct ?? base.blockagePct, outfall: (d.outfall as Outfall) ?? base.outfall,
-    flapGates: d.flap_gates ?? base.flapGates, roadsideGutters: d.roadside_gutters ?? base.roadsideGutters,
-  } };
+  state = { ...state, touched: true, sent: d, card: cardFromSpec(state.def, d) };
   emit();
+}
+
+export const OUTFALL_LABEL: Record<Outfall, string> = { tide: "Tide-limited", free: "Free", blocked: "Blocked" };
+const SYSTEM_WORDS: Record<DrainSystem, string> = { closed: "closed sewer", open: "open drains", mixed: "mixed drainage" };
+
+/** What a run's drainage changes from the area's default, in the Drainage card's words ("open drains, 30 % blocked"),
+ *  or null when it is the default. Without the area's default to compare with, any block is "custom drainage". */
+export function drainageDiff(d: Drainage | null | undefined, def: DrainageDefault | null | undefined): string | null {
+  if (!d) return null;
+  if (!def) return "custom drainage";
+  const c = cardFromSpec(def, d), b = cardFromDefault(def), out: string[] = [];
+  if (c.system !== b.system) out.push(SYSTEM_WORDS[c.system]);
+  if (c.returnPeriod !== b.returnPeriod || c.capacityMmH !== b.capacityMmH) out.push(c.returnPeriod != null ? `1-in-${c.returnPeriod} yr drains` : `drains ${c.capacityMmH} mm/h`);
+  if (c.blockagePct !== b.blockagePct) out.push(`${c.blockagePct} % blocked`);
+  if (c.outfall !== b.outfall) out.push(`${OUTFALL_LABEL[c.outfall].toLowerCase()} outfall`);
+  if (c.flapGates !== b.flapGates) out.push(c.flapGates ? "flap gates" : "no flap gates");
+  if (c.system !== "closed" && c.roadsideGutters !== b.roadsideGutters) out.push(c.roadsideGutters ? "roadside gutters" : "no roadside gutters");
+  return out.length ? out.join(", ") : null;
 }
 
 /** The scenario's `drainage` block: undefined while untouched (the area default). Exactly one of return_period_yr and

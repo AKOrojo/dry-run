@@ -6,7 +6,7 @@ import { API } from "../lib/api";
 import type { AgentEvent, RunManifest } from "../lib/api";
 import { TOOLS } from "./agent/Steps";
 import { Band, Card, FIG, mono } from "./rev5";
-import { describeIv } from "./Sidebar";
+import { describeIv } from "../lib/runlabel";
 import { Tip } from "./controls/Tooltip";
 import { Button } from "./controls/Button";
 

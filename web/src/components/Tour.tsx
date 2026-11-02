@@ -33,7 +33,7 @@ const ALL_STEPS = [
   { id: "viewshare", title: "Change the view or share it", body: "View hides panels and switches imagery or theme; Share copies a link to this moment or saves the map as an image." },
   { id: "plan", title: "Inspect a building", body: "Switch to the 2D plan view and click a building for its depths and the street beside it." },
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
-  { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
+  { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map. Each run's name shows what differs from the others: the time pattern, where the rain fell and the drainage." },
   { id: "street", anchor: "compare", title: "See a spot as a street picture", body: "In Compare, click a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
   { id: "voice", anchor: "agent", title: "Say it instead of typing", body: "In Agent, press the mic in the goal box and speak; pause or press it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },

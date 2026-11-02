@@ -7,13 +7,15 @@ export const TIME = "Time (T+hh:mm)";
 export type ChartTable = { header: string[]; rows: string[][] };
 
 /** One row per frame: the time, then run A when it is compared, then the chart's own series, to `digits` decimals. */
-export function chartTable({ title, unit, times, series, ghost, digits, time }: {
+export function chartTable({ title, unit, times, series, ghost, names, digits, time }: {
   title: string; unit: string; times: number[]; series: number[]; ghost?: number[]; digits: number; time: (s: number) => string;
+  /** Compare: the runs' labels, in the A and B column headers. */ names?: { a?: string; b?: string };
 }): ChartTable {
   const num = (v: number | undefined) => (v != null && Number.isFinite(v) ? v.toFixed(digits) : "");
   const at = (i: number) => (times[i] != null ? time(times[i]) : "");
   const compared = !!ghost && ghost.length > 1;
-  const header = compared ? [TIME, `A (${unit})`, `B (${unit})`] : [TIME, `${title} (${unit})`];
+  const col = (l: "A" | "B", n?: string) => `${l}${n ? ` · ${n}` : ""} (${unit})`;
+  const header = compared ? [TIME, col("A", names?.a), col("B", names?.b)] : [TIME, `${title} (${unit})`];
   const rows = series.map((v, i) => (compared
     ? [at(i), num(ghost?.[i]), num(v)]
     : [at(i), num(v)]));

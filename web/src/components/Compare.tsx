@@ -10,7 +10,8 @@ import { Change, DIFF_MIN_M, PlaceRow } from "../lib/compare";
 import { Button, fmtT } from "./ds";
 import { Band, Card, FIG, mono } from "./rev5";
 import { Select } from "./controls/Select";
-import { describeIv } from "./Sidebar";
+import { runLabel } from "../lib/runlabel";
+import type { RunNames } from "../lib/streetpic";
 import { Globe } from "./Globe";
 import { Tooltip } from "./controls/Tooltip";
 import { Button as CtlButton } from "./controls/Button";
@@ -18,11 +19,6 @@ import { ChartPicker } from "./Dock";
 import type { ChartPick } from "./Dock";
 
 export type CompareView = "A" | "B" | "Swipe" | "Side by side" | "Difference";
-
-/** "Baseline" or the run's interventions. */
-export const runWhat = (m: RunManifest) => (m.scenario.interventions?.length ? m.scenario.interventions.map(describeIv).join(", ") : "Baseline");
-/** "Baseline" or the interventions, then the storm: what a run is, in words. */
-export const runLabel = (m: RunManifest) => `${runWhat(m)} · ${m.scenario.storm.total_mm} mm / ${m.scenario.storm.duration_h} h`;
 
 /** Change of B against A as a signed percentage, e.g. "−82%"; lower is better for every compared stat. */
 export const pctChange = (a: number, b: number) => {
@@ -37,17 +33,17 @@ export function Letter({ l, size = 20 }: { l: "A" | "B"; size?: number }) {
   return <span style={{ width: size, height: size, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 3, fontSize: 11, fontWeight: 700, ...st }}>{l}</span>;
 }
 
-function RunSelect({ l, runs, value, onChange }: { l: "A" | "B"; runs: RunManifest[]; value?: string; onChange: (id: string) => void }) {
+function RunSelect({ l, runs, labels, value, onChange }: { l: "A" | "B"; runs: RunManifest[]; labels?: Map<string, string>; value?: string; onChange: (id: string) => void }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "22px minmax(0, 1fr)", gap: 8, alignItems: "center" }}>
       <Letter l={l} />
-      <Select label={`Run ${l}`} value={value} onChange={onChange} options={runs.map((m) => ({ value: m.run_id, label: runLabel(m), detail: m.run_id, detailMono: true }))} />
+      <Select label={`Run ${l}`} value={value} onChange={onChange} options={runs.map((m) => ({ value: m.run_id, label: labels?.get(m.run_id) ?? runLabel(m), detail: m.run_id, detailMono: true }))} />
     </div>
   );
 }
 
-export function CompareCard({ runs, a, b, onA, onB, onSwap, busy, onScenario }: {
-  runs: RunManifest[]; a?: string; b?: string; onA: (id: string) => void; onB: (id: string) => void; onSwap: () => void;
+export function CompareCard({ runs, labels, a, b, onA, onB, onSwap, busy, onScenario }: {
+  runs: RunManifest[]; /** lib/runlabel.ts runLabels over `runs`. */ labels?: Map<string, string>; a?: string; b?: string; onA: (id: string) => void; onB: (id: string) => void; onSwap: () => void;
   busy: boolean; onScenario: () => void;
 }) {
   if (runs.length < 2) {
@@ -67,8 +63,8 @@ export function CompareCard({ runs, a, b, onA, onB, onSwap, busy, onScenario }: 
       <CtlButton variant="text" type="button" onClick={onSwap} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "3px 6px", background: "transparent", border: 0,
         color: "var(--ink-muted)", font: "inherit", fontSize: 12 }}><ArrowCounterClockwise size={13} weight="bold" />Swap</CtlButton>}>
       <div data-tour="compare-runs" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px" }}>
-        <RunSelect l="A" runs={runs} value={a} onChange={onA} />
-        <RunSelect l="B" runs={runs} value={b} onChange={onB} />
+        <RunSelect l="A" runs={runs} labels={labels} value={a} onChange={onA} />
+        <RunSelect l="B" runs={runs} labels={labels} value={b} onChange={onB} />
       </div>
     </Card>
   );
@@ -97,7 +93,7 @@ const TILES: { k: string; label: string; Ic: Icon; fmt: (v: number) => string }[
   { k: "flooded_area_km2", label: "Flooded km²", Ic: Waves, fmt: (v) => v.toFixed(2) },
 ];
 
-export function DeltaCard({ a, b }: { a: RunManifest; b: RunManifest }) {
+export function DeltaCard({ a, b, names }: { a: RunManifest; b: RunManifest; names?: RunNames }) {
   const ps = TILES.map((t) => pctChange(num(a, t.k), num(b, t.k))?.p ?? 0);
   const verdict: [string, string] = ps.every((p) => p <= 0) && ps.some((p) => p < 0) ? ["Better", "var(--verified)"]
     : ps.every((p) => p >= 0) && ps.some((p) => p > 0) ? ["Worse", "var(--hazard)"] : ps.every((p) => p === 0) ? ["No change", "var(--ink-muted)"] : ["Mixed", "var(--ink-muted)"];
@@ -112,7 +108,7 @@ export function DeltaCard({ a, b }: { a: RunManifest; b: RunManifest }) {
         ))}
       </div>
       <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: line, color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
-        Run maxima. A <span style={{ fontFamily: mono, fontSize: 11 }}>{a.run_id}</span>, B <span style={{ fontFamily: mono, fontSize: 11 }}>{b.run_id}</span>.
+        Run maxima. A: {names?.a ?? runLabel(a)} (<span style={{ fontFamily: mono, fontSize: 11 }}>{a.run_id}</span>). B: {names?.b ?? runLabel(b)} (<span style={{ fontFamily: mono, fontSize: 11 }}>{b.run_id}</span>).
       </p>
     </Card>
   );
@@ -148,19 +144,21 @@ export function WaterBudgetCard({ a, b }: { a: RunManifest; b: RunManifest }) {
 }
 
 // ---- map overlays ----
-function RunTag({ l, m, origin, style }: { l: "A" | "B"; m: RunManifest; origin: string; style: CSSProperties }) {
+function RunTag({ l, m, name, origin, style }: { l: "A" | "B"; m: RunManifest; name: string; origin: string; style: CSSProperties }) {
   return (
-    <div style={{ position: "absolute", zIndex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px", maxWidth: 360, background: "var(--surface-raised)",
+    <div aria-label={`Run ${l}: ${name}`} style={{ position: "absolute", zIndex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "8px 12px", maxWidth: 360, background: "var(--surface-raised)",
       border: `1px solid ${l === "B" ? "var(--danfo)" : "var(--hairline)"}`, borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none", ...style }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Letter l={l} size={18} />{runWhat(m)}</span>
+      {/* A long label ends in an ellipsis; the full one is in the tooltip (the only part of the tag that takes the pointer). */}
+      <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}><Letter l={l} size={18} />
+        <Tooltip text={name}><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, pointerEvents: "auto" }}>{name}</span></Tooltip></span>
       <span style={{ color: "var(--ink-muted)", fontSize: 12, whiteSpace: "nowrap" }}><span style={{ fontFamily: mono, fontSize: 11 }}>{m.run_id}</span> · {origin}</span>
     </div>
   );
 }
 
 /** A and B labels, the view switch, and the swipe handle or difference legend, over the map. */
-export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }: {
-  a: RunManifest; b: RunManifest; origin: (m: RunManifest) => string; view: CompareView; onView: (v: CompareView) => void;
+export function CompareMapOverlay({ a, b, names, origin, view, onView, split, onSplit }: {
+  a: RunManifest; b: RunManifest; names?: RunNames; origin: (m: RunManifest) => string; view: CompareView; onView: (v: CompareView) => void;
   split: number; onSplit: (v: number) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -169,8 +167,8 @@ export function CompareMapOverlay({ a, b, origin, view, onView, split, onSplit }
   const left = view === "Swipe" || view === "Side by side";
   return (
     <div ref={box} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} origin={origin(a)} style={{ top: 84, left: 64 }} />}
-      {(left || view === "B" || view === "Difference") && <RunTag l="B" m={b} origin={origin(b)} style={{ top: 64, right: 16 }} />}
+      {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} name={names?.a ?? runLabel(a)} origin={origin(a)} style={{ top: 84, left: 64 }} />}
+      {(left || view === "B" || view === "Difference") && <RunTag l="B" m={b} name={names?.b ?? runLabel(b)} origin={origin(b)} style={{ top: 64, right: 16 }} />}
       {view === "Swipe" && (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${100 * split}%`, width: 0, zIndex: 1 }}>
           <span style={{ position: "absolute", top: 0, bottom: 0, left: -1, width: 2, background: "var(--danfo)" }} />

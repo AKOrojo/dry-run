@@ -16,9 +16,9 @@ import { Tooltip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 import { Button } from "./controls/Button";
+import { PATTERN_TEXT } from "../lib/runlabel";
 
 export type Mode = "Scenario" | "Compare" | "Agent";
-const PATTERN_TEXT = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" } as const;
 /** Free px a narrow desktop's top bar keeps before the mode tabs. */
 const FOLD_SLACK = 16;
 const vr = <span style={{ width: 1, height: 20, background: "var(--hairline)", flex: "none" }} />;

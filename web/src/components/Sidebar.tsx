@@ -38,6 +38,7 @@ import { setCloseUp, useCloseUp } from "../lib/patch3d";
 import { TextField } from "./controls/TextField";
 import { Tooltip, Tip } from "./controls/Tooltip";
 import { Button as CtlButton } from "./controls/Button";
+import { describeIv } from "../lib/runlabel";
 const GpuCard = lazyNamed(() => import("./GpuCard"), "GpuCard");
 
 export type Pattern = "uniform" | "front_loaded" | "center_peaked";
@@ -358,10 +359,6 @@ function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   );
 }
 
-export const describeIv = (iv: { type: string; [k: string]: unknown }) =>
-  iv.type === "tide" ? `Sea level ${(iv.boundary_level_m as number) > 0 ? "+" : ""}${iv.boundary_level_m} m`
-  : iv.type === "drain_upgrade" ? `Drains ×${iv.capacity_factor ?? "?"}`
-  : iv.type === "green" ? "Green infrastructure" : iv.type === "pond" ? "Retention pond" : iv.type === "road_closure" ? "Road closure" : iv.type;
 const PATTERN_LABEL = { uniform: "uniform", front_loaded: "front-loaded", center_peaked: "centre-peaked" };
 const n0 = (v: unknown) => (typeof v === "number" ? v.toLocaleString("en-GB") : "n/a");
 

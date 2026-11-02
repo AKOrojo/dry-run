@@ -9,7 +9,7 @@ import { useLayers } from "../lib/layers";
 import { perTheme, useTheme } from "../lib/theme";
 import {
   designMmH, drainStats, fillAt, fillTone, FULL_PCT, getDrainFill, getDrains, returnPeriods, setDrainage, resetDrainage,
-  SYSTEM_EXPLAIN, SYSTEM_LABEL, SYSTEM_SHORT, useDrainage,
+  OUTFALL_LABEL, SYSTEM_EXPLAIN, SYSTEM_LABEL, SYSTEM_SHORT, useDrainage,
 } from "../lib/drainage";
 import type { DrainCard, DrainFeature, DrainFill, DrainKind, DrainSystem, Outfall } from "../lib/drainage";
 import { Anchored } from "./Anchored";
@@ -24,7 +24,7 @@ import { Button } from "./controls/Button";
 const hint: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "16px" };
 const MM_PER_IN = 25.4;
 const SYSTEMS: { value: DrainSystem; label: string }[] = (["closed", "open", "mixed"] as const).map((v) => ({ value: v, label: SYSTEM_LABEL[v] }));
-const OUTFALLS: { value: Outfall; label: string }[] = [{ value: "tide", label: "Tide-limited" }, { value: "free", label: "Free" }, { value: "blocked", label: "Blocked" }];
+const OUTFALLS: { value: Outfall; label: string }[] = (["tide", "free", "blocked"] as const).map((value) => ({ value, label: OUTFALL_LABEL[value] }));
 const TYPED = "mmh";
 
 type LineKind = "open_drain" | "covered_drain" | "gutter_inferred" | "canal";

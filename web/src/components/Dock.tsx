@@ -176,12 +176,14 @@ export const ChartArea = createContext<{ aoi: string; name: string; run?: string
 const hiddenText: CSSProperties = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const BLOCKED = "Couldn't copy. Your browser blocked the clipboard.";
 
-export function ChartFigure({ title, unit, now, nowAt, ab, last, series, empty, menu, digits = 2, times, ...rest }: {
+export function ChartFigure({ title, unit, now, nowAt, ab, names, last, series, empty, menu, digits = 2, times, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
   /** Muted context after the value ("at T+01:00"): the first thing dropped when the header is tight. */
   nowAt?: string;
   /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
   ab?: ReactNode;
+  /** Compare mode: the runs' labels, in the table's column headers. */
+  names?: { a?: string; b?: string };
   /** The ⋮ button then picks which chart this slot shows. */
   menu?: ChartPick[];
   /** Decimals in the table and the CSV: the same as `now`. */
@@ -217,7 +219,7 @@ export function ChartFigure({ title, unit, now, nowAt, ab, last, series, empty, 
   const hasData = !!series && series.length > 1;
   const showTable = table && hasData;
   const reason = empty ?? "No data to show yet";
-  const data = series && hasData ? chartTable({ title, unit, digits, time: fmtT, series, ghost: rest.ghost,
+  const data = series && hasData ? chartTable({ title, unit, digits, time: fmtT, series, ghost: rest.ghost, names,
     times: times ?? series.map((_, i) => (rest.tTotal * i) / (series.length - 1)) }) : null;
   useEffect(() => {
     const el = ref.current;
@@ -478,14 +480,16 @@ function KeyEvents({ events, nowS, runId, extra }: { events: Ev[]; nowS: number;
 }
 
 /** Compare header: "A 20.81  B 3.66  −82%" at the playhead. */
-function abNow(a: number, b: number, digits: number) {
+function abNow(a: number, b: number, digits: number, names?: { a?: string; b?: string }) {
   const p = a > 0 ? Math.round((100 * (b - a)) / a) : null;
-  return (
+  const line = (
     <span style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: -2, fontWeight: 600, whiteSpace: "nowrap", ...FIG }}>
       <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>A {a.toFixed(digits)}</span>B {b.toFixed(digits)}
       {p != null && <span style={{ color: p < 0 ? "var(--verified)" : p > 0 ? "var(--hazard)" : "var(--ink-muted)" }}>{p > 0 ? "+" : p < 0 ? "−" : ""}{Math.abs(p)}%</span>}
     </span>
   );
+  // Which run is A and which is B: their labels, in a tooltip (the line itself stays short).
+  return names?.a && names?.b ? <Tooltip text={`A: ${names.a}. B: ${names.b}.`}>{line}</Tooltip> : line;
 }
 
 type RainStorm = { total_mm: number; duration_h: number; pattern?: "uniform" | "front_loaded" | "center_peaked" };
@@ -548,9 +552,10 @@ const dockShell = (layout: DockLayout): CSSProperties => (layout === "row"
   : { display: "flex", flexDirection: "column", background: "var(--surface)", minHeight: 0, border: layout === "extras" ? "1px solid var(--hairline)" : undefined,
     borderRadius: layout === "extras" ? 6 : undefined, overflow: layout === "extras" ? "hidden" : undefined });
 
-export function Dock({ storm, run, series, ghost, third, thirdLabel, side, note, layout = "row" }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+export function Dock({ storm, run, series, ghost, names, third, thirdLabel, side, note, layout = "row" }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
   layout?: DockLayout;
   /** Compare mode: run A, drawn under `run` (B) in the charts. */ ghost?: RunManifest;
+  /** Compare mode: the runs' labels (lib/runlabel.ts), for the A / B line's tooltip and the table headers. */ names?: { a?: string; b?: string };
   /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. The third chart
    *  is given the slot's "Choose chart" picks when the dock has room for fewer than three. */
   third?: ReactNode | ((menu?: ChartPick[]) => ReactNode); /** The third chart's name in the pickers. */ thirdLabel?: string;
@@ -634,9 +639,9 @@ export function Dock({ storm, run, series, ghost, third, thirdLabel, side, note,
   const thirdMenu = ds ? [{ label: label.dn, on: thirdPick === "drains", onPick: () => { setThirdPick("drains"); writeSlots(["fa", "rk", "dn"]); } },
     { label: label.dp, on: thirdPick !== "drains", onPick: () => { setThirdPick("depth"); writeSlots(["fa", "rk", "dp"]); } }] : undefined;
   const chart = (k: SlotKey, last: boolean, menu?: ChartPick[]): ReactNode => {
-    if (k === "fa") return <ChartFigure key="fa" last={last} title="Flooded area" unit="km²" digits={2} now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} menu={menu} {...common}
+    if (k === "fa") return <ChartFigure key="fa" names={ghost ? names : undefined} last={last} title="Flooded area" unit="km²" digits={2} now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2, names)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} menu={menu} {...common}
       aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />;
-    if (k === "rk") return <ChartFigure key="rk" last={last} title="Roads impassable" unit="km" digits={1} now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} menu={menu} {...common}
+    if (k === "rk") return <ChartFigure key="rk" names={ghost ? names : undefined} last={last} title="Roads impassable" unit="km" digits={1} now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1, names)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} menu={menu} {...common}
       aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />;
     if (k === "x") return <div key="x" style={{ display: "flex", flexDirection: "column", minWidth: 0, borderRight: last ? undefined : "1px solid var(--hairline)" }}>{typeof third === "function" ? third(menu) : third}</div>;
     if (k === "dn" && ds) return <ChartFigure key="dn" last={last} title="Drain network running full" unit="%" digits={0} now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)}`} nowAt={`at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}

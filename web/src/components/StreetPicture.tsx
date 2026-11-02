@@ -14,13 +14,13 @@ import {
   aboutMetres, clockText, DRY, fitBox, imageUrl, isDryInBoth, legendLine, makingNote, metres, mismatchNote, openLarge, renderLink, renderProblem,
   sourceNote, useLarge,
 } from "../lib/streetpic";
-import type { RenderResult, RenderView, StreetProblem } from "../lib/streetpic";
+import type { RenderResult, RenderView, RunNames, StreetProblem } from "../lib/streetpic";
 import { Card, FIG, Segmented, srOnly } from "./rev5";
 import { Button } from "./controls/Button";
 import { TextField } from "./controls/TextField";
 import { LockoutNote } from "./LockoutNote";
 import { Notice } from "./Notice";
-import { runWhat } from "./Compare";
+import { runLabel } from "../lib/runlabel";
 
 const row: CSSProperties = { display: "flex", justifyContent: "space-between", gap: 12 };
 const label: CSSProperties = { color: "var(--ink-muted)" };
@@ -85,11 +85,13 @@ function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: R
   return size ? swipe : <div style={{ display: "flex", justifyContent: "center", borderRadius: "var(--radius-sm)", background: "var(--ground)" }}>{swipe}</div>;
 }
 
-/** "A · Baseline" from the run, or "A" while the run is loading (a link opened without Compare). */
-const side = (letter: "A" | "B", m?: RunManifest) => (m ? `${letter} · ${runWhat(m)}` : letter);
+/** "A · Baseline · 120 mm / 3 h": Compare's label for the run (its own label when opened from a link), or "A" while the
+ *  run is loading. */
+const name = (m?: RunManifest, given?: string) => (m ? given ?? runLabel(m) : undefined);
+const side = (letter: "A" | "B", m?: RunManifest, given?: string) => (m ? `${letter} · ${name(m, given)}` : letter);
 
 /** The made pair: swipe, what it is, model vs picture depths, the mismatch note, the changes, Open large and Copy link. */
-function Made({ r, a, b }: { r: RenderResult; a?: RunManifest; b?: RunManifest }) {
+function Made({ r, a, b, names }: { r: RenderResult; a?: RunManifest; b?: RunManifest; names?: RunNames }) {
   const [copied, setCopied] = useState<"yes" | "no" | null>(null);
   const off = mismatchNote(r);
   const changes = [...(r.changes_here ?? []), ...(r.changes_elsewhere ?? [])];
@@ -132,7 +134,7 @@ function Made({ r, a, b }: { r: RenderResult; a?: RunManifest; b?: RunManifest }
         </ul>
       )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <Button variant="raised" data-street-main="" onClick={() => openLarge(r, { a, b })} style={btn}><ArrowsOut size={14} aria-hidden="true" />Open large</Button>
+        <Button variant="raised" data-street-main="" onClick={() => openLarge(r, { a, b, names })} style={btn}><ArrowsOut size={14} aria-hidden="true" />Open large</Button>
         <Button variant="raised" onClick={copy} style={btn}><Copy size={14} aria-hidden="true" />Copy link</Button>
         <span role="status" style={note}>{copied === "yes" ? "Link copied" : copied === "no" ? "Could not copy the link" : ""}</span>
       </div>
@@ -140,7 +142,7 @@ function Made({ r, a, b }: { r: RenderResult; a?: RunManifest; b?: RunManifest }
   );
 }
 
-export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunManifest; b: RunManifest }) {
+export function StreetPictureCard({ aoi, a, b, names }: { aoi?: AOIManifest; a: RunManifest; b: RunManifest; /** Compare's labels for A and B. */ names?: RunNames }) {
   const spot = usePinnedSpot();
   const touch = useTouch();
   const lock = useLockout();
@@ -247,13 +249,13 @@ export function StreetPictureCard({ aoi, a, b }: { aoi?: AOIManifest; a: RunMani
               <div><Button variant="raised" data-street-main="" onClick={() => { setStopped(true); ctl.current?.abort(); }} style={btn}><Square size={12} weight="fill" aria-hidden="true" />Stop</Button></div>
             </>
           ) : phase === "made" && result ? (
-            <Made r={result} a={a} b={b} />
+            <Made r={result} a={a} b={b} names={names} />
           ) : (
             <>
               <span style={note}>See this spot as a street picture, before and after your change. The model draws the water at the depth the simulation found.</span>
               <div style={row}><span style={label}>Spot</span><span style={value}>{place ?? `${spot.lat.toFixed(5)}, ${spot.lon.toFixed(5)}`}</span></div>
-              <div style={row}><span style={label}>Before</span><span style={value}>{side("A", a)}</span></div>
-              <div style={row}><span style={label}>After</span><span style={value}>{side("B", b)}</span></div>
+              <div style={row}><span style={label}>Before</span><span style={value}>{side("A", a, names?.a)}</span></div>
+              <div style={row}><span style={label}>After</span><span style={value}>{side("B", b, names?.b)}</span></div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={{ ...note, fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase" }}>View</span>
                 <Segmented<RenderView> options={[{ value: "street", label: "Street" }, { value: "window", label: "From a window" }]} active={view} onChange={setView} />
@@ -328,14 +330,14 @@ export function StreetLarge() {
     if (from?.isConnected) from.focus();
   }
   const where = r!.place ?? "This spot";
-  if (phone) return <PhoneLarge r={r} runs={runs} where={where} close={close} shut={shut} />;
-  return <DesktopLarge r={r} runs={runs} where={where} close={close} shut={shut} />;
+  if (phone) return <PhoneLarge r={r} runs={runs} names={open?.names} where={where} close={close} shut={shut} />;
+  return <DesktopLarge r={r} runs={runs} names={open?.names} where={where} close={close} shut={shut} />;
 }
 
 const LARGE_MAX_W = 1040, LARGE_GUTTER = 16, LARGE_PAD = 14;
 /** The desktop large view: a dialog over the page with the picture as large as the window allows at its own aspect. */
-function DesktopLarge({ r, runs, where, close, shut }: {
-  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
+function DesktopLarge({ r, runs, names, where, close, shut }: {
+  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; names?: RunNames; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
 }) {
   const head = useRef<HTMLDivElement>(null);
   const [win, setWin] = useState({ w: window.innerWidth, h: window.innerHeight, head: 0 });
@@ -365,8 +367,8 @@ function DesktopLarge({ r, runs, where, close, shut }: {
             style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)" }}><X size={16} aria-hidden="true" /></Button>
         </div>
         <div style={{ padding: LARGE_PAD, display: "flex", justifyContent: "center" }}>
-          {size.w > 0 && <BeforeAfter large r={r} size={size} beforeLabel={`Before · ${side("A", runs.a)} · model ${metres(r.before.depth_m)}`}
-            afterLabel={`After · ${side("B", runs.b)} · model ${metres(r.after.depth_m)}`} />}
+          {size.w > 0 && <BeforeAfter large r={r} size={size} beforeLabel={`Before · ${side("A", runs.a, names?.a)} · model ${metres(r.before.depth_m)}`}
+            afterLabel={`After · ${side("B", runs.b, names?.b)} · model ${metres(r.after.depth_m)}`} />}
         </div>
       </div>
     </div>
@@ -375,8 +377,8 @@ function DesktopLarge({ r, runs, where, close, shut }: {
 
 /** The phone's large view: the whole screen on the ground colour, the title and Close on top, the picture as large as it
  *  fits at its own aspect ratio (short side labels on it), and each side's run and model depth in a legend under it. */
-function PhoneLarge({ r, runs, where, close, shut }: {
-  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
+function PhoneLarge({ r, runs, names, where, close, shut }: {
+  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; names?: RunNames; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
 }) {
   const room = useRef<HTMLDivElement>(null);
   const [roomSize, setRoomSize] = useState({ w: 0, h: 0 });
@@ -406,8 +408,8 @@ function PhoneLarge({ r, runs, where, close, shut }: {
         {size.w > 0 && <BeforeAfter large r={r} size={size} beforeLabel="Before · A" afterLabel="After · B" />}
       </div>
       <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 10px", margin: "0 16px 16px" }}>
-        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>Before</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("A", runs.a && runWhat(runs.a), r.before.depth_m)}</dd>
-        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>After</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("B", runs.b && runWhat(runs.b), r.after.depth_m)}</dd>
+        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>Before</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("A", name(runs.a, names?.a), r.before.depth_m)}</dd>
+        <dt style={{ ...note, fontSize: 13, lineHeight: "18px" }}>After</dt><dd style={{ ...legend, margin: 0 }}>{legendLine("B", name(runs.b, names?.b), r.after.depth_m)}</dd>
       </dl>
     </div>
   );
