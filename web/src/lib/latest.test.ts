@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestOnly } from "./latest";
+import { latestOnly, newerOnly } from "./latest";
 
 describe("latestOnly", () => {
   it("keeps only the newest read current", () => {
@@ -19,5 +19,39 @@ describe("latestOnly", () => {
     const moved = pinTap();  // another tap moves the pin
     expect(pin()).toBe(false);
     expect(moved()).toBe(true);
+  });
+});
+
+describe("newerOnly", () => {
+  it("applies replies that arrive in order, even while later reads are pending", () => {
+    const g = newerOnly();
+    const a = g.start(), b = g.start(), c = g.start();
+    expect(a()).toBe(true);
+    expect(b()).toBe(true);
+    expect(c()).toBe(true);
+  });
+
+  it("drops an older reply that arrives after a newer one applied", () => {
+    const g = newerOnly();
+    const a = g.start(), b = g.start();
+    expect(b()).toBe(true);
+    expect(a()).toBe(false);
+  });
+
+  it("a reply applies once", () => {
+    const g = newerOnly();
+    const a = g.start();
+    expect(a()).toBe(true);
+    expect(a()).toBe(false);
+  });
+
+  it("a reset drops every pending reply; reads after it apply", () => {
+    const g = newerOnly();
+    const a = g.start(), b = g.start();
+    g.reset();
+    expect(b()).toBe(false);
+    expect(a()).toBe(false);
+    const c = g.start();
+    expect(c()).toBe(true);
   });
 });
