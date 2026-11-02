@@ -23,8 +23,8 @@ export function PhotorealChip({ phone = false, style }: { phone?: boolean; style
   if (!down || lay.photorealChipDismissed) return null;
   return (
     <div {...(phone ? { "data-declutter-phone": "" } : { "data-declutter-block": "" })} style={{ ...chip, ...style }}>
-      <span role="status">3D city unavailable · showing aerial</span>
-      <Tooltip text={downText(down.kind)}>
+      <span role="status">3D city unavailable · {lay.aerial === "osm" ? "street map" : "showing aerial"}</span>
+      <Tooltip text={downText(down.kind, lay.aerial === "osm")}>
         <Button variant="icon" aria-label="Why" style={iconBtn}><Info size={14} weight="bold" aria-hidden="true" /></Button>
       </Tooltip>
       <Button variant="text" onClick={focusBasemap} style={{ padding: "0 4px", border: 0, background: "transparent", font: "inherit", fontWeight: 600, color: "var(--ink)", cursor: "pointer" }}>Details</Button>

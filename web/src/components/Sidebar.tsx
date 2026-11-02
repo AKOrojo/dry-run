@@ -125,12 +125,14 @@ function AerialSourceRow() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 14px 0", fontSize: 12, color: "var(--ink-muted)", opacity: aerial ? 1 : 0.45 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        Aerial
+        {lay.ionDown ? "Street map" : "Aerial"}
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
-          {(["bing", "google"] as const).map((a) => (
-            <Tooltip key={a} text={a === "bing" ? "Bing aerial imagery, for everyone" : "Google satellite imagery, for judges (needs the judge key)"}><CtlButton variant="segment" pressed={lay.aerial === a} type="button" disabled={!aerial} onClick={() => pick(a)} style={seg(lay.aerial === a)}>
-              {a === "bing" ? "Bing" : "Google"}</CtlButton></Tooltip>
-          ))}
+          {/* With ion down the first choice is the street map that stands in for Bing (lib/layers.ts resolveAerial). */}
+          {(["bing", "google"] as const).map((a) => {
+            const on = lay.aerial === a || (a === "bing" && lay.aerial === "osm");
+            return <Tooltip key={a} text={a === "google" ? "Google satellite imagery, for judges (needs the judge key)" : lay.ionDown ? "OpenStreetMap street map, while aerial imagery is unavailable" : "Bing aerial imagery, for everyone"}><CtlButton variant="segment" pressed={on} type="button" disabled={!aerial} onClick={() => pick(a)} style={seg(on)}>
+              {a === "google" ? "Google" : lay.ionDown ? "Street map" : "Bing"}</CtlButton></Tooltip>;
+          })}
         </span>
       </div>
       {lay.aerialNote && <span role="status" style={{ color: needKey ? "var(--ink)" : "var(--ink-muted)" }}>{lay.aerialNote}</span>}
@@ -151,6 +153,7 @@ function AerialSourceRow() {
 /** Under Base map when Google's 3D tiles failed: why the map is aerial, and Try 3D again once it may work (never for a
  *  refused key; after Retry-After or 10 min for the daily limit; at once otherwise). */
 function PhotorealDownRow({ down }: { down: PhotorealDown }) {
+  const street = useLayers().aerial === "osm";
   const [, tick] = useState(0);
   const wait = down.retryAt - Date.now();
   useEffect(() => {
@@ -161,8 +164,8 @@ function PhotorealDownRow({ down }: { down: PhotorealDown }) {
   const ready = !isDown(down);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "6px 14px 0", fontSize: 12, lineHeight: "16px" }}>
-      <span role="status" style={{ color: "var(--ink)" }}>{downText(down.kind)}</span>
-      {down.kind !== "key" && (
+      <span role="status" style={{ color: "var(--ink)" }}>{downText(down.kind, street)}</span>
+      {down.retryAt !== Infinity && (
         <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)" }}>
           <CtlButton variant="text" type="button" disabled={!ready} onClick={() => { setPhotorealDown(null); setBasemap("photoreal"); }}
             style={{ padding: 0, border: 0, background: "transparent", font: "inherit", fontWeight: 600, color: ready ? "var(--ink)" : "var(--ink-muted)", cursor: ready ? "pointer" : "default" }}>Try 3D again</CtlButton>
@@ -216,14 +219,16 @@ function LayersCard({ aoiId, runId }: { aoiId?: string; runId?: string }) {
           {(["photoreal", "aerial"] as const).map((m) => {
             const on = lay.basemap === m;
             const off = m === "photoreal" && photorealOff;
-            return <Tooltip key={m} text={m === "photoreal" ? (off && lay.photorealDown ? downText(lay.photorealDown.kind) : "Google Photorealistic 3D Tiles") : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" disabled={off} onClick={() => setBasemap(m)}
+            const osm = m === "aerial" && lay.aerial === "osm";
+            return <Tooltip key={m} text={m === "photoreal" ? (off && lay.photorealDown ? downText(lay.photorealDown.kind, lay.aerial === "osm") : "Google Photorealistic 3D Tiles") : osm ? "OpenStreetMap street map (aerial imagery is unavailable right now); shows every building by depth" : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" disabled={off} onClick={() => setBasemap(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
-              {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</CtlButton></Tooltip>;
+              {m === "photoreal" ? "Photoreal 3D" : osm ? "Street map" : "Aerial"}</CtlButton></Tooltip>;
           })}
         </span>
       </div>
       {lay.photorealDown && <PhotorealDownRow down={lay.photorealDown} />}
-      {lay.googleAvailable && <AerialSourceRow />}
+      {lay.googleAvailable ? <AerialSourceRow /> : lay.aerial === "osm" && lay.aerialNote && (
+        <span role="status" style={{ padding: "6px 14px 0", fontSize: 12, color: "var(--ink-muted)" }}>{lay.aerialNote}</span>)}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", fontSize: 12, color: "var(--ink-muted)", opacity: lay.basemap === "aerial" ? 1 : 0.45 }}>
         Imagery
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
