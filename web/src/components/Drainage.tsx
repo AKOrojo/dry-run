@@ -6,6 +6,7 @@ import * as Cesium from "cesium";
 import { Info, ListBullets, Drop } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { useLayers } from "../lib/layers";
+import { perTheme, useTheme } from "../lib/theme";
 import {
   designMmH, drainStats, fillAt, fillTone, FULL_PCT, getDrainFill, getDrains, returnPeriods, setDrainage, resetDrainage,
   SYSTEM_EXPLAIN, SYSTEM_LABEL, SYSTEM_SHORT, useDrainage,
@@ -205,11 +206,14 @@ function densify(p: LL[]): LL[] {
 
 const llKey = (q: LL) => `${q[0].toFixed(6)},${q[1].toFixed(6)}`;
 
-const cssColor = (name: string) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+// Token colours are read once per theme: a time step recolours hundreds of lines, and each style read can force a recalc.
+const cssColor = perTheme((name) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim()));
 const toneColor = (pct: number | null | undefined) => { const t = fillTone(pct); return cssColor(t.token).withAlpha(t.alpha); };
 /** Tone bucket of a fill (0 = no fill yet): lines only rebuild when a bucket changes. */
 const bucketOf = (pct: number | null | undefined) => (pct == null ? 0 : pct < 40 ? 1 : pct < 80 ? 2 : pct < FULL_PCT ? 3 : 4);
 const BUCKET_PCT = [null, 0, 40, 80, FULL_PCT];
+// Recolouring budget per frame: short while time steps keep coming, longer (still under the 50 ms long-task line) otherwise.
+const CHUNK_PLAY_MS = 2, CHUNK_IDLE_MS = 40, PLAY_GAP_MS = 1000;
 /** No fill yet (before a run, or a line the run has no fill for): muted ink, gutters thinner still; full strength
  *  only once the fill colours apply. */
 const mutedColor = (kind: LineKind) => cssColor("--ink").withAlpha(kind === "gutter_inferred" ? 0.35 : 0.5);
@@ -317,13 +321,20 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     return () => { off = true; };
   }, [show, photoreal, viewer, lines, zones, inlets, outfalls]);
 
-  // Lines (with a ground-coloured halo) and sewer-zone fills, rebuilt when a tone bucket changes.
+  // Lines (with a ground-coloured halo) and sewer-zone fills. The geometry is built once per network and basemap; a time
+  // step only flips per-instance show and colour for the lines and zones whose tone bucket changed (rebuilding the
+  // ground polylines every step stalled playback for seconds).
   const prev = useRef<Cesium.PrimitiveCollection>();
+  const tone = useRef<{ apply: (pct: Map<string, number> | null) => void } | null>(null);
+  const pctRef = useRef(pctOf);
+  pctRef.current = pctOf;
+  // Line colours live in materials and instance attributes: a theme switch rebuilds the layer in the new tokens.
+  const theme = useTheme();
   useEffect(() => {
-    const drop = () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
+    const drop = () => { tone.current = null; if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
     if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
     if (photoreal && !heights) return;
-    let live = true;
+    let live = true, stop = () => {};
     const ready = photoreal ? Promise.resolve() : Promise.all([Cesium.GroundPolylinePrimitive.initializeTerrainHeights(), Cesium.GroundPrimitive.initializeTerrainHeights()]);
     ready.then(() => {
       if (!live || viewer.isDestroyed()) return;
@@ -333,40 +344,148 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       const col = new Cesium.PrimitiveCollection();
       const ground = cssColor("--ground").withAlpha(0.75);
       const material = (c: Cesium.Color, dash?: boolean) => dash ? Cesium.Material.fromType("PolylineDash", { color: c, gapColor: Cesium.Color.TRANSPARENT, dashLength: 14 }) : Cesium.Material.fromType("Color", { color: c });
-      const add = (parts: LL[][], width: number, c: Cesium.Color, dash?: boolean) => {
-        if (!parts.length) return;
-        if (photoreal) {
-          const insts = parts.map((p) => new Cesium.GeometryInstance({ geometry: new Cesium.PolylineGeometry({ positions: lift(p), width, arcType: Cesium.ArcType.NONE, vertexFormat: Cesium.PolylineMaterialAppearance.VERTEX_FORMAT }) }));
-          col.add(new Cesium.Primitive({ geometryInstances: insts, asynchronous: false, appearance: new Cesium.PolylineMaterialAppearance({ material: material(c, dash) }),
-            depthFailAppearance: new Cesium.PolylineMaterialAppearance({ material: material(c.withAlpha(c.alpha * 0.45), dash) }) }));
-        } else {
-          const insts = parts.map((p) => new Cesium.GeometryInstance({ geometry: new Cesium.GroundPolylineGeometry({ positions: Cesium.Cartesian3.fromDegreesArray(p.flat()), width }) }));
-          col.add(new Cesium.GroundPolylinePrimitive({ geometryInstances: insts, asynchronous: false, appearance: new Cesium.PolylineMaterialAppearance({ material: material(c, dash) }) }));
+      const pct0 = pctRef.current;
+      const b0 = (id: string) => bucketOf(pct0?.get(id));
+      // One primitive holding every item (all its parts), each part an instance "<tag>:<item id>:<k>" with a show flag and,
+      // for `perColor`, its own colour; otherwise one colour (and dash) for the whole primitive.
+      type Attrs = { show?: Uint8Array; color?: Uint8Array; depthFailColor?: Uint8Array };
+      type Prim = { prim: Cesium.Primitive | Cesium.GroundPolylinePrimitive | Cesium.GroundPrimitive; ids: Map<string, string[]> };
+      const built: Prim[] = [];
+      let tags = 0;
+      const linePrim = (items: { id: string; parts: LL[][] }[], width: number, look: { color: Cesium.Color; dash?: boolean } | { perColor: (id: string) => Cesium.Color },
+        visible: (id: string) => boolean): Prim | null => {
+        const tag = String(tags++), ids = new Map<string, string[]>(), insts: Cesium.GeometryInstance[] = [];
+        const per = "perColor" in look;
+        for (const it of items) it.parts.forEach((p, k) => {
+          const id = `${tag}:${it.id}:${k}`;
+          ids.set(it.id, [...(ids.get(it.id) ?? []), id]);
+          const attributes: Record<string, unknown> = { show: new Cesium.ShowGeometryInstanceAttribute(visible(it.id)) };
+          if (per) {
+            const c = look.perColor(it.id);
+            attributes.color = Cesium.ColorGeometryInstanceAttribute.fromColor(c);
+            if (photoreal) attributes.depthFailColor = Cesium.ColorGeometryInstanceAttribute.fromColor(c.withAlpha(c.alpha * 0.45));
+          }
+          insts.push(new Cesium.GeometryInstance({ id, attributes, geometry: photoreal
+            ? new Cesium.PolylineGeometry({ positions: lift(p), width, arcType: Cesium.ArcType.NONE, vertexFormat: per ? Cesium.PolylineColorAppearance.VERTEX_FORMAT : Cesium.PolylineMaterialAppearance.VERTEX_FORMAT })
+            : new Cesium.GroundPolylineGeometry({ positions: Cesium.Cartesian3.fromDegreesArray(p.flat()), width }) }));
+        });
+        if (!insts.length) return null;
+        const appearance = per ? new Cesium.PolylineColorAppearance() : new Cesium.PolylineMaterialAppearance({ material: material(look.color, look.dash) });
+        const prim = photoreal
+          ? new Cesium.Primitive({ geometryInstances: insts, asynchronous: false, appearance,
+              depthFailAppearance: per ? new Cesium.PolylineColorAppearance() : new Cesium.PolylineMaterialAppearance({ material: material(look.color.withAlpha(look.color.alpha * 0.45), look.dash) }) })
+          : new Cesium.GroundPolylinePrimitive({ geometryInstances: insts, asynchronous: false, appearance });
+        col.add(prim);
+        built.push({ prim, ids });
+        return { prim, ids };
+      };
+      const outlineColor = (b: number) => (b ? toneColor(BUCKET_PCT[b]).withAlpha(0.35) : cssColor("--ink").withAlpha(0.2));
+      // Zones: a translucent fill in the tone of their storage (it carries the meaning) and a hairline outline.
+      const zoneIds = new Map<string, string[]>();
+      const zoneInsts = zones.flatMap((z) => z.parts.map((ring, k) => {
+        const id = `zone:${z.id}:${k}`;
+        zoneIds.set(z.id, [...(zoneIds.get(z.id) ?? []), id]);
+        return new Cesium.GeometryInstance({ id,
+          geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(ring.flat())) }),
+          attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(toneColor(pct0?.get(z.id) ?? null).withAlpha(0.2)) } });
+      }));
+      const zoneFill = zoneInsts.length ? new Cesium.GroundPrimitive({ geometryInstances: zoneInsts, asynchronous: false, classificationType: photoreal ? Cesium.ClassificationType.BOTH : Cesium.ClassificationType.TERRAIN,
+        appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }) }) : null;
+      const fillPrim: Prim | null = zoneFill ? { prim: zoneFill, ids: zoneIds } : null;
+      if (zoneFill && fillPrim) { col.add(zoneFill); built.push(fillPrim); }
+      const zoneLine = linePrim(zones, 1, { perColor: (id) => outlineColor(b0(id)) }, () => true);
+      // Per kind (thin gutters first, canals on top): unfilled lines muted; filled ones over a halo, in their tone. A dashed
+      // kind keeps one primitive per tone (the dash is a material), the others colour each line.
+      const kinds = [...LINE_KINDS].reverse().map((kind) => {
+        const st = LINE_STYLE[kind], ls = lines.filter((l) => l.kind === kind);
+        if (!ls.length) return null;
+        const muted = linePrim(ls, mutedWidth(kind), { color: mutedColor(kind), dash: st.dash }, (id) => b0(id) === 0);
+        const halo = linePrim(ls, st.width + 3, { color: ground }, (id) => b0(id) > 0);
+        const toned = st.dash
+          ? [1, 2, 3, 4].map((b) => linePrim(ls, st.width, { color: toneColor(BUCKET_PCT[b]), dash: true }, (id) => b0(id) === b))
+          : [linePrim(ls, st.width, { perColor: (id) => toneColor(BUCKET_PCT[Math.max(1, b0(id))]) }, (id) => b0(id) > 0)];
+        return { ls, muted, halo, toned, dash: !!st.dash };
+      }).filter((k): k is NonNullable<typeof k> => k != null);
+
+      const seen = new Map<string, number>();
+      [...lines, ...zones].forEach((x) => seen.set(x.id, b0(x.id)));
+      // Reading an attribute allocates a fresh array, so values are written from scratch arrays instead.
+      const showV = new Uint8Array(1), colorV = new Uint8Array(4), failV = new Uint8Array(4);
+      const set = (pr: Prim | null, id: string, on: boolean | null, c?: Cesium.Color) => {
+        const iids = pr?.ids.get(id);
+        if (!iids) return;
+        if (on != null) Cesium.ShowGeometryInstanceAttribute.toValue(on, showV);
+        if (c) { Cesium.ColorGeometryInstanceAttribute.toValue(c, colorV); Cesium.ColorGeometryInstanceAttribute.toValue(c.withAlpha(c.alpha * 0.45), failV); }
+        for (const iid of iids) {
+          // Looked up each time: attribute objects kept from the first ready frame were seen to go stale (writes dropped).
+          const a = pr!.prim.getGeometryInstanceAttributes(iid) as Attrs | undefined;
+          if (!a) continue;
+          if (on != null) a.show = showV;
+          if (c && a.color) a.color = colorV;
+          if (c && a.depthFailColor) a.depthFailColor = failV;
         }
       };
-      // Zones: a translucent fill in the tone of their storage (it carries the meaning) and a hairline outline.
-      const zoneInsts = zones.flatMap((z) => z.parts.map((ring) => new Cesium.GeometryInstance({
-        geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(ring.flat())) }),
-        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(toneColor(pctOf?.get(z.id) ?? null).withAlpha(0.2)) } })));
-      if (zoneInsts.length) col.add(new Cesium.GroundPrimitive({ geometryInstances: zoneInsts, asynchronous: false, classificationType: photoreal ? Cesium.ClassificationType.BOTH : Cesium.ClassificationType.TERRAIN,
-        appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }) }));
-      const byBucket = (xs: { id: string }[]) => { const m = new Map<number, typeof xs>(); xs.forEach((x) => { const b = bucketOf(pctOf?.get(x.id)); m.set(b, [...(m.get(b) ?? []), x]); }); return m; };
-      byBucket(zones).forEach((zs, b) => add((zs as Zone[]).flatMap((z) => z.parts), 1, b ? toneColor(BUCKET_PCT[b]).withAlpha(0.35) : cssColor("--ink").withAlpha(0.2)));
-      // Unfilled lines muted; filled ones over a halo, by tone (thin gutters first, canals on top).
-      for (const kind of [...LINE_KINDS].reverse()) {
-        const st = LINE_STYLE[kind], groups = byBucket(lines.filter((l) => l.kind === kind));
-        add(((groups.get(0) ?? []) as Line[]).flatMap((l) => l.parts), mutedWidth(kind), mutedColor(kind), st.dash);
-        const filled = [...groups].filter(([b]) => b > 0);
-        add(filled.flatMap(([, ls]) => (ls as Line[]).flatMap((l) => l.parts)), st.width + 3, ground);
-        filled.forEach(([b, ls]) => add((ls as Line[]).flatMap((l) => l.parts), st.width, toneColor(BUCKET_PCT[b]), st.dash));
-      }
+      // One flat list, diffed in time-boxed chunks: Lagos has ~14k lines, and a busy step flips thousands of instances.
+      type Item = { id: string; k: (typeof kinds)[number] | null };
+      const items: Item[] = [...kinds.flatMap((k) => k.ls.map((l) => ({ id: l.id, k }))), ...zones.map((z) => ({ id: z.id, k: null }))];
+      let target: Map<string, number> | null = null, cursor = 0, left = 0, budget = CHUNK_PLAY_MS, lastAt = -Infinity;
+      let waiting: (() => void) | null = null, frame = 0;
+      stop = () => { if (frame) cancelAnimationFrame(frame); waiting?.(); waiting = null; };
+      const write = (it: Item, pct: Map<string, number> | null) => {
+        const b = bucketOf(pct?.get(it.id)), was = seen.get(it.id) ?? 0;
+        if (was === b) return false;
+        seen.set(it.id, b);
+        const k = it.k;
+        if (!k) {
+          set(zoneLine, it.id, true, outlineColor(b));
+          set(fillPrim, it.id, null, toneColor(pct?.get(it.id) ?? null).withAlpha(0.2));
+          return true;
+        }
+        // Only the primitives whose state flips are written.
+        if ((was === 0) !== (b === 0)) { set(k.muted, it.id, b === 0); set(k.halo, it.id, b > 0); }
+        if (k.dash) { if (was) set(k.toned[was - 1], it.id, false); if (b) set(k.toned[b - 1], it.id, true); }
+        else set(k.toned[0], it.id, (was === 0) !== (b === 0) ? b > 0 : null, b ? toneColor(BUCKET_PCT[b]) : undefined);
+        return true;
+      };
+      const run = () => {
+        frame = 0;
+        if (!live || viewer.isDestroyed() || !items.length) return;
+        // Attributes exist once each primitive has had its first update: until then, run after the next frame.
+        if (!built.every((p) => p.prim.ready)) {
+          if (!waiting) { waiting = viewer.scene.postRender.addEventListener(() => { waiting?.(); waiting = null; run(); }); viewer.scene.requestRender(); }
+          return;
+        }
+        const t0 = performance.now(); let changed = false;
+        while (left > 0) {
+          changed = write(items[cursor], target) || changed;
+          cursor = (cursor + 1) % items.length;
+          if (--left % 64 === 0 && performance.now() - t0 > budget) break;
+        }
+        if (changed) viewer.scene.requestRender();
+        if (left > 0) frame = requestAnimationFrame(run);
+      };
+      const apply = (pct: Map<string, number> | null) => {
+        // Steps arriving close together (playback, scrubbing) get a short slice per frame; an isolated change, such as
+        // the fill arriving, takes longer slices so it lands within a few frames.
+        const now = performance.now();
+        budget = now - lastAt < PLAY_GAP_MS ? CHUNK_PLAY_MS : CHUNK_IDLE_MS;
+        lastAt = now;
+        target = pct;
+        left = items.length;  // a newer step restarts the pass from wherever the last one stopped
+        if (frame) cancelAnimationFrame(frame);
+        run();
+      };
       drop();
       viewer.scene.primitives.add(col);
       prev.current = col;
+      tone.current = { apply };
+      apply(pctRef.current);  // the fill may have moved on while this was building
       viewer.scene.requestRender();
     }).catch(() => { /* terrain heights unavailable: no drains drawn */ });
-    return () => { live = false; };
-  }, [show, viewer, lines, zones, toneKey, basemap, heights]);  // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { live = false; stop(); };
+  }, [show, viewer, lines, zones, basemap, heights, theme]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // A time step: only the tones change.
+  useEffect(() => { tone.current?.apply(pctOf); }, [toneKey]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); }, [viewer]);
 
   // Inlets: small dots, only at street scale (the points outside the view are culled by Cesium).
@@ -394,7 +513,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     s.postRender.addEventListener(near);
     s.requestRender();
     return () => { if (!s.isDestroyed()) { s.postRender.removeEventListener(near); s.primitives.remove(pts); } };
-  }, [show, viewer, inlets, photoreal, heights]);
+  }, [show, viewer, inlets, photoreal, heights, theme]);
 
   // Outfall marks as billboards (hundreds of them; DOM marks would be re-placed every frame).
   useEffect(() => {
@@ -411,7 +530,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     s.primitives.add(bb);
     s.requestRender();
     return () => { if (!s.isDestroyed()) s.primitives.remove(bb); };
-  }, [show, viewer, outfalls, photoreal, heights]);
+  }, [show, viewer, outfalls, photoreal, heights, theme]);
 
   // The view (for labels and chips) and the zone under the cursor.
   const [cam, setCam] = useState<{ rect: [number, number, number, number] | null; h: number }>({ rect: null, h: Infinity });
