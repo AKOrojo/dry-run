@@ -6,6 +6,7 @@ import type { RunEvents, RunManifest } from "../lib/api";
 import { setFocus } from "../lib/focus";
 import { useExtras } from "../lib/extras";
 import { clock, useClock } from "../lib/clock";
+import { scrubKey } from "../lib/scrub";
 import { addNote, removeNote, useNotes } from "../lib/notes";
 import { fmtT } from "./ds";
 import { depthByPlace, hyetograph, isCell, useRain } from "../lib/rain";
@@ -336,6 +337,12 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
     const r = track.current!.getBoundingClientRect();
     clock.set({ t_s: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * durS, playing: false });
   };
+  // Keyboard: the same keys as the phone player's scrubber (lib/scrub.ts).
+  const [ring, setRing] = useState(false);
+  const onKey = (e: React.KeyboardEvent) => {
+    const to = scrubKey(e.key, nowS, durS);
+    if (to !== null) { e.preventDefault(); clock.set({ t_s: to, playing: false }); }
+  };
   const frames = ts.t_s.length;
   const stepMin = frames > 1 ? Math.round((ts.t_s[1] - ts.t_s[0]) / 60) : 0;
   const fa = ts.flooded_area_km2, fmax = Math.max(...fa, 1e-9);
@@ -363,8 +370,13 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
           <Button variant="raised" type="button" aria-label="Playback speed" onClick={() => clock.set({ speed: SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] })}
             style={{ ...sq, gap: 6, padding: "0 8px 0 10px", ...raisedButton, font: "inherit", ...FIG }}>{speed}×<CaretDown size={12} weight="bold" color="var(--ink-muted)" /></Button>
         </div>
-        <div ref={track} onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seek(e); }}
-          onPointerMove={(e) => { if (e.buttons) seek(e); }} style={{ position: "relative", height: 66, cursor: "pointer", touchAction: "none" }}>
+        <div ref={track} role="slider" tabIndex={0} aria-label="Time in the run" aria-valuemin={0} aria-valuemax={Math.round(durS)} aria-valuenow={Math.round(nowS)} aria-valuetext={fmtT(nowS)}
+          onKeyDown={onKey} onFocus={(e) => setRing(e.currentTarget.matches(":focus-visible"))} onBlur={() => setRing(false)}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seek(e); }}
+          onPointerMove={(e) => { if (e.buttons) seek(e); }}
+          style={{ position: "relative", height: 66, cursor: "pointer", touchAction: "none", outline: "none" }}>
+          {/* The focus ring goes round the playhead's time label above and the hour labels below. */}
+          {ring && <span aria-hidden="true" style={{ position: "absolute", inset: "-12px -10px -14px -10px", border: "2px solid var(--focus-ring)", borderRadius: "var(--radius-md)", pointerEvents: "none" }} />}
           <span style={{ position: "absolute", left: `${ph}%`, top: -6, transform: "translateX(-50%)", padding: "2px 8px", background: "var(--ink)", color: "var(--ground)", borderRadius: "var(--radius-md)",
             fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: "16px", fontWeight: 500, whiteSpace: "nowrap" }}>{fmtT(nowS)}</span>
           <div style={{ position: "absolute", left: 0, right: 0, top: 22, height: 4, background: "var(--ground)", borderRadius: "var(--radius-pill)", boxShadow: "var(--inset-shadow)" }} />
