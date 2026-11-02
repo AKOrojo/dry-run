@@ -79,6 +79,11 @@ def require_paid_access(request: Request) -> None:
     raise HTTPException(403, "live model calls need a judge key; the cached demo is open to everyone")
 
 
+def _retry_after(wait_s: float) -> dict:
+    """Seconds until the oldest hit leaves the window, i.e. until the next request is admitted."""
+    return {"Retry-After": str(max(1, int(wait_s) + 1))}
+
+
 def limit(request: Request, bucket: str, per_hour: int) -> None:
     if _is_team(request):
         return
@@ -86,7 +91,7 @@ def limit(request: Request, bucket: str, per_hour: int) -> None:
     while q and now - q[0] > 3600:
         q.popleft()
     if len(q) >= per_hour:
-        raise HTTPException(429, f"rate limit: {per_hour}/hour for {bucket}")
+        raise HTTPException(429, f"rate limit: {per_hour}/hour for {bucket}", headers=_retry_after(q[0] + 3600 - now))
     q.append(now)
 
 
@@ -101,5 +106,6 @@ def limit_global(bucket: str, per_day: int, request: Request | None = None) -> N
     while q and now - q[0] > 86400:
         q.popleft()
     if len(q) >= per_day:
-        raise HTTPException(429, f"daily demo capacity for {bucket} reached; please try again tomorrow")
+        raise HTTPException(429, f"daily demo capacity for {bucket} reached; please try again tomorrow",
+                            headers=_retry_after(q[0] + 86400 - now))
     q.append(now)

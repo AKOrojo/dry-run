@@ -130,3 +130,23 @@ def test_provider_retries_a_content_filter_refusal_once(monkeypatch):
                 p.chat([{"role": "user", "content": "q"}])
             assert classify_llm_error(e.value)["code"] == "llm_content_filter"
         assert not replies  # exactly 1 + CONTENT_FILTER_RETRIES calls, never more
+
+
+def test_rate_limit_retry_after_is_the_real_wait(monkeypatch):
+    """Retry-After says when the oldest hit leaves the hour, not a flat 60 s that would still be refused."""
+    from starlette.requests import Request as StarletteRequest
+
+    from dryrun.api import ratelimit
+
+    clock = [10_000.0]
+    monkeypatch.setattr(ratelimit.time, "time", lambda: clock[0])
+    monkeypatch.setattr(ratelimit, "_hits", ratelimit.defaultdict(ratelimit.deque))
+    monkeypatch.setattr(ratelimit, "_TEAM", "")
+    req = StarletteRequest({"type": "http", "headers": [(b"x-forwarded-for", b"9.9.9.9")], "client": ("9.9.9.9", 1)})
+    ratelimit.limit(req, "t", per_hour=2)
+    clock[0] += 600
+    ratelimit.limit(req, "t", per_hour=2)
+    clock[0] += 60
+    with pytest.raises(HTTPException) as e:
+        ratelimit.limit(req, "t", per_hour=2)
+    assert e.value.headers["Retry-After"] == str(3600 - 660 + 1)  # the first hit ages out in 2940 s
