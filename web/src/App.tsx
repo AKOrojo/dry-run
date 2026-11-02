@@ -29,7 +29,7 @@ const DeltaCard = lazyNamed(() => import("./components/Compare"), "DeltaCard");
 const SideGlobe = lazyNamed(() => import("./components/Compare"), "SideGlobe");
 const WaterBudgetCard = lazyNamed(() => import("./components/Compare"), "WaterBudgetCard");
 const WhatChanges = lazyNamed(() => import("./components/Compare"), "WhatChanges");
-import { byPlace, diffFrame, PlaceRow, whatChanges } from "./lib/compare";
+import { byPlace, diffFrame, isBaseline, pickPair, PlaceRow, sameStorm, whatChanges } from "./lib/compare";
 import { fmtT, ProvenanceBadge } from "./components/ds";
 import { ChartArea, Dock } from "./components/Dock";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -68,9 +68,6 @@ const DEFAULT_PATTERN: Pattern = "center_peaked";
 const STARTING_AFTER_MS = 600;
 // A shared link (?aoi=&run=&t=) opens on that area, run and time, paused.
 const shared = readSharedView();
-const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
-const sameStorm = (x: RunManifest, y: RunManifest) =>
-  JSON.stringify([x.scenario.storm, x.scenario.sim_hours]) === JSON.stringify([y.scenario.storm, y.scenario.sim_hours]);
 
 /** The rain-area state a run's storm.spatial stands for; null = the whole area. */
 function rainPatchOf(sp: Spatial | undefined): Partial<RainState> {
@@ -126,6 +123,7 @@ export default function App() {
   const [cmpView, setCmpView] = useState<CompareView>("Swipe");
   const [split, setSplit] = useState(0.5);
   const [agentIds, setAgentIds] = useState<Set<string>>(new Set());
+  const [linked, setLinked] = useState<Set<string>>(new Set());
   const [mainViewer, setMainViewer] = useState<Cesium.Viewer>();
   const [baseBusy, setBaseBusy] = useState(false);
   const addRun = (m: RunManifest) => { if (m.status === "done") setRuns((p) => [m, ...p.filter((r) => r.run_id !== m.run_id)]); };
@@ -248,6 +246,9 @@ export default function App() {
       if (u.toString() !== window.location.href) window.history.replaceState(null, "", u.toString());
       if (r.run) {
         setRun(r.run);
+        // Offered in Compare like any run of this session; it is A there until another A is picked.
+        if (r.run.status === "done") setLinked((p) => new Set(p).add(r.run!.run_id));
+        addRun(r.run);
         clock.set({ t_s: r.t ?? 0, max_s: r.run.frames.at(-1)?.t_s ?? 0, playing: false });
       }
     });
@@ -427,13 +428,15 @@ export default function App() {
     if (aoiNow.current !== id || m.status !== "done") return;
     setRun(m); addRun(m); startClock(m);
   };
-  const showAgentRun = (m: RunManifest) => { setRun(m); startClock(m); setAgentShown({ id: m.run_id, picked: true }); };
+  const showAgentRun = (m: RunManifest) => { setRun(m); addRun(m); startClock(m); setAgentShown({ id: m.run_id, picked: true }); };
   const agentView = mode === "Agent" && agentList.length > 0;
 
 
   // ---- Compare: A defaults to the baseline of B's storm, B to the newest run that is not a baseline.
   const here = useMemo(() => runs.filter((r) => r.scenario.aoi_id === aoiId), [runs, aoiId]);
   const comparing = mode === "Compare";
+  // Runs this session did not simulate itself: opened from a link, or the agent's (live or replayed).
+  const elsewhere = useMemo(() => new Set([...agentIds, ...linked]), [agentIds, linked]);
   useEffect(() => {
     if (!comparing || !here.length || baseBusy) return;
     const latest = here.find((r) => !isBaseline(r)) ?? here[0];
@@ -444,12 +447,9 @@ export default function App() {
   }, [comparing, here]);
   useEffect(() => {
     if (!comparing) return;
-    const has = (id?: string) => here.some((r) => r.run_id === id);
-    if (has(cmp.a) && has(cmp.b)) return;
-    const b = here.find((r) => !isBaseline(r)) ?? here[0];
-    const a = b && (here.find((r) => r !== b && isBaseline(r) && sameStorm(r, b)) ?? here.find((r) => r !== b));
-    if (a?.run_id !== cmp.a || b?.run_id !== cmp.b) setCmp({ a: a?.run_id, b: b?.run_id });
-  }, [comparing, here, cmp]);
+    const { a, b } = pickPair(here, cmp, run ? { id: run.run_id, fromElsewhere: elsewhere.has(run.run_id) } : undefined);
+    if (a !== cmp.a || b !== cmp.b) setCmp({ a, b });
+  }, [comparing, here, cmp]);  // eslint-disable-line react-hooks/exhaustive-deps
   const aRun = here.find((r) => r.run_id === cmp.a), bRun = here.find((r) => r.run_id === cmp.b);
   const pair = comparing && aRun && bRun && aRun !== bRun ? { a: aRun, b: bRun } : undefined;
   // Compare's run labels: what differs between the runs on offer, with short ids where two still read the same.
@@ -461,7 +461,7 @@ export default function App() {
   // Side by side: A on the left map, B on the right one. A single run view shows that run; the others show B's buildings.
   const mapRun = pair ? (cmpView === "A" || cmpView === "Side by side" ? pair.a : pair.b) : run;
   const framesOf = (m?: RunManifest) => m?.frames.map((f) => ({ t_s: f.t_s, url: runFileUrl(runsBase, m.run_id, f.png) }));
-  const origin = (m: RunManifest) => (agentIds.has(m.run_id) ? "made by the agent" : isBaseline(m) ? "no interventions" : "made in Scenario");
+  const origin = (m: RunManifest) => (agentIds.has(m.run_id) ? "made by the agent" : linked.has(m.run_id) ? "opened from a link" : isBaseline(m) ? "no interventions" : "made in Scenario");
   const [places, setPlaces] = useState<PlaceRow[] | null>(null);
   useEffect(() => {
     setPlaces(null);

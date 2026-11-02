@@ -5,6 +5,27 @@ import { areaCache } from "./areaCache";
 
 export type PlaceRow = { place: string; a: number; b: number };
 
+export const isBaseline = (m: RunManifest) => !m.scenario.interventions?.length;
+export const sameStorm = (x: RunManifest, y: RunManifest) =>
+  JSON.stringify([x.scenario.storm, x.scenario.sim_hours]) === JSON.stringify([y.scenario.storm, y.scenario.sim_hours]);
+
+/** Compare's A and B when the chosen ones are not both on offer (runs = this area's, most recent first). By default B is
+ *  the latest run with a change and A its baseline. A run opened from elsewhere (a link, the agent, a replay) that is on
+ *  screen becomes A when no A is chosen, so the run someone is looking at is the one compared. */
+export function pickPair(runs: RunManifest[], chosen: { a?: string; b?: string }, shown?: { id: string; fromElsewhere: boolean }): { a?: string; b?: string } {
+  const has = (id?: string) => runs.some((r) => r.run_id === id);
+  if (has(chosen.a) && has(chosen.b) && chosen.a !== chosen.b) return chosen;
+  if (!has(chosen.a) && shown?.fromElsewhere && has(shown.id)) {
+    const a = runs.find((r) => r.run_id === shown.id)!;
+    const b = has(chosen.b) && chosen.b !== a.run_id ? runs.find((r) => r.run_id === chosen.b)
+      : runs.find((r) => r !== a && isBaseline(r) && sameStorm(r, a)) ?? runs.find((r) => r !== a);
+    return { a: a.run_id, b: b?.run_id };
+  }
+  const b = runs.find((r) => !isBaseline(r)) ?? runs[0];
+  const a = b && (runs.find((r) => r !== b && isBaseline(r) && sameStorm(r, b)) ?? runs.find((r) => r !== b));
+  return { a: a?.run_id, b: b?.run_id };
+}
+
 /** Road km impassable (run max) inside every named place, for runs A and B; largest first. */
 export async function byPlace(aoiId: string, a: string, b: string): Promise<PlaceRow[]> {
   const fc = await fetch(`${API}/api/aoi/${aoiId}/layer/places`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
