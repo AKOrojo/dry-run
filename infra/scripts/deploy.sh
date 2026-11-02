@@ -32,6 +32,8 @@ ENV_VARS+=",DRYRUN_PUBLIC_RUNS_BASE=https://storage.googleapis.com/${RUNS_BUCKET
 ENV_VARS+=",DRYRUN_SIM_BACKEND=${SIM_BACKEND:-fake},DRYRUN_AGENT_PROVIDER=${AGENT_PROVIDER:-fake},DRYRUN_WARM_ON_START=1"
 ENV_VARS+=",DRYRUN_DEFAULT_AOI=${DEFAULT_AOI:-fixture-synthetic},DRYRUN_AGENT_PER_HOUR=${AGENT_PER_HOUR:-12}"
 ENV_VARS+=",DRYRUN_AGENT_PER_DAY=${AGENT_PER_DAY:-300},DRYRUN_BUILDINGS_URL=${BUILDINGS_URL:-}"
+# Judges-only Muse Glimmer on Modal (Eng C). Not a secret; without it the UI hides the choice.
+ENV_VARS+=",MODAL_BASE_URL=${MODAL_BASE_URL:-https://bensmithofficial01--dryrun-glimmer-serve.us-east.modal.run/v1}"
 if [[ "${SIM_BACKEND:-fake}" == "fake" || "${AGENT_PROVIDER:-fake}" == "fake" ]]; then
   echo "!! deploying with SIM_BACKEND=${SIM_BACKEND:-fake} AGENT_PROVIDER=${AGENT_PROVIDER:-fake} (placeholder physics/agent)."
   # Demo days need real physics. The default agent provider must be free (replay, or fake): paid providers (meta,
@@ -48,7 +50,7 @@ gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --image 
   --cpu 2 --memory 4Gi --concurrency 8 --timeout 900 --cpu-boost \
   --min-instances "$MIN" --max-instances 4 --session-affinity \
   --set-env-vars "$ENV_VARS" \
-  --set-secrets "META_API_KEY=meta-api-key:latest,BASETEN_API_KEY=baseten-api-key:latest,CESIUM_ION_TOKEN=cesium-ion-token:latest,DRYRUN_ADMIN_TOKEN=admin-token:latest,DRYRUN_JUDGE_TOKEN=judge-token:latest,OPENROUTER_API_KEY=openrouter-api-key:latest,GOOGLE_TILES_KEY=google-tiles-key:latest"
+  --set-secrets "META_API_KEY=meta-api-key:latest,BASETEN_API_KEY=baseten-api-key:latest,CESIUM_ION_TOKEN=cesium-ion-token:latest,DRYRUN_ADMIN_TOKEN=admin-token:latest,DRYRUN_JUDGE_TOKEN=judge-token:latest,OPENROUTER_API_KEY=openrouter-api-key:latest,GOOGLE_TILES_KEY=google-tiles-key:latest,MODAL_PROXY_TOKEN_ID=modal-proxy-token-id:latest,MODAL_PROXY_TOKEN_SECRET=modal-proxy-token-secret:latest"
 
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')
 echo "Deployed $TAG -> $URL"
