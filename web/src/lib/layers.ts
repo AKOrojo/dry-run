@@ -7,12 +7,15 @@ export type ImageryMode = "colour" | "greyscale";
 /** Aerial: Bing imagery on World Terrain. Photoreal: Google Photorealistic 3D Tiles (via ion), water draped on it. */
 import type { PhotorealDown } from "./photoreal";
 export type Basemap = "aerial" | "photoreal";
-/** Aerial imagery source: Bing (ion, everyone) or Google Map Tiles 2D (judges and the team; key from /api/tiles/google-key). */
-export type AerialSource = "bing" | "google";
+/** Aerial imagery source: Bing (ion, everyone) or Google Map Tiles 2D (judges and the team; key from /api/tiles/google-key);
+ *  osm: OpenStreetMap's street map, when ion refused the imagery (nothing asks ion again this session). */
+export type AerialSource = "bing" | "google" | "osm";
+export const OSM_NOTE = "Aerial imagery is unavailable right now; showing the street map.";
 export type LayersState = Record<LayerKey, LayerState> & {
   imageryMode: ImageryMode; basemap: Basemap; aerial: AerialSource;
   /** Why the map is on Bing although Google was picked (no key, daily limit), or null. */ aerialNote: string | null;
   /** The server has a Google Map Tiles key (/api/config.google_tiles_available): offer Google as an Aerial source. */ googleAvailable: boolean;
+  /** Cesium ion refused the aerial imagery this session: Bing is replaced by the street map (osm). */ ionDown: boolean;
   /** Google's Photorealistic 3D Tiles failed this session (lib/photoreal.ts): why, and when to offer them again. */ photorealDown: PhotorealDown | null;
   /** The map's "3D city unavailable" chip was dismissed: it is shown once per session. */ photorealChipDismissed: boolean;
   /** Bumped to open Layers and focus the Base map row (the chip's Details). */ basemapFocus: number;
@@ -46,6 +49,7 @@ let state: LayersState = {
   basemap: "photoreal",
   aerial: "bing",
   aerialNote: null,
+  ionDown: false,
   googleAvailable: false,
   photorealDown: null,
   photorealChipDismissed: false,
@@ -72,8 +76,21 @@ export function setImageryMode(mode: ImageryMode) {
   state = { ...state, imageryMode: mode };
   emit();
 }
+/** With ion down Bing is not on offer: the street map stands in for it (with OSM_NOTE unless a note says more). */
+export function resolveAerial(aerial: AerialSource, aerialNote: string | null, ionDown: boolean): { aerial: AerialSource; aerialNote: string | null } {
+  return ionDown && aerial === "bing" ? { aerial: "osm", aerialNote: aerialNote ?? OSM_NOTE } : { aerial, aerialNote };
+}
 export function setAerial(aerial: AerialSource, aerialNote: string | null = null) {
-  state = { ...state, aerial, aerialNote };
+  state = { ...state, ...resolveAerial(aerial, aerialNote, state.ionDown) };
+  emit();
+}
+/** ion refused the imagery: Google keeps showing if picked; otherwise the street map, with its note. */
+export function ionDownPatch(s: Pick<LayersState, "aerial" | "aerialNote">): Pick<LayersState, "aerial" | "aerialNote" | "ionDown"> {
+  return s.aerial === "google" ? { aerial: "google", aerialNote: s.aerialNote, ionDown: true } : { aerial: "osm", aerialNote: OSM_NOTE, ionDown: true };
+}
+export function setIonDown() {
+  if (state.ionDown) return;
+  state = { ...state, ...ionDownPatch(state) };
   emit();
 }
 export function setAerialNote(aerialNote: string | null) {

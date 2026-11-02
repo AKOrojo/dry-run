@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, downText, errorLine, isDown, LIMIT_WAIT_MS, mayLoadPhotoreal } from "./photoreal";
+import { classify, downText, errorLine, ionRefused, isDown, LIMIT_WAIT_MS, mayLoadPhotoreal } from "./photoreal";
 
 const now = 1_000_000;
 
@@ -12,6 +12,13 @@ describe("photoreal failure", () => {
   it("treats 401 and 403 as a refused key, never offered again", () => {
     for (const s of [401, 403]) expect(classify({ statusCode: s }, now)).toMatchObject({ kind: "key", retryAt: Infinity });
     expect(downText("key")).toMatch(/refused the key/);
+  });
+  it("treats any refusal by Cesium ion itself as unavailable, never offered again", () => {
+    for (const s of [401, 403, 404, 429, 500, 503]) expect(classify(ionRefused({ statusCode: s }), now)).toEqual({ kind: "unavailable", status: s, retryAt: Infinity });
+    expect(classify(ionRefused(new Error("Failed to fetch")), now)).toEqual({ kind: "unavailable", status: null, retryAt: Infinity });
+    expect(downText("unavailable")).toBe("Google's 3D city isn't available right now. Showing the aerial map.");
+    expect(downText("unavailable", true)).toBe("Google's 3D city isn't available right now. Showing the street map.");
+    expect(errorLine(ionRefused({ statusCode: 403 }))).toMatch(/^Cesium ion refused the Google Photorealistic 3D Tiles asset: HTTP 403/);
   });
   it("offers anything else again at once", () => {
     expect(classify({ statusCode: 500 }, now)).toEqual({ kind: "other", status: 500, retryAt: now });

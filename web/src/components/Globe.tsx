@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import type { AOIManifest } from "../lib/api";
-import { layers, setAerial, setAerialNote, setBasemap, setPhotorealDown, useLayers } from "../lib/layers";
-import { classify, errorLine, mayLoadPhotoreal } from "../lib/photoreal";
+import { layers, OSM_NOTE, setAerial, setAerialNote, setBasemap, setIonDown, setPhotorealDown, useLayers } from "../lib/layers";
+import { classify, errorLine, ionRefused, mayLoadPhotoreal } from "../lib/photoreal";
 import { ApiError, getGoogleTilesKey } from "../lib/api";
 import { areaCache } from "../lib/areaCache";
 import { CESIUM_CHECKED } from "../lib/cesiumPin";
@@ -64,6 +64,30 @@ function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
     terrain.readyEvent.addEventListener(() => resolve());
     terrain.errorEvent.addEventListener(() => resolve());
   });
+}
+
+// Cesium ion refusing us (over quota, suspended, offline): OpenStreetMap stands in for its imagery (attribution through
+// Cesium's credits), the ellipsoid for World Terrain. Neither is asked of ion again this session.
+// OpenStreetMap's tile policy asks for its attribution on the map itself, not only behind "Data attribution".
+const osm = () => new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/",
+  credit: new Cesium.Credit('© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors', true) });
+let terrainDown = false;
+const why = (err: unknown) => (err instanceof Error ? err.message : String(err));
+/** `p` in place of the base imagery layer, with its show, alpha, saturation and brightness. */
+function swapBase(v: Cesium.Viewer, p: Cesium.ImageryProvider) {
+  const old = v.imageryLayers.get(0);
+  const layer = v.imageryLayers.addImageryProvider(p, 0);
+  layer.show = old.show; layer.alpha = old.alpha; layer.saturation = old.saturation; layer.brightness = old.brightness;
+  v.imageryLayers.remove(old, true);
+  return layer;
+}
+// Google's 3D tiles through ion (what createGooglePhotorealistic3DTileset does without a key, and as it does, the asset
+// is asked of ion once a session): a refusal by ion itself is tagged, so classify() tells it from one by Google.
+let photorealAsset: Promise<Cesium.IonResource> | undefined;
+function photorealTileset(options: Cesium.Cesium3DTileset.ConstructorOptions) {
+  photorealAsset ??= Cesium.IonResource.fromAssetId(2275207);
+  return photorealAsset.catch((e) => { throw ionRefused(e); })
+    .then((res) => Cesium.Cesium3DTileset.fromUrl(res, { cacheBytes: 1536 * 1024 * 1024, maximumCacheOverflowBytes: 1024 * 1024 * 1024, enableCollision: true, ...options }));
 }
 
 export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, buildingsUrl, buildingDepthsUrl, onBuildingsStatus, onViewer, onRestart }: {
@@ -155,7 +179,8 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
 
   useEffect(() => {
     if (!el.current) return;
-    terrainRef.current = token ? Cesium.Terrain.fromWorldTerrain() : undefined;
+    const ionImagery = !!token && !layers.get().ionDown;
+    terrainRef.current = token && !terrainDown ? Cesium.Terrain.fromWorldTerrain() : undefined;
     const v = new Cesium.Viewer(el.current, {
       timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
       homeButton: false, sceneModePicker: false, fullscreenButton: false, navigationHelpButton: false, infoBox: false,
@@ -163,9 +188,21 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       // Render on demand: an idle map draws nothing. Cesium renders for camera moves and tile loads; lib/render.ts asks
       // for frames when our own state changes.
       requestRenderMode: true, maximumRenderTimeChange: Infinity,
-      ...(token ? { terrain: terrainRef.current } : {}),
-      // Without an ion token fall back to OSM tiles (attribution shown by Cesium credits).
-      ...(token ? {} : { baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" })) }),
+      ...(terrainRef.current ? { terrain: terrainRef.current } : {}),
+      // Without an ion token (or with ion refusing this session) OSM tiles (attribution shown by Cesium credits).
+      ...(ionImagery ? {} : { baseLayer: new Cesium.ImageryLayer(osm()) }),
+    });
+    // ion refuses: a flat globe (buildings stay at ground 0), and the street map unless Google's imagery is showing.
+    terrainRef.current?.errorEvent.addEventListener((err) => {
+      terrainDown = true;
+      console.warn(`Cesium World Terrain is unavailable; the globe stays flat. ${why(err)}`);
+      // Cesium leaves the globe without a terrain provider until the terrain is ready, and draws no globe meanwhile.
+      if (!v.isDestroyed()) { v.scene.globe.terrainProvider = new Cesium.EllipsoidTerrainProvider(); v.scene.requestRender(); }
+    });
+    if (ionImagery) v.imageryLayers.get(0).errorEvent.addEventListener((err) => {
+      console.warn(`Cesium ion imagery is unavailable; showing the street map. ${why(err)}`);
+      if (!v.isDestroyed() && !googleShown.current) { swapBase(v, osm()); v.scene.requestRender(); }
+      setIonDown();
     });
     // Render settings from the design prototype: soft 4k shadows, a lower sun, sharper terrain and
     // full device resolution (the browser-recommended scale renders at CSS pixels and blurs on HiDPI).
@@ -493,18 +530,22 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     if (!v || v.isDestroyed() || !token) return;
     let cancelled = false;
     let added: Cesium.ImageryLayer | undefined;
-    const swapIn = (p: Cesium.ImageryProvider) => {
-      const old = v.imageryLayers.get(0);
-      const layer = v.imageryLayers.addImageryProvider(p, 0);
-      layer.show = old.show; layer.alpha = old.alpha; layer.saturation = old.saturation; layer.brightness = old.brightness;
-      v.imageryLayers.remove(old, true);
-      return layer;
+    const swapIn = (p: Cesium.ImageryProvider) => swapBase(v, p);
+    // Back from Google: Bing, or the street map once ion has refused (osmNote then says why).
+    const toStreet = (osmNote: string) => { added = swapIn(osm()); setAerial("osm", osmNote); };
+    const toBing = (note: string | null, osmNote = OSM_NOTE) => {
+      if (layers.get().ionDown) { toStreet(osmNote); return; }
+      Cesium.IonImageryProvider.fromAssetId(2).then((bing) => {
+        if (cancelled || v.isDestroyed()) return;
+        added = swapIn(bing);
+        if (note) setAerial("bing", note);
+      }).catch((err) => {
+        if (cancelled || v.isDestroyed()) return;
+        console.warn(`Cesium ion imagery is unavailable; showing the street map. ${why(err)}`);
+        setIonDown();
+        toStreet(osmNote);
+      });
     };
-    const toBing = (note: string | null) => Cesium.IonImageryProvider.fromAssetId(2).then((bing) => {
-      if (cancelled || v.isDestroyed()) return;
-      added = swapIn(bing);
-      if (note) setAerial("bing", note);
-    }).catch(() => { /* keep whatever imagery is showing */ });
     if (layerState.aerial !== "google") {
       // The viewer starts on ion's default (Bing); swap back only after Google was showing.
       if (googleShown.current) { googleShown.current = false; toBing(null); }
@@ -526,14 +567,15 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
         p.errorEvent.addEventListener(() => {
           if (++failures !== 8 || cancelled || v.isDestroyed()) return;
           googleShown.current = false;
-          toBing("Google reached today's tile limit; showing Bing.");
+          toBing("Google reached today's tile limit; showing Bing.", "Google reached today's tile limit; showing the street map.");
         });
       })
       .catch((err) => {
         if (cancelled) return;
         // A judge-key lockout (429, X-Auth-Lockout) also brings up the key box, which shows the countdown.
         const forbidden = err instanceof ApiError && (err.status === 403 || err.code === "forbidden" || !!err.lockout);
-        setAerial("bing", forbidden ? "Google imagery needs the judge key." : "Google imagery is not available right now; showing Bing.");
+        setAerial("bing", forbidden ? "Google imagery needs the judge key."
+          : layers.get().ionDown ? "Google imagery is not available right now; showing the street map." : "Google imagery is not available right now; showing Bing.");
         if (googleShown.current) { googleShown.current = false; toBing(null); }
       });
     return () => { cancelled = true; };
@@ -546,10 +588,12 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     if (!v || v.isDestroyed() || !token || layerState.basemap !== "photoreal") return;
     // Failed earlier this session: stay on aerial without asking Google again, area switches included, until Try 3D again.
     if (!mayLoadPhotoreal(layers.get().photorealDown)) { setBasemap("aerial"); return; }
+    // ion refused us already this session: the 3D tiles come through ion too.
+    if (layers.get().ionDown) { setPhotorealDown({ kind: "unavailable", status: null, retryAt: Infinity }); setBasemap("aerial"); return; }
     let cancelled = false;
     let tiles: Cesium.Cesium3DTileset | undefined;
     const g = v.scene.globe;
-    const load = googleQueue.then(() => Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true }, {
+    const load = googleQueue.then(() => photorealTileset({
       maximumScreenSpaceError: TILES_REST_SSE,
       // Coarser tiles toward the screen edges, and no requests for tiles that will be out of view once they arrive.
       foveatedScreenSpaceError: true, cullRequestsWhileMoving: true,
