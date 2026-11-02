@@ -1,5 +1,5 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -631,27 +631,31 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   // and a tap hits the footer). The visible one is followed as tabs and panels mount.
   const scroller = useRef<HTMLDivElement>(null);
   const [footH, setFootH] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const sc = scroller.current;
     if (!sc) return;
     let el: HTMLElement | null = null, last = 0;
     // What it covers: its height, plus the gap its bottom offset leaves above the scroller's padded edge.
     const covers = (f: HTMLElement) => f.offsetHeight + (parseFloat(getComputedStyle(sc).paddingBottom) || 0) + (parseFloat(getComputedStyle(f).bottom) || 0);
+    // The padding is written straight onto the scroller (React's copy follows), so a tap right after a tab switch or
+    // the sheet opening already lands above the footer.
+    const apply = (h: number) => { sc.style.scrollPaddingBottom = h ? `${h}px` : ""; setFootH(h); };
+    // The visible footer: a closed phone sheet has none, and opening it resizes the scroller, which lands in measure.
+    const visible = () => Array.from(sc.querySelectorAll<HTMLElement>("[data-sticky-foot]")).find((x) => x.offsetParent !== null) ?? null;
     const measure = () => {
-      // The visible footer: a closed phone sheet has none, and opening it resizes the scroller, which lands here.
-      const f = Array.from(sc.querySelectorAll<HTMLElement>("[data-sticky-foot]")).find((x) => x.offsetParent !== null) ?? null;
+      const f = visible();
       if (f !== el) {
         if (el) ro.unobserve(el);
         el = f;
         if (f) ro.observe(f, { box: "border-box" });  // padding counts (the safe-area inset)
         last = f ? covers(f) : 0;
-        setFootH(last);
+        apply(last);
         return;
       }
       if (!el) return;
       const h = covers(el), grew = h - last;
       last = h;
-      setFootH(h);
+      apply(h);
       // The footer grows when a status line wraps (the estimate arriving after a change): scroll by the growth, so
       // whatever sat just above the footer, touched or not, stays above it.
       if (grew > 0 && last > grew && sc.scrollTop > 0) sc.scrollTop += grew;
@@ -659,9 +663,14 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     const ro = new ResizeObserver(measure);
     ro.observe(sc);
     measure();
-    const mo = new MutationObserver(measure);
+    // A DOM change that swaps the footer (a tab switch) is measured at once; other changes re-measure at most once a frame.
+    let frame = 0;
+    const mo = new MutationObserver(() => {
+      if (visible() !== el) { cancelAnimationFrame(frame); frame = 0; measure(); }
+      else if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); });
+    });
     mo.observe(sc, { childList: true, subtree: true });
-    return () => { ro.disconnect(); mo.disconnect(); };
+    return () => { ro.disconnect(); mo.disconnect(); cancelAnimationFrame(frame); };
   }, [phone, tab]);
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
