@@ -57,6 +57,18 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   const keyProvider = provider !== "fake" && provider !== "replay";  // Replay and Fake never send a key: never locked
   const needsKey = (judgeKeyRequired || err?.code === "forbidden" || !!lock) && keyProvider;
   useEffect(() => { if (err?.code === "forbidden") keyRef.current?.focus(); }, [err]);
+  // Live reveals the key row, often below the fold in a phone sheet: bring it into view (above the Ask bar, which the
+  // side panel's scroll-padding accounts for), so its Show key button is not under the footer.
+  const keyShown = useRef<boolean | null>(null);
+  useEffect(() => {
+    const was = keyShown.current;
+    keyShown.current = needsKey;
+    if (was === false && needsKey) requestAnimationFrame(() => {
+      const box = keyRef.current?.parentElement;
+      box?.scrollIntoView({ block: "nearest" });
+      box?.querySelector("button")?.scrollIntoView({ block: "nearest" });  // its 40 px touch target outgrows the box
+    });
+  }, [needsKey]);
   const [replays, setReplays] = useState<Replay[]>([]);
   useEffect(() => { getReplays().then(setReplays, () => setReplays([])); }, []);
   const replay = provider === "replay" ? replays.find((r) => r.question === q) : undefined;

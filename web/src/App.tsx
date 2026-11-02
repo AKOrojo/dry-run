@@ -516,6 +516,9 @@ export default function App() {
     if (bp === "phone") { if (sheet !== phoneOf(t)) setSnap("half"); setSheet(phoneOf(t)); }
     else if (bp === "tablet") setDrawer(true);
   };
+  // The "3D city unavailable" chip's Details opens Layers (the sheet on a phone, the drawer on a tablet).
+  const basemapFocus = useLayers().basemapFocus;
+  useEffect(() => { if (basemapFocus) openSide("Layers"); }, [basemapFocus]);  // eslint-disable-line react-hooks/exhaustive-deps
   /** The tour opens the sheet or drawer its step points into, and closes it for steps on the map or the header. */
   const tourStep = (id: string) => {
     const where: Record<string, PhoneTab> = { scenario: "Scenario", rain: "Scenario", "rain-domain": "Scenario", drainage: "Scenario", simulate: "Scenario", "sim-status": "Scenario",
@@ -533,7 +536,7 @@ export default function App() {
   const playerRun = (pair ? pair.b : run);
   const mainDock = !cu.active && !buildingView && !agentView;
   const dock = (layout: DockLayout) => (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
-          third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
+          third={pair ? (menu) => <ByPlace rows={places} menu={menu} /> : undefined} thirdLabel="By place" side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} layout={layout} />);
   const narrow = bp !== "desktop";
 

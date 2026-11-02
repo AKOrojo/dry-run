@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import type { LonLat } from "../lib/flyroute";
-import { holdRendering } from "../lib/render";
+import { holdWhileMoving } from "../lib/render";
 
 const R = 6378137;
 const rad = Cesium.Math.toRadians;
@@ -15,6 +15,7 @@ export const FLY_MAX_AGL = 3000;
 const PITCH_MIN = rad(-90), PITCH_MAX = rad(10);
 const FLY_PITCH = rad(-25);
 const FLY_PITCH_LO = PITCH_MIN - FLY_PITCH, FLY_PITCH_HI = PITCH_MAX - FLY_PITCH;
+const SNAP_M = 0.01, SNAP_RAD = rad(0.01);
 
 const isTyping = (t: EventTarget | null) => {
   const n = t as HTMLElement | null;
@@ -53,9 +54,11 @@ function useLookDrag(viewer: Cesium.Viewer | undefined, active: boolean, onLook:
   }, [viewer, active]);
 }
 
-/** Held-key set, cleared on blur or when the mode ends. */
-function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
+/** Held-key set, cleared on blur or when the mode ends; onDown hears each handled key press. */
+function useHeldKeys(active: boolean, handled: ReadonlySet<string>, onDown?: () => void) {
   const keys = useRef(new Set<string>());
+  const cb = useRef(onDown);
+  cb.current = onDown;
   useEffect(() => {
     if (!active) return;
     const set = keys.current;
@@ -65,7 +68,7 @@ function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
       const k = name(e);
       set.add(k);
       if (e.shiftKey) set.add("shift");
-      if (handled.has(k)) e.preventDefault();
+      if (handled.has(k)) { e.preventDefault(); cb.current?.(); }
     };
     const up = (e: KeyboardEvent) => { set.delete(name(e)); if (!e.shiftKey) set.delete("shift"); };
     const clear = () => set.clear();
@@ -79,11 +82,13 @@ function useHeldKeys(active: boolean, handled: ReadonlySet<string>) {
 
 const FREE_KEYS = new Set(["w", "a", "s", "d", "e", "q", "c", "space"]);
 const FLY_KEYS = new Set(["e", "q"]);
+const holding = (keys: Set<string>, handled: ReadonlySet<string>) => [...keys].some((k) => handled.has(k));
 
 /** First-person flight: left-drag looks, WASD moves along the heading, E/Space up, Q/C down, Shift 4x, scroll sets speed. */
 export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean, onSpeed: (mul: number) => void) {
   const mul = useRef(1);
-  const keys = useHeldKeys(active, FREE_KEYS);
+  const hold = useRef<ReturnType<typeof holdWhileMoving> | null>(null);
+  const keys = useHeldKeys(active, FREE_KEYS, () => hold.current?.poke());
   useControllerLock(viewer, active);
   useEffect(() => { if (active) { mul.current = 1; onSpeed(1); } }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,9 +132,9 @@ export function useFreeCamera(viewer: Cesium.Viewer | undefined, active: boolean
       c.setView({ destination: Cesium.Cartesian3.fromRadians(lon, lat, height), orientation: { heading: h, pitch: c.pitch, roll: 0 } });
     };
     s.preRender.addEventListener(pre);
-    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
-    const release = holdRendering();
-    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // Held keys move the camera from preRender: frames run while one is down, then stop.
+    const h = (hold.current = holdWhileMoving(s, () => holding(keys.current, FREE_KEYS)));
+    return () => { h.stop(); hold.current = null; el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -172,7 +177,9 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
   }, [path, route]);
   atRef.current = at;
 
-  const keys = useHeldKeys(active, FLY_KEYS);
+  const hold = useRef<ReturnType<typeof holdWhileMoving> | null>(null);
+  const poke = () => hold.current?.poke();
+  const keys = useHeldKeys(active, FLY_KEYS, poke);
   useControllerLock(viewer, active);
 
   useEffect(() => {
@@ -185,6 +192,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
     const v = st.current;
     v.yaw += dx * 0.004;
     v.pitch = clamp(v.pitch - dy * 0.004, FLY_PITCH_LO, FLY_PITCH_HI);
+    poke();
   });
 
   useEffect(() => {
@@ -195,6 +203,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       const v = st.current;
       v.hAgl = clamp(v.hAgl - e.deltaY * 0.6, FLY_MIN_AGL, FLY_MAX_AGL);
       sync();
+      poke();
     };
     el.addEventListener("wheel", wheel, { passive: false });
     let last = performance.now(), lastHud = 0;
@@ -214,27 +223,36 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
       const s0 = Math.min(v.s, Math.max(0, path.len - 60));
       const a = at(s0), b = at(s0 + 60);
       const target = Math.atan2((b[0] - a[0]) * Math.cos(rad(p[1])), b[1] - a[1]);
-      if (Number.isNaN(v.head)) v.head = target;
-      else v.head += Cesium.Math.negativePiToPi(target - v.head) * Math.min(1, dt * 2.5);
+      // The easings snap once within 0.01° / 1 cm, so a paused flight comes to rest exactly.
+      const dh = Cesium.Math.negativePiToPi(target - v.head);
+      if (Number.isNaN(v.head) || Math.abs(dh) < SNAP_RAD) v.head = target;
+      else v.head += dh * Math.min(1, dt * 2.5);
       const g = groundAt(s, rad(p[0]), rad(p[1]));
-      if (g !== undefined) v.gS = Number.isNaN(v.gS) ? g : v.gS + (g - v.gS) * Math.min(1, dt * 3);
-      viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(p[0], p[1], (Number.isNaN(v.gS) ? 0 : v.gS) + v.hAgl),
-        orientation: { heading: v.head + v.yaw, pitch: clamp(FLY_PITCH + v.pitch, PITCH_MIN, PITCH_MAX), roll: 0 },
-      });
+      if (g !== undefined) v.gS = Number.isNaN(v.gS) || Math.abs(g - v.gS) < SNAP_M ? g : v.gS + (g - v.gS) * Math.min(1, dt * 3);
+      const dest = Cesium.Cartesian3.fromDegrees(p[0], p[1], (Number.isNaN(v.gS) ? 0 : v.gS) + v.hAgl);
+      const heading = v.head + v.yaw, pitch = clamp(FLY_PITCH + v.pitch, PITCH_MIN, PITCH_MAX);
+      const c = viewer.camera;
+      // Setting the same pose again still changes it by float noise, and the on-demand renderer draws on any camera
+      // change: a paused flight would keep drawing every frame. Leave the camera alone when nothing moved.
+      if (Cesium.Cartesian3.distance(c.positionWC, dest) >= SNAP_M || Math.abs(Cesium.Math.negativePiToPi(c.heading - heading)) >= SNAP_RAD
+        || Math.abs(c.pitch - pitch) >= SNAP_RAD) {
+        c.setView({ destination: dest, orientation: { heading, pitch, roll: 0 } });
+      }
       if (ended || now - lastHud > 100) { lastHud = now; sync(); }
     };
     s.preRender.addEventListener(pre);
-    // Held keys and the flight move the camera from preRender, which runs only while frames are drawn: keep drawing.
-    const release = holdRendering();
-    return () => { release(); el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
+    // The flight, held keys and the easing after a turn or a height change move the camera from preRender: frames run
+    // while any of them does, then stop.
+    const h = (hold.current = holdWhileMoving(s, () => st.current.playing || holding(keys.current, FLY_KEYS)));
+    h.poke();
+    return () => { h.stop(); hold.current = null; el.removeEventListener("wheel", wheel); if (!s.isDestroyed()) s.preRender.removeEventListener(pre); };
   }, [viewer, active, path, at, sync, keys]);
 
   return {
     hud,
     /** Start or stop the flight; starting at the end restarts from the beginning. */
-    play: (on: boolean) => { const v = st.current; if (on && v.s >= path.len) v.s = 0; v.playing = on && path.len > 0; sync(); },
+    play: (on: boolean) => { const v = st.current; if (on && v.s >= path.len) v.s = 0; v.playing = on && path.len > 0; sync(); poke(); },
     setSpeed: (n: FlySpeed) => { st.current.speed = n; sync(); },
-    seek: (s: number) => { st.current.s = clamp(s, 0, path.len); sync(); },
+    seek: (s: number) => { st.current.s = clamp(s, 0, path.len); sync(); poke(); },
   };
 }

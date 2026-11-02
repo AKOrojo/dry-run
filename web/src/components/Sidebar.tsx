@@ -1,5 +1,5 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -8,7 +8,9 @@ import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
 import type { LevelSensitivity } from "../lib/api";
 import { lazyNamed } from "../lib/lazy";
 const FlowHazardCard = lazyNamed(() => import("./FlowHazard"), "FlowHazardCard");
-import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, useLayers } from "../lib/layers";
+import { LayerKey, setAerial, setBasemap, setImageryMode, setLayer, setPhotorealDown, useLayers } from "../lib/layers";
+import { downText, isDown } from "../lib/photoreal";
+import type { PhotorealDown } from "../lib/photoreal";
 import type { AerialSource } from "../lib/layers";
 import { useInspect } from "../lib/inspect";
 import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints";
@@ -143,8 +145,34 @@ function AerialSourceRow() {
   );
 }
 
+/** Under Base map when Google's 3D tiles failed: why the map is aerial, and Try 3D again once it may work (never for a
+ *  refused key; after Retry-After or 10 min for the daily limit; at once otherwise). */
+function PhotorealDownRow({ down }: { down: PhotorealDown }) {
+  const [, tick] = useState(0);
+  const wait = down.retryAt - Date.now();
+  useEffect(() => {
+    if (!(wait > 0) || !Number.isFinite(wait)) return;
+    const id = window.setTimeout(() => tick((n) => n + 1), Math.min(wait + 50, 2 ** 31 - 1));
+    return () => window.clearTimeout(id);
+  }, [down, wait]);
+  const ready = !isDown(down);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "6px 14px 0", fontSize: 12, lineHeight: "16px" }}>
+      <span role="status" style={{ color: "var(--ink)" }}>{downText(down.kind)}</span>
+      {down.kind !== "key" && (
+        <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--ink-muted)" }}>
+          <CtlButton variant="text" type="button" disabled={!ready} onClick={() => { setPhotorealDown(null); setBasemap("photoreal"); }}
+            style={{ padding: 0, border: 0, background: "transparent", font: "inherit", fontWeight: 600, color: ready ? "var(--ink)" : "var(--ink-muted)", cursor: ready ? "pointer" : "default" }}>Try 3D again</CtlButton>
+          {!ready && <span>from {new Date(down.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LayersCard() {
   const lay = useLayers();
+  const photorealOff = !!lay.photorealDown;  // back only through Try 3D again
   const imageryMode = lay.imageryMode;
   const { boundary } = useExtras();
   const rainSet = useRain().mode !== "whole";
@@ -176,17 +204,19 @@ function LayersCard() {
           </div></Tip>
         );
       })}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
+      <div data-basemap-row="" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 0", marginTop: 4, borderTop: "1px solid var(--hairline)", fontSize: 12, color: "var(--ink-muted)" }}>
         Base map
         <span style={{ display: "flex", marginLeft: "auto", padding: 2, gap: 2, background: "var(--ground)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
           {(["photoreal", "aerial"] as const).map((m) => {
             const on = lay.basemap === m;
-            return <Tooltip key={m} text={m === "photoreal" ? "Google Photorealistic 3D Tiles" : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" onClick={() => setBasemap(m)}
+            const off = m === "photoreal" && photorealOff;
+            return <Tooltip key={m} text={m === "photoreal" ? (off && lay.photorealDown ? downText(lay.photorealDown.kind) : "Google Photorealistic 3D Tiles") : "Aerial imagery on terrain; shows every building by depth"}><CtlButton variant="segment" pressed={on} type="button" disabled={off} onClick={() => setBasemap(m)}
               style={{ height: 22, padding: "0 9px", border: 0, borderRadius: 3, font: "inherit", fontSize: "inherit", boxShadow: "none", ...(on ? { background: "var(--ink)", color: "var(--ground)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)", fontWeight: 400 }) }}>
               {m === "photoreal" ? "Photoreal 3D" : "Aerial"}</CtlButton></Tooltip>;
           })}
         </span>
       </div>
+      {lay.photorealDown && <PhotorealDownRow down={lay.photorealDown} />}
       {lay.googleAvailable && <AerialSourceRow />}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px 6px", fontSize: 12, color: "var(--ink-muted)", opacity: lay.basemap === "aerial" ? 1 : 0.45 }}>
         Imagery
@@ -572,6 +602,22 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     setTab(now);
   }, [comparing, agentMode]);
   useEffect(() => { if (inspectFocus) setTab("Inspect"); }, [inspectFocus]);
+  // The map chip's Details: Layers, scrolled to the Base map row with its pressed choice focused.
+  const basemapFocus = useLayers().basemapFocus;
+  useEffect(() => {
+    if (!basemapFocus) return;
+    setTab("Layers");
+    // The Layers card may mount a few frames later (a lazy chunk, the phone sheet opening): look for the row for up to ~1 s.
+    let tries = 0, raf = 0;
+    const find = () => {
+      const row = document.querySelector<HTMLElement>("[data-basemap-row]");
+      const btn = row?.querySelector<HTMLElement>('button[aria-pressed="true"]');
+      if (row && btn) { row.scrollIntoView({ block: "center" }); btn.focus(); return; }
+      if (++tries < 60) raf = requestAnimationFrame(find);
+    };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [basemapFocus]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
@@ -580,28 +626,51 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     wasCloseup.current = closeup;
   }, [closeup]);
   const { t_s } = useClock();
-  // Phone: the sticky Simulate footer covers the bottom of the scroller, so focus and scrollIntoView stop above it
-  // (otherwise a control scrolled into view lands under the footer and a tap hits the footer).
-  const foot = useRef<HTMLDivElement>(null);
+  // A sticky footer (the phone's Simulate bar, the Agent's Ask bar: [data-sticky-foot]) covers the bottom of the
+  // scroller, so focus and scrollIntoView stop above it (otherwise a control scrolled into view lands under the footer
+  // and a tap hits the footer). The visible one is followed as tabs and panels mount.
   const scroller = useRef<HTMLDivElement>(null);
-  const touched = useRef<Element | null>(null);
   const [footH, setFootH] = useState(0);
-  useEffect(() => {
-    const el = foot.current;
-    if (!el) { setFootH(0); return; }
-    const ro = new ResizeObserver(() => {
-      const h = el.offsetHeight;
-      setFootH(h);
-      // The footer grows when a status line wraps (the estimate arriving after a change): the control just used
-      // stays above it instead of ending up under it.
-      const sc = scroller.current, focused = document.activeElement;
-      const t = sc && focused && sc.contains(focused) && focused !== sc ? focused : touched.current;
-      if (!sc || !t || !sc.contains(t) || el.contains(t) || t.getBoundingClientRect().bottom <= el.getBoundingClientRect().top) return;
-      sc.style.scrollPaddingBottom = `${h}px`;
-      t.scrollIntoView({ block: "nearest" });
+  useLayoutEffect(() => {
+    const sc = scroller.current;
+    if (!sc) return;
+    let el: HTMLElement | null = null, last = 0;
+    // What it covers: its height, plus the gap its bottom offset leaves above the scroller's padded edge.
+    const covers = (f: HTMLElement) => f.offsetHeight + (parseFloat(getComputedStyle(sc).paddingBottom) || 0) + (parseFloat(getComputedStyle(f).bottom) || 0);
+    // The padding is written straight onto the scroller (React's copy follows), so a tap right after a tab switch or
+    // the sheet opening already lands above the footer.
+    const apply = (h: number) => { sc.style.scrollPaddingBottom = h ? `${h}px` : ""; setFootH(h); };
+    // The visible footer: a closed phone sheet has none, and opening it resizes the scroller, which lands in measure.
+    const visible = () => Array.from(sc.querySelectorAll<HTMLElement>("[data-sticky-foot]")).find((x) => x.offsetParent !== null) ?? null;
+    const measure = () => {
+      const f = visible();
+      if (f !== el) {
+        if (el) ro.unobserve(el);
+        el = f;
+        if (f) ro.observe(f, { box: "border-box" });  // padding counts (the safe-area inset)
+        last = f ? covers(f) : 0;
+        apply(last);
+        return;
+      }
+      if (!el) return;
+      const h = covers(el), grew = h - last;
+      last = h;
+      apply(h);
+      // The footer grows when a status line wraps (the estimate arriving after a change): scroll by the growth, so
+      // whatever sat just above the footer, touched or not, stays above it.
+      if (grew > 0 && last > grew && sc.scrollTop > 0) sc.scrollTop += grew;
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(sc);
+    measure();
+    // A DOM change that swaps the footer (a tab switch) is measured at once; other changes re-measure at most once a frame.
+    let frame = 0;
+    const mo = new MutationObserver(() => {
+      if (visible() !== el) { cancelAnimationFrame(frame); frame = 0; measure(); }
+      else if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); });
     });
-    ro.observe(el);
-    return () => ro.disconnect();
+    mo.observe(sc, { childList: true, subtree: true });
+    return () => { ro.disconnect(); mo.disconnect(); cancelAnimationFrame(frame); };
   }, [phone, tab]);
   const locked = scenario.busy || scenario.sim.state === "running";
   // While it runs, the lock says why and for how long, so the greyed cards explain themselves.
@@ -612,8 +681,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   return (
     <aside style={{ display: "flex", flexDirection: "column", flex: "1 1 auto", background: "var(--ground)", borderLeft: phone ? undefined : "1px solid var(--hairline)", minHeight: 0, overflow: "hidden" }}>
       {!phone && <Tabs tabs={[...(comparing ? COMPARE_TABS : agentMode ? AGENT_TABS : TABS), ...(timeline ? ["Timeline" as const] : [])]} active={tab} onTab={setTab} />}
-      <div ref={scroller} onPointerDown={(e) => { touched.current = e.target instanceof Element ? e.target : null; }}
-        style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
+      <div ref={scroller} style={{ flexGrow: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: 10, scrollPaddingBottom: footH || undefined }}>
         {tab === "Layers" && <><LayersCard /><FlowHazardCard /><GpuCard run={run} aoi={aoi} buildingsUrl={buildingsUrl} onDemo={onDemo} /></>}
         {tab === "Layers" && phone && (
           <CtlButton variant="text" type="button" onClick={() => setTab("Sources")} style={{ alignSelf: "flex-start", minHeight: 40, padding: "0 4px", background: "transparent", border: 0,
@@ -641,7 +709,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
               {aoi?.drainage_default && <div data-tour="drainage" style={{ display: "flex", flexDirection: "column" }}><DrainageCard aoi={aoi} run={run} /></div>}
             </CardLock.Provider>
             {phone ? (
-              <div ref={foot} style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
+              <div data-sticky-foot="" style={{ position: "sticky", bottom: -10, zIndex: 2, margin: "0 -10px -10px", padding: "8px 10px calc(10px + env(safe-area-inset-bottom))", background: "var(--ground)",
                 borderTop: "1px solid var(--hairline)", display: "flex", flexDirection: "column", order: 1 }}>
                 <SimulateBar sim={scenario.sim} busy={scenario.busy} canRun={scenario.canRun} canClear={scenario.canClear} onSimulate={scenario.onSimulate} onStop={scenario.onStop} onClear={scenario.onClear} />
               </div>

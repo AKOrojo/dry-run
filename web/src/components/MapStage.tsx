@@ -9,6 +9,7 @@ import { useShort, useTouch } from "../lib/breakpoint";
 import type { Breakpoint } from "../lib/breakpoint";
 import { Globe } from "./Globe";
 import { fmtT, ProvenanceBadge } from "./ds";
+import { PhotorealChip } from "./PhotorealChip";
 import { API, getBuildingDepths, getPointInfo, getPointSeries, SERIES_DEBOUNCE_MS } from "../lib/api";
 import type { AOIManifest, PointInfo, PointSeries, RunManifest } from "../lib/api";
 import { useExtras } from "../lib/extras";
@@ -50,6 +51,7 @@ import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 import { Button } from "./controls/Button";
+import { labelWidth, thinTicks } from "../lib/ticks";
 import { PlaceLabel } from "./PlaceLabel";
 
 type CamMode = "orbit" | "free" | "fly";
@@ -342,11 +344,13 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   const km = nice >= 1000;
   const f = (n: number) => String(km ? n / 1000 : n);
   const unit = km ? " km" : " m";
+  // The middle label goes when the labels would run together (the same rule as the chart axes); the ends always show.
+  const mid = thinTicks([0, px / 2, px], ["0", f(nice / 2), `${f(nice)}${unit}`].map((t) => labelWidth(t, 11)), px, ["middle", "middle", "middle"]).includes(1);
   return (
     <div aria-label={`Scale ${f(nice)}${unit}`} style={{ position: "relative", width: px, height: 28, marginRight: 10, color: "var(--ink)", fontSize: 11, ...FIG,
       textShadow: "0 0 3px var(--ground), 0 0 1px var(--ground)" }}>
       <span style={{ position: "absolute", left: 0, top: 0, transform: "translateX(-50%)" }}>0</span>
-      <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>
+      {mid && <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>}
       <span style={{ position: "absolute", right: 0, top: 0, transform: "translateX(50%)", whiteSpace: "nowrap" }}>{f(nice)}{unit}</span>
       <svg width={px} height="10" viewBox={`0 0 ${px} 10`} style={{ position: "absolute", left: 0, bottom: 0, overflow: "visible" }} aria-hidden="true">
         <path d={`M1 1v8 M${px - 1} 1v8 M1 6h${px - 2}`} stroke="var(--ground)" strokeWidth="4" strokeLinecap="round" fill="none" />
@@ -569,6 +573,17 @@ function declutter(root: HTMLElement, phone = false) {
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
   const obstacles = kept.slice();
+  // On a desktop the close-up, GPU-box and rain chips give way to the controls, the legends and the credits; one still
+  // shown then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
+  // Among themselves the higher priority stays (data-declutter-phone; a tie keeps page order).
+  if (!phone) Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-phone]"))
+    .map((el) => ({ el, p: Number(el.dataset.declutterPhone) || 0, r: el.getBoundingClientRect() }))
+    .filter((c) => c.r.width > 0)
+    .sort((a, b) => b.p - a.p)
+    .forEach(({ el, r }) => {
+      if (under(r, kept)) el.style.visibility = "hidden";
+      else kept.push(r);
+    });
   for (const b of boxes) {
     const isPlace = "place" in b.el.dataset;
     const capped = phone && isPlace && places >= PHONE_PLACES;
@@ -581,12 +596,6 @@ function declutter(root: HTMLElement, phone = false) {
     if ((phone || b.el.dataset.off) && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
     if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
-  // On a desktop the close-up and GPU-box chips keep their places among the labels but still give way to the controls,
-  // the legends and the credits.
-  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && under(r, obstacles)) el.style.visibility = "hidden";
-  });
   // A place's dot under a control or the credits goes, with its chip.
   root.querySelectorAll<HTMLElement>("[data-place]").forEach((chip) => {
     const btn = chip.parentElement!, dot = btn.firstElementChild!.getBoundingClientRect();
@@ -628,6 +637,8 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const [mode, setMode] = useState<CamMode>("orbit");
   const modeRef = useRef<CamMode>("orbit");
   modeRef.current = mode;
+  // Bumped by "Restart map": a new Globe and viewer after the map stopped drawing.
+  const [mapGen, setMapGen] = useState(0);
   const [freeSpeed, setFreeSpeed] = useState(1);
   const route = useFlyRoute();
   const evac = useEvacLine();
@@ -1274,9 +1285,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
   return (
     <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
-      {aoi && <Globe aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
+      {aoi && <Globe key={mapGen} aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
-        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} />}
+        onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} onRestart={() => setMapGen((g) => g + 1)} />}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
         {underlay}
         {lay.places.on && places.map((p) => {
@@ -1341,11 +1352,15 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           items={menu ? [{ kind: "item", label: "Drop waypoint", hint: touch ? undefined : "W", onSelect: () => dropWaypoint(menu.lon, menu.lat) }] : []} />
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
-        {run && !!frames?.length && !closeUp.active && (
-          <div data-declutter-block={phone ? "" : undefined} style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), pointerEvents: "auto" }}>
-            <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
-          </div>
-        )}
+        {/* Top-left chip stack: the run's badge, then the "3D city unavailable" chip when Google's tiles failed. */}
+        <div style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, pointerEvents: "none" }}>
+          {run && !!frames?.length && !closeUp.active && (
+            <div data-declutter-block={phone ? "" : undefined} style={{ pointerEvents: "auto" }}>
+              <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
+            </div>
+          )}
+          <PhotorealChip phone={phone} />
+        </div>
         {phone ? (
           <div data-declutter-block style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
             <ViewSwitch compact active={active} onPick={pickMode} canFly={route.length >= 2} extra={

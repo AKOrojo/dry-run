@@ -5,6 +5,7 @@ export type LayerKey = "water" | "buildings" | "roads" | "places" | "arrival" | 
 export type LayerState = { on: boolean; opacity: number };
 export type ImageryMode = "colour" | "greyscale";
 /** Aerial: Bing imagery on World Terrain. Photoreal: Google Photorealistic 3D Tiles (via ion), water draped on it. */
+import type { PhotorealDown } from "./photoreal";
 export type Basemap = "aerial" | "photoreal";
 /** Aerial imagery source: Bing (ion, everyone) or Google Map Tiles 2D (judges and the team; key from /api/tiles/google-key). */
 export type AerialSource = "bing" | "google";
@@ -12,6 +13,9 @@ export type LayersState = Record<LayerKey, LayerState> & {
   imageryMode: ImageryMode; basemap: Basemap; aerial: AerialSource;
   /** Why the map is on Bing although Google was picked (no key, daily limit), or null. */ aerialNote: string | null;
   /** The server has a Google Map Tiles key (/api/config.google_tiles_available): offer Google as an Aerial source. */ googleAvailable: boolean;
+  /** Google's Photorealistic 3D Tiles failed this session (lib/photoreal.ts): why, and when to offer them again. */ photorealDown: PhotorealDown | null;
+  /** The map's "3D city unavailable" chip was dismissed: it is shown once per session. */ photorealChipDismissed: boolean;
+  /** Bumped to open Layers and focus the Base map row (the chip's Details). */ basemapFocus: number;
 };
 
 let state: LayersState = {
@@ -43,6 +47,9 @@ let state: LayersState = {
   aerial: "bing",
   aerialNote: null,
   googleAvailable: false,
+  photorealDown: null,
+  photorealChipDismissed: false,
+  basemapFocus: 0,
 };
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
@@ -71,6 +78,20 @@ export function setAerial(aerial: AerialSource, aerialNote: string | null = null
 }
 export function setAerialNote(aerialNote: string | null) {
   state = { ...state, aerialNote };
+  emit();
+}
+/** Photoreal failed (down) or the user asked to try it again (null). */
+export function setPhotorealDown(photorealDown: PhotorealDown | null) {
+  state = { ...state, photorealDown };
+  emit();
+}
+export function dismissPhotorealChip() {
+  state = { ...state, photorealChipDismissed: true };
+  emit();
+}
+/** Open Layers at the Base map row (Sidebar on desktop, the panel or sheet on smaller screens). */
+export function focusBasemap() {
+  state = { ...state, basemapFocus: state.basemapFocus + 1 };
   emit();
 }
 export function setGoogleAvailable(googleAvailable: boolean) {
