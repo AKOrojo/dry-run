@@ -3,6 +3,7 @@
 // (docs/design/rev5-ref/parts.py): tokens only, no hand-rolled colours.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import * as Cesium from "cesium";
 import { ArrowsOut, ArrowsOutCardinal, Camera, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
 import { useShort, useTouch } from "../lib/breakpoint";
@@ -81,6 +82,8 @@ export type MapStageProps = {
   underlay?: ReactNode;
   /** Board 13: a phone gets the icon-only toolbar, the right-edge column and the scale bar bottom-left. */
   layout?: Breakpoint;
+  /** Phone Side by side: the right pane, where the map's button column goes (the two cameras are synced, so it shows once). */
+  controlsHost?: HTMLElement | null;
 };
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
@@ -562,6 +565,8 @@ function ArrivalLegendBox({ legend }: { legend: ArrivalLegend }) {
  *  most PHONE_PLACES place chips. */
 const PHONE_PLACES = 6;
 function declutter(root: HTMLElement, phone = false) {
+  // Obstacles over the map from outside this stage count too (Compare's runs card and pane labels, the second pane's buttons).
+  const scope = root.closest<HTMLElement>(".dr-map") ?? root;
   if (!phone) {
     root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => { el.style.visibility = ""; });
     root.querySelectorAll<HTMLElement>("[data-place]").forEach((el) => { el.parentElement!.style.visibility = ""; });
@@ -597,7 +602,7 @@ function declutter(root: HTMLElement, phone = false) {
   let places = 0;
   // A pinned card beside its point takes the first free side: below-right, above-right, below-left, above-left.
   // Free means clear of the bottom controls, the credits and the map's edge; with none free, the least covered spot.
-  const fixed = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block]:not([data-clamp]), .cesium-viewer-bottom :not(:has(*))"))
+  const fixed = Array.from(scope.querySelectorAll<HTMLElement>("[data-declutter-block]:not([data-clamp]), .cesium-viewer-bottom :not(:has(*))"))
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
   root.querySelectorAll<HTMLElement>("[data-clamp]").forEach((card) => {
     const at = card.parentElement!.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
@@ -619,7 +624,7 @@ function declutter(root: HTMLElement, phone = false) {
     if (card.style.transform !== t) card.style.transform = t;
   });
   // Map controls and the hint pill are obstacles: labels never sit under them.
-  const kept: DOMRect[] = Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
+  const kept: DOMRect[] = Array.from(scope.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);  // and the credits (an attribution requirement)
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
@@ -655,7 +660,8 @@ function declutter(root: HTMLElement, phone = false) {
 }
 
 // ---------- the stage ----------
-export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase, layout = "desktop" }: MapStageProps) {
+export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer, onBuilding, onView, underlay, tS, ionToken, buildingsUrl, runsBase, layout = "desktop", controlsHost }: MapStageProps) {
+  const portal = (el: ReactElement) => (controlsHost ? createPortal(el, controlsHost) : el);
   const phone = layout === "phone";
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
@@ -1722,7 +1728,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <>
             {/* Phone: top right, under the header. Tablet: bottom right, clear of the coordinate chip (the desktop row
                 would run into it at 768 px). */}
-            <div data-declutter-block style={{ position: "absolute", right: phone ? 12 : 16, ...(phone ? { top: 12 } : { bottom: 26 }), display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
+            {portal(<div data-declutter-block style={{ position: "absolute", right: phone ? 12 : 16, ...(phone ? { top: 12 } : { bottom: 26 }), display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
               <button type="button" data-tour="plan" aria-label={view === "Plan" ? "2D plan view. Switch to 3D" : "3D view. Switch to the 2D plan view"} onClick={() => pickView(view === "Plan" ? "Orbit" : "Plan")}
                 style={{ ...groupStyle, ...colBtn, fontWeight: 600, fontSize: 12 }}>{view === "Plan" ? "2D" : "3D"}</button>
               <div style={{ ...groupStyle, height: "auto", padding: 0, flexDirection: "column" }}>
@@ -1736,7 +1742,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
               ) : (
                 <UiTooltip text="Fullscreen"><Button variant="icon" type="button" aria-label="Fullscreen" onClick={fullscreen} style={{ ...groupStyle, ...colBtn }}><ArrowsOut size={16} weight="bold" /></Button></UiTooltip>
               )}
-            </div>
+            </div>)}
             <div data-declutter-block style={{ position: "absolute", ...(phone ? (short ? { left: credW + 16, bottom: 8 } : { left: 12, bottom: aboveChip }) : { right: 72, bottom: viewState.coords ? aboveChip : 26 }), pointerEvents: "none" }}>
               <ScaleBar nice={cam.nice} px={cam.px} />
             </div>

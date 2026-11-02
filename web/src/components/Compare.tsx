@@ -167,21 +167,29 @@ function PhoneRuns({ rows }: { rows: { l: "A" | "B"; name: string; origin: strin
   useLayoutEffect(() => {
     const box = el.current?.parentElement;
     if (!box) return;
+    // A chip the declutter hid (visibility: hidden) still takes room in the stack: count only the ones that show.
+    const shows = (e: Element) => { const cs = getComputedStyle(e); return cs.visibility !== "hidden" && cs.opacity !== "0" && e.getBoundingClientRect().height > 0; };
     const place = () => {
       const o = box.getBoundingClientRect();
-      const bar = document.querySelector<HTMLElement>("[data-map-toolbar]")?.getBoundingClientRect();
-      const marks = [...document.querySelectorAll<HTMLElement>("[data-map-toolbar], [data-chip-stack]")].map((m) => m.getBoundingClientRect()).filter((r) => r.height > 0);
-      if (short && bar) setAt({ top: Math.round(bar.top - o.top), left: Math.round(bar.right - o.left + 8) });
-      else if (marks.length) setAt({ top: Math.round(Math.max(...marks.map((r) => r.bottom)) - o.top + 8), left: 12 });
+      const bar = document.querySelector<HTMLElement>("[data-map-toolbar]");
+      const stack = document.querySelector<HTMLElement>("[data-chip-stack]");
+      const marks = [...(bar ? [bar] : []), ...(stack ? [...stack.children] : [])].filter(shows).map((e) => e.getBoundingClientRect());
+      const next = short && bar ? { top: Math.round(bar.getBoundingClientRect().top - o.top), left: Math.round(bar.getBoundingClientRect().right - o.left + 8) }
+        : marks.length ? { top: Math.round(Math.max(...marks.map((r) => r.bottom)) - o.top + 8), left: 12 } : null;
+      if (next) setAt((p) => (p.top === next.top && p.left === next.left ? p : next));
     };
     place();
     const ro = new ResizeObserver(place);
     document.querySelectorAll("[data-map-toolbar], [data-chip-stack]").forEach((m) => ro.observe(m));
     ro.observe(box);
-    return () => ro.disconnect();
+    // A chip shown or hidden by the declutter changes no size: watch its style and class too.
+    const mo = new MutationObserver(place);
+    const stack = document.querySelector("[data-chip-stack]");
+    if (stack) mo.observe(stack, { subtree: true, childList: true, attributes: true, attributeFilter: ["style", "class"] });
+    return () => { ro.disconnect(); mo.disconnect(); };
   }, [short]);
   return (
-    <div ref={el} style={{ position: "absolute", top: at.top, left: at.left, right: 64, zIndex: 2, display: "flex", flexDirection: "column", background: "var(--surface-raised)",
+    <div ref={el} data-declutter-block="" style={{ position: "absolute", top: at.top, left: at.left, right: 64, zIndex: 2, display: "flex", flexDirection: "column", background: "var(--surface-raised)",
       border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none" }}>
       {rows.map(({ l, name, origin }, i) => (
         <div key={l} role="group" aria-label={`Run ${l}: ${name}, ${origin}`} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: 32, padding: "0 10px",
@@ -194,6 +202,18 @@ function PhoneRuns({ rows }: { rows: { l: "A" | "B"; name: string; origin: strin
   );
 }
 
+/** Phone Side by side: each pane's run, at the pane's bottom-left above the view switch (one line, the card row's look). */
+function PaneLabel({ l, name, origin, bottom }: { l: "A" | "B"; name: string; origin: string; bottom: number }) {
+  return (
+    <div role="group" aria-label={`Run ${l}: ${name}, ${origin}`} data-declutter-block="" style={{ position: "absolute", bottom, left: l === "A" ? 12 : "calc(50% + 12px)",
+      maxWidth: "calc(50% - 24px)", zIndex: 2, display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px", boxSizing: "border-box", minWidth: 0,
+      background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none" }}>
+      <Letter l={l} size={18} />
+      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, fontWeight: 600, fontSize: 13 }}>{name}</span>
+    </div>
+  );
+}
+
 /** A and B labels, the view switch, and the swipe handle or difference legend, over the map. */
 export function CompareMapOverlay({ phone = false, a, b, names, origin, view, onView, split, onSplit }: {
   /** One runs card in place of the two chips (they overlap at phone widths). */ phone?: boolean;
@@ -201,12 +221,27 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
   split: number; onSplit: (v: number) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  // Phone Side by side: the pane labels sit just above the view switch (which spans the panes' bottom-left).
+  const switchEl = useRef<HTMLDivElement>(null);
+  const [labelsBottom, setLabelsBottom] = useState(98);
+  useLayoutEffect(() => {
+    const sw = switchEl.current;
+    if (!phone || view !== "Side by side" || !sw || !box.current) return;
+    const place = () => setLabelsBottom(Math.round(box.current!.getBoundingClientRect().bottom - sw.getBoundingClientRect().top + 8));
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(sw); ro.observe(box.current);
+    return () => ro.disconnect();
+  }, [phone, view]);
   const drag = (e: PointerEvent) => { const r = box.current!.getBoundingClientRect(); onSplit(Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width))); };
   const views: CompareView[] = ["A", "B", "Swipe", "Side by side", "Difference"];
   const left = view === "Swipe" || view === "Side by side";
   return (
     <div ref={box} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {phone ? <PhoneRuns rows={[
+      {phone && view === "Side by side" ? <>
+        <PaneLabel l="A" name={names?.a ?? runLabel(a)} origin={origin(a)} bottom={labelsBottom} />
+        <PaneLabel l="B" name={names?.b ?? runLabel(b)} origin={origin(b)} bottom={labelsBottom} />
+      </> : phone ? <PhoneRuns rows={[
         ...(left || view === "A" || view === "Difference" ? [{ l: "A" as const, name: names?.a ?? runLabel(a), origin: origin(a) }] : []),
         ...(left || view === "B" || view === "Difference" ? [{ l: "B" as const, name: names?.b ?? runLabel(b), origin: origin(b) }] : []),
       ]} /> : <>
@@ -235,7 +270,7 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
           <span style={{ color: "var(--ink-muted)", ...FIG }}>Changes under {DIFF_MIN_M.toFixed(2)} m not shown</span>
         </div>
       )}
-      <div role="group" aria-label="Compare view" data-tour="compare-view" style={{ position: "absolute", left: 12, bottom: 44, zIndex: 1, display: "flex", gap: 2, padding: 3, background: "var(--surface)",
+      <div ref={switchEl} role="group" aria-label="Compare view" data-tour="compare-view" style={{ position: "absolute", left: 12, bottom: 44, zIndex: 1, display: "flex", gap: 2, padding: 3, background: "var(--surface)",
         border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--card-shadow)", pointerEvents: "auto" }}>
         {views.map((v) => {
           const on = v === view;

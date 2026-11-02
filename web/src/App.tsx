@@ -487,6 +487,7 @@ export default function App() {
     [mapRun, runsBase, pair?.a.run_id, cmpView, diff]);
   const framesB = useMemo(() => (pair && cmpView === "Swipe" ? framesOf(pair.b) : undefined), [pair?.b.run_id, cmpView, runsBase]);
   const side = !!pair && cmpView === "Side by side";
+  const [sideHost, setSideHost] = useState<HTMLDivElement | null>(null);
 
   // ---- Plan view: click a building (shift: a second one to compare); ?building=<id> selects one on load.
   const [plan, setPlan] = useState(false);
@@ -572,7 +573,7 @@ export default function App() {
             <ErrorBoundary name="map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
             {aoi && <MapStage aoi={aoi} run={mapRun} frames={frames} framesB={framesB} split={pair && cmpView === "Swipe" ? split : undefined} onViewer={setMainViewer} onBuilding={onBuilding} onView={(v) => setPlan(v === "Plan")} underlay={plan ? <Graticule viewer={mainViewer} /> : undefined}
               tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase}
-              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} layout={bp} />}
+              rainStorm={{ total_mm: rain, duration_h: durationH, pattern }} layout={bp} controlsHost={side && bp === "phone" ? sideHost : null} />}
             </ErrorBoundary>
           </div>
           {side && aoi && pair && (
@@ -580,6 +581,8 @@ export default function App() {
               <ErrorBoundary name="second map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
               <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
               </ErrorBoundary>
+              {/* Phone: the map's buttons, once, here (MapStage portals them in; the cameras are synced). */}
+              <div ref={setSideHost} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
             </div>
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
