@@ -624,10 +624,13 @@ function declutter(root: HTMLElement, phone = false) {
     if (card.style.transform !== t) card.style.transform = t;
   });
   // Map controls and the hint pill are obstacles: labels never sit under them.
-  const kept: DOMRect[] = Array.from(scope.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
-    .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);  // and the credits (an attribution requirement)
+  const blocks = Array.from(scope.querySelectorAll<HTMLElement>("[data-declutter-block], .cesium-viewer-bottom :not(:has(*))"))
+    .map((el) => ({ el, r: el.getBoundingClientRect() })).filter((k) => k.r.width > 0);  // and the credits (an attribution requirement)
+  const kept: DOMRect[] = blocks.map((k) => k.r);
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
+  // Compare's runs card gives way to the chip stack (data-chips-over): a chip is a notice, the card never hides one.
+  const keptForChips = () => kept.filter((_, i) => !blocks[i]?.el.hasAttribute("data-chips-over"));
   const obstacles = kept.slice();
   // On a desktop the close-up, GPU-box and rain chips give way to the controls, the legends and the credits; one still
   // shown then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
@@ -645,7 +648,7 @@ function declutter(root: HTMLElement, phone = false) {
     const capped = phone && isPlace && places >= PHONE_PLACES;
     // A label the map's edge would cut (under the header, the player or the tab bar) is hidden, not clipped.
     const outside = b.r.right > edge.right + 1 || b.r.left < edge.left - 1 || b.r.top < edge.top - 1 || b.r.bottom > edge.bottom + 1;
-    const hit = capped || outside || !!b.el.dataset.off || under(b.r, kept);
+    const hit = capped || outside || !!b.el.dataset.off || under(b.r, b.el.closest("[data-chip-stack]") ? keptForChips() : kept);
     b.el.style.visibility = hit ? "hidden" : "";
     // On a phone a hidden place goes with its dot: a dot left under another label is the clutter we are removing.
     // So does a place whose point is off the map, on any layout.
@@ -1728,7 +1731,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <>
             {/* Phone: top right, under the header. Tablet: bottom right, clear of the coordinate chip (the desktop row
                 would run into it at 768 px). */}
-            {portal(<div data-declutter-block style={{ position: "absolute", right: phone ? 12 : 16, ...(phone ? { top: 12 } : { bottom: 26 }), display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
+            {portal(<div data-declutter-block data-map-controls="" style={{ position: "absolute", right: phone ? 12 : 16, ...(phone ? { top: 12 } : { bottom: 26 }), display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
               <button type="button" data-tour="plan" aria-label={view === "Plan" ? "2D plan view. Switch to 3D" : "3D view. Switch to the 2D plan view"} onClick={() => pickView(view === "Plan" ? "Orbit" : "Plan")}
                 style={{ ...groupStyle, ...colBtn, fontWeight: 600, fontSize: 12 }}>{view === "Plan" ? "2D" : "3D"}</button>
               <div style={{ ...groupStyle, height: "auto", padding: 0, flexDirection: "column" }}>

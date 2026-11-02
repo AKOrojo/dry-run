@@ -189,7 +189,7 @@ function PhoneRuns({ rows }: { rows: { l: "A" | "B"; name: string; origin: strin
     return () => { ro.disconnect(); mo.disconnect(); };
   }, [short]);
   return (
-    <div ref={el} data-declutter-block="" style={{ position: "absolute", top: at.top, left: at.left, right: 64, zIndex: 2, display: "flex", flexDirection: "column", background: "var(--surface-raised)",
+    <div ref={el} data-declutter-block="" data-chips-over="" style={{ position: "absolute", top: at.top, left: at.left, right: 64, zIndex: 2, display: "flex", flexDirection: "column", background: "var(--surface-raised)",
       border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none" }}>
       {rows.map(({ l, name, origin }, i) => (
         <div key={l} role="group" aria-label={`Run ${l}: ${name}, ${origin}`} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: 32, padding: "0 10px",
@@ -202,11 +202,12 @@ function PhoneRuns({ rows }: { rows: { l: "A" | "B"; name: string; origin: strin
   );
 }
 
-/** Phone Side by side: each pane's run, at the pane's bottom-left above the view switch (one line, the card row's look). */
-function PaneLabel({ l, name, origin, bottom }: { l: "A" | "B"; name: string; origin: string; bottom: number }) {
+/** Phone Side by side: each pane's run, at the pane's bottom-left above the view switch (one line, the card row's look).
+ *  maxWidth: px when the pane's map buttons share its rows (it stops short of them), else the pane's width less the gutters. */
+function PaneLabel({ l, name, origin, bottom, maxWidth }: { l: "A" | "B"; name: string; origin: string; bottom: number; maxWidth?: number }) {
   return (
     <div role="group" aria-label={`Run ${l}: ${name}, ${origin}`} data-declutter-block="" style={{ position: "absolute", bottom, left: l === "A" ? 12 : "calc(50% + 12px)",
-      maxWidth: "calc(50% - 24px)", zIndex: 2, display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px", boxSizing: "border-box", minWidth: 0,
+      maxWidth: maxWidth ?? "calc(50% - 24px)", zIndex: 2, display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 10px", boxSizing: "border-box", minWidth: 0,
       background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none" }}>
       <Letter l={l} size={18} />
       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, fontWeight: 600, fontSize: 13 }}>{name}</span>
@@ -224,14 +225,29 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
   // Phone Side by side: the pane labels sit just above the view switch (which spans the panes' bottom-left).
   const switchEl = useRef<HTMLDivElement>(null);
   const [labelsBottom, setLabelsBottom] = useState(98);
+  // The B pane holds the map's buttons (MapStage portals them there): where they share the label's rows, the label
+  // stops 8 px short of them.
+  const [bMax, setBMax] = useState<number | undefined>();
   useLayoutEffect(() => {
-    const sw = switchEl.current;
-    if (!phone || view !== "Side by side" || !sw || !box.current) return;
-    const place = () => setLabelsBottom(Math.round(box.current!.getBoundingClientRect().bottom - sw.getBoundingClientRect().top + 8));
+    const sw = switchEl.current, own = box.current;
+    if (!phone || view !== "Side by side" || !sw || !own) return;
+    const map = own.closest(".dr-map") ?? document.body;
+    let col: Element | null = null;
+    const ro = new ResizeObserver(() => place());
+    const place = () => {
+      if (!col?.isConnected) { col = map.querySelector("[data-map-controls]"); if (col) ro.observe(col); }
+      const o = own.getBoundingClientRect(), bottom = Math.round(o.bottom - sw.getBoundingClientRect().top + 8);
+      setLabelsBottom(bottom);
+      const c = col?.getBoundingClientRect(), y1 = o.bottom - bottom, y0 = y1 - 32, x0 = o.left + o.width / 2 + 12;
+      const max = c && c.width > 0 && c.top < y1 && c.bottom > y0 && c.left > x0 ? Math.floor(Math.min(o.width / 2 - 24, c.left - 8 - x0)) : undefined;
+      setBMax(max);
+    };
     place();
-    const ro = new ResizeObserver(place);
-    ro.observe(sw); ro.observe(box.current);
-    return () => ro.disconnect();
+    ro.observe(sw); ro.observe(own);
+    // The buttons arrive through a portal, possibly after this runs (or again, when the portal's host changes).
+    const mo = new MutationObserver(() => { if (!col?.isConnected) place(); });
+    mo.observe(map, { childList: true, subtree: true });
+    return () => { ro.disconnect(); mo.disconnect(); };
   }, [phone, view]);
   const drag = (e: PointerEvent) => { const r = box.current!.getBoundingClientRect(); onSplit(Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width))); };
   const views: CompareView[] = ["A", "B", "Swipe", "Side by side", "Difference"];
@@ -240,7 +256,7 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
     <div ref={box} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       {phone && view === "Side by side" ? <>
         <PaneLabel l="A" name={names?.a ?? runLabel(a)} origin={origin(a)} bottom={labelsBottom} />
-        <PaneLabel l="B" name={names?.b ?? runLabel(b)} origin={origin(b)} bottom={labelsBottom} />
+        <PaneLabel l="B" name={names?.b ?? runLabel(b)} origin={origin(b)} bottom={labelsBottom} maxWidth={bMax} />
       </> : phone ? <PhoneRuns rows={[
         ...(left || view === "A" || view === "Difference" ? [{ l: "A" as const, name: names?.a ?? runLabel(a), origin: origin(a) }] : []),
         ...(left || view === "B" || view === "Difference" ? [{ l: "B" as const, name: names?.b ?? runLabel(b), origin: origin(b) }] : []),
