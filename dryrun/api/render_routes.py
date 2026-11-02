@@ -39,6 +39,9 @@ async def render(request: Request, base_run_id: str = Form(...), alt_run_id: str
                             provider=provider)
     except ValidationError as exc:
         raise HTTPException(422, "invalid render request: " + "; ".join(e["msg"] for e in exc.errors())) from None
+    # Fake pictures land in the shared render cache, so only a dev or test server may make them.
+    if req.provider == "fake" and os.getenv("DRYRUN_ALLOW_FAKE_RENDER") != "1":
+        raise HTTPException(400, "provider=fake is only for local testing and is turned off on this server")
     # Auth and limits run off the event loop: a presented key can wait on the shared lockout store (authguard).
     await run_in_threadpool(limit, request, "render_cached", per_hour=600)  # before any storage lookup
     photo = None

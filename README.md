@@ -572,7 +572,8 @@ How the pictures are made, and why:
   second click in the same cell, costs nothing and needs no key. Identical requests in flight share one render. A new render makes two image calls and two vision
   calls, so it needs the judge or team key, counts against the per-IP cap (20/h) and the daily cap
   (`DRYRUN_RENDER_PER_DAY`, 100), and takes about 50-90 s (49-74 s locally, 89 s on Cloud Run). `provider: "fake"`
-  draws offline placeholders for UI work.
+  draws offline placeholders for UI work. The server refuses it (400) unless `DRYRUN_ALLOW_FAKE_RENDER=1` is
+  set, because fake pictures go into the same render cache real viewers read; never set it on a deployment.
 
 ## Provenance
 
