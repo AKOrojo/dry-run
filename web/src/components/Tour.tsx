@@ -10,7 +10,7 @@ const CARD_W = 300;
 const GAP = 14;
 const PAD = 6;
 const MARGIN = 12;
-/** Phone and tablet: how long a step looks for its target in a sheet or drawer (lazy cards) before it is skipped. */
+/** How long a step looks for its target in a sheet, drawer or newly opened tab (lazy cards) before it is skipped. */
 const SEARCH_MS = 1500;
 
 const ALL_STEPS = [
@@ -35,7 +35,7 @@ const ALL_STEPS = [
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map. Each run's name shows what differs from the others: the time pattern, where the rain fell and the drainage." },
   { id: "street", anchor: "compare", title: "See a spot as a street picture", body: "In Compare, click a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
-  { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
+  { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check. Without the judge key, pick a recorded question to replay a real session." },
   { id: "voice", anchor: "agent", title: "Say it instead of typing", body: "In Agent, press the mic in the goal box and speak; pause or press it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ] as const;
 type Step = { id: string; title: string; body: string; /** The element to ring, when it is not [data-tour=id]. */ anchor?: string };
@@ -97,7 +97,13 @@ const findTarget = (id: string): Box | null => {
   return r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
 };
 
-function place(t: Box | null, cardH: number): { left: number; top: number } {
+/** A target taller than half the screen (the Drainage card on a phone) scrolls its top into view, not its middle. */
+const reveal = (id: string) => {
+  const el = document.querySelector<HTMLElement>(`[data-tour="${id}"]`);
+  el?.scrollIntoView({ block: el.getBoundingClientRect().height > window.innerHeight * 0.5 ? "start" : "nearest" });
+};
+
+function place(t: Box | null, cardH: number): { left: number; top: number; docked?: boolean } {
   const vw = window.innerWidth, vh = window.innerHeight;
   if (!t) return { left: (vw - CARD_W) / 2, top: Math.max(MARGIN, (vh - cardH) / 2) };
   const clampX = (x: number) => Math.min(Math.max(MARGIN, x), vw - CARD_W - MARGIN);
@@ -108,7 +114,15 @@ function place(t: Box | null, cardH: number): { left: number; top: number } {
   if (small && t.top - GAP - cardH >= MARGIN) return { left: clampX(cx), top: t.top - GAP - cardH };
   if (t.left - GAP - CARD_W >= MARGIN) return { left: t.left - GAP - CARD_W, top: clampY(cy) };
   if (t.left + t.width + GAP + CARD_W + MARGIN <= vw) return { left: t.left + t.width + GAP, top: clampY(cy) };
-  return { left: clampX(cx), top: clampY(cy) };
+  // No room beside it (a tall card on a phone): the tour card docks at the bottom, under the target's top.
+  return { left: clampX(cx), top: vh - cardH - MARGIN, docked: true };
+}
+
+/** The ring goes round the part of the target left in view above a docked card. */
+function ringed(t: Box, at: { top: number; docked?: boolean }): Box {
+  if (!at.docked) return t;
+  const top = Math.max(t.top, MARGIN), bottom = Math.min(t.top + t.height, at.top - GAP);
+  return { ...t, top, height: Math.max(0, bottom - top) };
 }
 
 export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: () => void; layout?: Breakpoint;
@@ -133,20 +147,24 @@ export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: 
 
   const measure = useCallback(() => {
     const t = findTarget(step.anchor ?? step.id);
-    setTarget(t);
-    setPos(place(t, cardRef.current?.offsetHeight ?? 190));
+    const at = place(t, cardRef.current?.offsetHeight ?? 190);
+    setTarget(t && ringed(t, at));
+    setPos({ left: at.left, top: at.top });
     return t;
   }, [step]);
-  const layoutNarrow = useCallback(() => {
-    stepTo.current?.(step.id);
-    // The sheet or drawer renders on the next frames, and its cards may still be loading: look for up to SEARCH_MS.
+  const layout = useCallback(() => {
+    const id = step.anchor ?? step.id;
+    if (narrow) stepTo.current?.(step.id);
+    // Desktop: a card on another sidebar tab (Flow and hazard on Layers) opens that tab first.
+    else if (VIA[step.id] && !document.querySelector(`[data-tour="${id}"]`)) document.querySelector<HTMLElement>(`[data-tour="${VIA[step.id]}"]`)?.click();
+    // The sheet, drawer or tab renders on the next frames, and its cards may still be loading: look for up to SEARCH_MS.
     const t0 = performance.now();
     let raf = 0;
     setSearching(true);
     const look = () => {
-      document.querySelector<HTMLElement>(`[data-tour="${step.anchor ?? step.id}"]`)?.scrollIntoView({ block: "nearest" });
+      reveal(id);
       if (measure() || performance.now() - t0 > SEARCH_MS) {
-        if (!findTarget(step.anchor ?? step.id) && OPTIONAL.has(step.id)) {  // not on this page after all (no drains, no rain area)
+        if (!findTarget(id) && OPTIONAL.has(step.id)) {  // not on this page after all (no drains, no rain area)
           if (dir.current > 0 && i < STEPS.length - 1) { setI(i + 1); return; }
           if (dir.current < 0 && i > 0) { setI(i - 1); return; }
         }
@@ -157,27 +175,14 @@ export function Tour({ onClose, layout: shell = "desktop", onStep }: { onClose: 
     };
     raf = requestAnimationFrame(look);
     return () => cancelAnimationFrame(raf);
-  }, [step, measure, i, STEPS.length]);
-  const layout = useCallback(() => {
-    if (narrow) return layoutNarrow();
-    const via = VIA[step.id];
-    if (via && !document.querySelector(`[data-tour="${step.id}"]`)) {
-      document.querySelector<HTMLElement>(`[data-tour="${via}"]`)?.click();
-      requestAnimationFrame(() => requestAnimationFrame(() => { const t2 = findTarget(step.id); setTarget(t2); setPos(place(t2, cardRef.current?.offsetHeight ?? 190)); }));
-    }
-    // A card low in the sidebar (Drainage, the Simulate bar) scrolls into view before it is measured.
-    document.querySelector<HTMLElement>(`[data-tour="${step.id}"]`)?.scrollIntoView({ block: "nearest" });
-    const t = findTarget(step.id);
-    setTarget(t);
-    setPos(place(t, cardRef.current?.offsetHeight ?? 190));
-  }, [step.id]);
+  }, [step, measure, i, STEPS.length, narrow]);
 
   useLayoutEffect(() => layout(), [layout]);
   useEffect(() => {
-    const again = () => { if (narrow) measure(); else layout(); };
+    const again = () => { reveal(step.anchor ?? step.id); measure(); };
     window.addEventListener("resize", again);
     return () => window.removeEventListener("resize", again);
-  }, [measure, layout, narrow]);
+  }, [measure, step]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
