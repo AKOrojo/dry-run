@@ -12,6 +12,7 @@ import { Band, Card, FIG, mono } from "./rev5";
 import { Select } from "./controls/Select";
 import { runLabel } from "../lib/runlabel";
 import { useShort } from "../lib/breakpoint";
+import { SHEET_ID } from "./phone/Phone";
 import type { RunNames } from "../lib/streetpic";
 import { Globe } from "./Globe";
 import { Tooltip } from "./controls/Tooltip";
@@ -225,6 +226,24 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
   // Phone Side by side: the pane labels sit just above the view switch (which spans the panes' bottom-left).
   const switchEl = useRef<HTMLDivElement>(null);
   const [labelsBottom, setLabelsBottom] = useState(98);
+  // Phone: the view switch (and the difference legend above it) sits above the sheet at peek, which covers the map's foot.
+  const [lift, setLift] = useState(0);
+  useLayoutEffect(() => {
+    const sheet = document.getElementById(SHEET_ID), own = box.current;
+    if (!phone || !sheet || !own) return;
+    const place = () => {
+      const peek = !sheet.hidden && sheet.dataset.sheet === "peek";
+      const next = peek ? Math.max(0, Math.round(own.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top)) : 0;
+      setLift(next);
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(sheet); ro.observe(own);
+    const mo = new MutationObserver(place);
+    mo.observe(sheet, { attributes: true, attributeFilter: ["hidden", "data-sheet"] });
+    return () => { ro.disconnect(); mo.disconnect(); };
+  }, [phone]);
+  const switchBottom = lift ? lift + 8 : 44;
   // The B pane holds the map's buttons (MapStage portals them there): where they share the label's rows, the label
   // stops 8 px short of them.
   const [bMax, setBMax] = useState<number | undefined>();
@@ -248,7 +267,7 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
     const mo = new MutationObserver(() => { if (!col?.isConnected) place(); });
     mo.observe(map, { childList: true, subtree: true });
     return () => { ro.disconnect(); mo.disconnect(); };
-  }, [phone, view]);
+  }, [phone, view, switchBottom]);
   const drag = (e: PointerEvent) => { const r = box.current!.getBoundingClientRect(); onSplit(Math.min(0.95, Math.max(0.05, (e.clientX - r.left) / r.width))); };
   const views: CompareView[] = ["A", "B", "Swipe", "Side by side", "Difference"];
   const left = view === "Swipe" || view === "Side by side";
@@ -278,7 +297,7 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
       )}
       {view === "Side by side" && <span style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 2, marginLeft: -1, background: "var(--hairline)" }} />}
       {view === "Difference" && (
-        <div style={{ position: "absolute", left: 12, bottom: 84, zIndex: 1, display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "var(--surface-raised)",
+        <div style={{ position: "absolute", left: 12, bottom: switchBottom + 40, zIndex: 1, display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "var(--surface-raised)",
           border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", fontSize: 12 }}>
           <span style={{ fontWeight: 600 }}>Depth, B minus A</span>
           {([["var(--verified)", "Drier in B"], ["var(--hazard)", "Wetter in B"]] as const).map(([c, t]) => (
@@ -286,13 +305,15 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
           <span style={{ color: "var(--ink-muted)", ...FIG }}>Changes under {DIFF_MIN_M.toFixed(2)} m not shown</span>
         </div>
       )}
-      <div ref={switchEl} role="group" aria-label="Compare view" data-tour="compare-view" style={{ position: "absolute", left: 12, bottom: 44, zIndex: 1, display: "flex", gap: 2, padding: 3, background: "var(--surface)",
+      {/* Phone: inside the 16 px gutters (wider, it pushed the map sideways at 360 px), segments sharing the width. */}
+      <div ref={switchEl} role="group" aria-label="Compare view" data-tour="compare-view" style={{ position: "absolute", ...(phone ? { left: "var(--space-4)", maxWidth: "calc(100% - 2 * var(--space-4))", boxSizing: "border-box" } : { left: 12 }), bottom: switchBottom, zIndex: 1, display: "flex", gap: 2, padding: 3, background: "var(--surface)",
         border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--card-shadow)", pointerEvents: "auto" }}>
         {views.map((v) => {
           const on = v === view;
           return (
             <CtlButton variant="segment" pressed={on} key={v} type="button" onClick={() => onView(v)}
-              style={{ height: 26, display: "flex", alignItems: "center", gap: 6, padding: v.length === 1 ? "0 8px 0 4px" : "0 10px", border: 0, borderRadius: 3, font: "inherit", fontSize: 12, whiteSpace: "nowrap",
+              style={{ height: 26, display: "flex", alignItems: "center", ...(phone ? { flex: "1 1 0", justifyContent: "center", gap: "var(--space-1)", padding: "0 var(--space-1)" }
+                : { gap: 6, padding: v.length === 1 ? "0 8px 0 4px" : "0 10px" }), border: 0, borderRadius: 3, font: "inherit", fontSize: 12, whiteSpace: "nowrap",
                 ...(on ? { background: "var(--raised-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ink)", fontWeight: 600 } : { background: "transparent", color: "var(--ink-muted)" }) }}>
               {v.length === 1 ? <><Letter l={v as "A" | "B"} size={18} />Run {v}</> : v}
             </CtlButton>

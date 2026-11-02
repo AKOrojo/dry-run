@@ -1,4 +1,4 @@
-// Phone shell pieces (design board 13, under 600 px): the bottom tab bar, the sheet each tab opens (half and full
+// Phone shell pieces (design board 13, under 600 px): the bottom tab bar, the sheet each tab opens (peek, half and full
 // snaps, a drag handle, tap the active tab to close) and the 56 px mini player that sits above the tab bar while a
 // run is open. Same tokens and components as the desktop frame; nothing here is a new visual.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -14,14 +14,15 @@ import { FIG, raisedButton } from "../rev5";
 import { Button } from "../controls/Button";
 
 export type PhoneTab = "Scenario" | "Layers" | "Inspect" | "Timeline" | "Agent";
-export type Snap = "half" | "full";
+/** peek: the header alone (Compare opens there, so both panes and the view switch show). */
+export type Snap = "peek" | "half" | "full";
 export const PHONE_TABS: { name: PhoneTab; Ic: Icon }[] = [
   { name: "Scenario", Ic: CloudRain }, { name: "Layers", Ic: MapTrifold }, { name: "Inspect", Ic: MapPin },
   { name: "Timeline", Ic: ChartBar }, { name: "Agent", Ic: ChatTeardropText },
 ];
 export const TAB_BAR_H = 64;
 export const PLAYER_H = 56;
-const SHEET_ID = "dr-phone-sheet";
+export const SHEET_ID = "dr-phone-sheet";
 
 export const tabId = (t: PhoneTab) => `dr-tab-${t.toLowerCase()}`;
 
@@ -68,7 +69,8 @@ export function TabBar({ active, onTab, agentRuns = 0 }: { active: PhoneTab | nu
 
 const HALF_MIN = 344;
 
-/** A bottom sheet over the map. Drag the handle between half and full height, or down past half to close. */
+/** A bottom sheet over the map. Drag the handle between half and full height, or down past half to close. Opened at
+ *  peek (the header alone), a tap or ArrowUp raises it to half and a drag can land it on peek again. */
 export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = false, tab, fullOnly = false, children }: {
   /** A phone on its side: no half snap, the sheet opens at full height; drag down closes it. */ fullOnly?: boolean;
   title: string; snap: Snap; onSnap: (s: Snap) => void; onClose: () => void;
@@ -79,6 +81,15 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
   const box = useRef<HTMLElement>(null);
   const [room, setRoom] = useState(0);
   const [drag, setDrag] = useState<{ y0: number; h0: number; h: number } | null>(null);
+  const headEl = useRef<HTMLDivElement>(null);
+  const [peek, setPeek] = useState(58);
+  useLayoutEffect(() => {
+    const el = headEl.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setPeek(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // The sheet fills the map area above the player and the tab bar; its parent is that area.
   useLayoutEffect(() => {
     const parent = box.current?.parentElement;
@@ -91,7 +102,7 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
   // On a short phone half the room leaves a slot (an iPhone SE: 33 px above the Simulate footer), so the half sheet
   // is at least HALF_MIN tall: the 58 px header, Safari's 109 px sticky footer and about three controls above it.
   const full = Math.max(0, room - 8), half = fullOnly ? full : Math.min(full, Math.max(Math.round(room / 2), HALF_MIN));
-  const target = snap === "full" ? full : half;
+  const target = snap === "full" ? full : snap === "peek" ? Math.min(full, peek) : half;
   const down = (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -104,11 +115,14 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
     setDrag(null);
     if (!moved) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); return; }  // a tap toggles (closes when full-only)
     const h = drag.h;
-    if (h < half * (fullOnly ? 0.75 : 0.6)) onClose();
+    if (snap === "peek") {
+      if (h < peek * 0.75) onClose();
+      else onSnap(h > (half + full) / 2 ? "full" : h > (peek + half) / 2 ? "half" : "peek");
+    } else if (h < half * (fullOnly ? 0.75 : 0.6)) onClose();
     else onSnap(h > (half + full) / 2 ? "full" : "half");
   };
   const onKey = (e: ReactKeyboardEvent) => {
-    if (e.key === "ArrowUp") { e.preventDefault(); onSnap("full"); }
+    if (e.key === "ArrowUp") { e.preventDefault(); onSnap(snap === "peek" && !fullOnly ? "half" : "full"); }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (snap === "full" && !fullOnly) onSnap("half"); else onClose(); }
   };
   useEffect(() => (hidden ? undefined : sheetOpened()), [hidden]);
@@ -124,11 +138,11 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
       hidden={hidden} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: room ? h : "50%", zIndex: 4, display: hidden ? "none" : "flex", flexDirection: "column",
         background: "var(--ground)", borderTop: "1px solid var(--hairline)", borderRadius: "8px 8px 0 0", boxShadow: "var(--shadow-float)", overflow: "hidden",
         transition: drag ? "none" : "height 0.2s ease-out" }}>
-      <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
+      <div ref={headEl} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
         style={{ position: "relative", flex: "none", touchAction: "none", cursor: "grab", background: "var(--surface)", borderBottom: "1px solid var(--hairline)" }}>
         {/* The handle's target is the top 40 px of the header; the title sits under its lower half. */}
         <Button variant="icon" type="button" onKeyDown={onKey} onClick={(e) => { if (e.detail === 0) { if (fullOnly) onClose(); else onSnap(snap === "half" ? "full" : "half"); } }}
-          aria-label={fullOnly ? `Close the ${title} panel` : snap === "half" ? `Expand the ${title} panel` : `Shrink the ${title} panel`}
+          aria-label={fullOnly ? `Close the ${title} panel` : snap === "full" ? `Shrink the ${title} panel` : `Expand the ${title} panel`}
           style={{ position: "absolute", left: 0, right: 0, top: 0, display: "flex", height: 40, alignItems: "flex-start", justifyContent: "center", padding: "8px 0 0", background: "transparent", border: 0, cursor: "inherit", zIndex: 1 }}>
           <span aria-hidden="true" style={{ width: 36, height: 4, borderRadius: "var(--radius-pill)", background: "var(--control-edge)" }} />
         </Button>
