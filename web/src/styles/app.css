@@ -85,6 +85,8 @@ html:has(.dr-app.bp-phone), html:has(.dr-app.bp-tablet) { overflow-x: hidden; }
 .dr-app.bp-tablet .dr-compass-n { font-size: 11px !important; }
 /* Phone: the rain label gives the map back while a sheet is open (it would sit over the half sheet's edge). */
 .dr-app.bp-phone.sheet-open .dr-rain-chip { display: none !important; }
+/* Phone in fly along: the map's floating labels go, so no tap meant for the flight card can reach one under it. */
+.dr-app.bp-phone [data-flying] [data-anchored] { display: none !important; }
 /* Phone on its side: keep clear of the notch. The coordinate chip's controls are touch targets too. */
 .dr-app.bp-phone { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); box-sizing: border-box; }
 .dr-app.bp-phone [data-tour="coords"] :is(button, input) { min-height: 40px; min-width: 40px; }
