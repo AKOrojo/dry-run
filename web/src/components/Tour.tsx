@@ -81,12 +81,15 @@ function stepsFor(layout: Breakpoint, touch: boolean): Step[] {
 }
 /** Steps whose anchor is only on the page sometimes (a run with a 3D close-up) are left out when it is not there. */
 const OPTIONAL = new Set<string>(["closeup", "flow", "rain-domain", "gpu3d", "drainage", "player"]);
-/** Steps whose card sits on another sidebar tab: the tour opens that tab (a click on this anchor) when it gets there. */
-const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers" };
+/** Desktop: the sidebar tab each step's card sits on. The tour opens that tab (a click on this anchor) when it gets
+ *  there, going forward or back (after Layers, Back to the storm steps reopens Scenario). */
+const VIA: Record<string, string> = { flow: "layers", gpu3d: "layers",
+  rain: "scenario", "rain-domain": "scenario", drainage: "scenario", simulate: "scenario", "sim-status": "scenario" };
 /** Phone and tablet: these steps are in a sheet or drawer the tour opens first, so they are checked when reached. */
 const IN_PANEL = new Set<string>(["flow", "rain-domain", "gpu3d", "drainage"]);
 const stepsOnPage = (all: readonly Step[], narrow: boolean): readonly Step[] => all.filter((st) => !OPTIONAL.has(st.id) || document.querySelector(`[data-tour="${st.anchor ?? st.id}"]`)
-  || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]`)) || (narrow && IN_PANEL.has(st.id)));
+  // On a tab that is not open, it can only be checked when reached; on the open tab, what is there is what there is.
+  || (VIA[st.id] && document.querySelector(`[data-tour="${VIA[st.id]}"]:not([aria-current="page"])`)) || (narrow && IN_PANEL.has(st.id)));
 
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -118,10 +121,10 @@ function place(t: Box | null, cardH: number): { left: number; top: number; docke
   return { left: clampX(cx), top: vh - cardH - MARGIN, docked: true };
 }
 
-/** The ring goes round the part of the target left in view above a docked card. */
+/** The ring stays on screen (a card flush with the window's foot) and goes round the part of the target left in view
+ *  above a docked card. */
 function ringed(t: Box, at: { top: number; docked?: boolean }): Box {
-  if (!at.docked) return t;
-  const top = Math.max(t.top, MARGIN), bottom = Math.min(t.top + t.height, at.top - GAP);
+  const top = Math.max(t.top, at.docked ? MARGIN : PAD), bottom = Math.min(t.top + t.height, at.docked ? at.top - GAP : window.innerHeight - PAD);
   return { ...t, top, height: Math.max(0, bottom - top) };
 }
 
