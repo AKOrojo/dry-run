@@ -36,6 +36,6 @@ export function Anchored({ anchors, scene, lon, lat, dx = 0, dy = 0, clamp, chil
     update(scene);
     return () => { anchors.current.delete(update); };
   }, [scene, lon, lat, dx, dy, anchors, clamp?.join(",")]);  // eslint-disable-line react-hooks/exhaustive-deps
-  return <div ref={el} style={{ position: "absolute", left: 0, top: 0, display: "none", pointerEvents: "none", willChange: "transform" }}>{children}</div>;
+  return <div ref={el} data-anchored="" style={{ position: "absolute", left: 0, top: 0, display: "none", pointerEvents: "none", willChange: "transform" }}>{children}</div>;
 }
 

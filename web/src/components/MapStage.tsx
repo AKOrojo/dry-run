@@ -2,7 +2,7 @@
 // waypoints, place labels, time-to-flood layer and legend). All styling follows the rev 5 design
 // (docs/design/rev5-ref/parts.py): tokens only, no hand-rolled colours.
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
 import * as Cesium from "cesium";
 import { ArrowsOut, ArrowsOutCardinal, Camera, CaretDown, Crosshair, Drone, GlobeHemisphereWest, Info, Minus, Pause, Path, Play, Plus, RoadHorizon, X } from "@phosphor-icons/react";
 import { useShort, useTouch } from "../lib/breakpoint";
@@ -283,7 +283,10 @@ const hudShell: CSSProperties = {
   position: "absolute", left: "50%", bottom: 64, transform: "translateX(-50%)", display: "flex", flexDirection: "column", width: 640, maxWidth: "calc(100% - 24px)",
   background: "var(--surface-raised)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)",
   whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "auto",
+  zIndex: 2,  // above the map's floating labels (rain, close-ups, places), which come later in the page
 };
+/** Phone: the map's full width less 12 px a side; a card taller than the room under the toolbar scrolls inside. */
+const hudCompact: CSSProperties = { left: 12, right: 12, width: "auto", maxWidth: "none", transform: "none", maxHeight: "calc(100% - 64px - 76px)", overflowY: "auto" };
 
 function waterBelow(ser: PointSeries, tS: number): string {
   if (ser.permanent_water) return "Lagoon / open water below";
@@ -313,40 +316,75 @@ function RouteReadyCard({ len, speed, onFly, onRedraw, onClear, onClose }: { len
   );
 }
 
-function FlyHudCard({ hud, cellM, link, canLink, status, below, onPlay, onSpeed, onSeek, onLink, onExit }: {
+function FlyHudCard({ hud, cellM, link, canLink, status, below, compact = false, side = false, onPlay, onSpeed, onSeek, onLink, onExit }: {
   hud: FlyHud; cellM: number; link: FloodLink; canLink: boolean; status: string; below: string | null;
+  /** Phone: one control per row at the map's full width, 40 px targets, no keyboard hints. */ compact?: boolean;
+  /** A phone on its side: stop short of the right-edge map buttons, which sit beside the card rather than above it. */ side?: boolean;
   onPlay: (on: boolean) => void; onSpeed: (n: FlySpeed) => void; onSeek: (s: number) => void; onLink: (l: FloodLink) => void; onExit: () => void;
 }) {
   const left = Math.max(0, hud.len - hud.s) / hud.speed;
+  const tip = (text: string, el: ReactElement) => (compact ? el : <UiTooltip text={text}>{el}</UiTooltip>);
+  const segH = compact ? 40 : 20, groupH = compact ? 46 : 26;
+  const playBtn = tip(hud.playing ? "Pause (Space)" : "Play (Space)", <Button variant="icon" type="button" aria-label={hud.playing ? "Pause" : "Play"} onClick={() => onPlay(!hud.playing)}
+    style={{ width: compact ? 40 : 28, height: compact ? 40 : 28, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
+      background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
+    {hud.playing ? <Pause size={compact ? 16 : 14} weight="bold" /> : <Play size={compact ? 16 : 14} weight="bold" />}
+  </Button>);
+  const slider = <Slider bare label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)} text={fmtLen(hud.s)} onChange={onSeek} />;
+  const progress = <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>;
+  const height = tip("Height above ground (scroll or E / Q)", <span style={{ fontSize: 12, ...FIG, ...(compact ? { color: "var(--ink-muted)", marginLeft: "auto" } : {}) }}>{Math.round(hud.hAgl)} m up</span>);
+  const speeds = (
+    <div style={{ ...groupStyle, height: groupH, gap: 2, flex: "none" }}>
+      {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><Button variant="segment" pressed={hud.speed === n} type="button" onClick={() => onSpeed(n)} style={{ height: segH, cursor: "pointer", whiteSpace: "nowrap" }}>{SPEED_NAME[n]}</Button></UiTooltip>)}
+    </div>
+  );
+  const links = (
+    <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: groupH, gap: 2, flex: "none" }}>
+      {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
+      {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><Button variant="segment" pressed={link === l.key} type="button" disabled={!canLink} onClick={() => onLink(l.key)} style={{ height: segH, cursor: "pointer", whiteSpace: "nowrap" }}>{l.label}</Button></UiTip>)}
+    </div></UiTip>
+  );
+  const exit = tip("Exit (Esc)", <Button variant="text" type="button" aria-label="Exit fly along" onClick={onExit} style={{ height: compact ? 32 : 28, width: compact ? 40 : 26, flex: "none", marginLeft: compact ? "auto" : undefined, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></Button>);
+  const title = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, flex: "none", padding: compact ? "0 0 0 12px" : "0 6px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
+      <Drone size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
+      <span style={{ fontWeight: 600, flex: "none" }}>Fly along</span>
+      <span style={{ color: "var(--ink-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", ...(compact ? { minWidth: 0, flex: "1 1 auto" } : {}) }}>{status}</span>
+      {!compact && <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>}
+      {exit}
+    </div>
+  );
+  if (compact) {
+    const row: CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "0 12px" };
+    const label: CSSProperties = { fontSize: 12, color: "var(--ink-muted)", flex: "none", minWidth: 40 };
+    return (
+      <div role="region" aria-label="Fly along" style={{ ...hudShell, ...hudCompact, ...(side ? { right: 64 } : {}) }}>
+        {title}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0 10px", background: "var(--surface)", whiteSpace: "normal" }}>
+          <div style={row}>{playBtn}{slider}</div>
+          <div style={{ ...row, marginTop: -4 }}>{progress}{height}</div>
+          <div style={row}><span style={label}>Speed</span>{speeds}</div>
+          <div style={{ ...row, flexWrap: "wrap", rowGap: 6 }}><span style={label}>Flood</span>{links}</div>
+          {/* Holds its line while there is no reading yet, so the card does not jump when one arrives. */}
+          <div style={{ ...row, minHeight: 18, color: "var(--ink)", fontSize: 13, ...FIG }}>{below ?? "\u00a0"}</div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div role="region" aria-label="Fly along" style={hudShell}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 6px 0 12px", borderBottom: "1px solid var(--hairline)" }}>
-        <Drone size={15} weight="bold" color="var(--danfo)" style={{ flex: "none" }} />
-        <span style={{ fontWeight: 600 }}>Fly along</span>
-        <span style={{ color: "var(--ink-muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{status}</span>
-        <span style={{ marginLeft: "auto", color: "var(--ink-muted)", fontSize: 11 }}>{cellM} m model cells</span>
-        <UiTooltip text="Exit (Esc)"><Button variant="text" type="button" aria-label="Exit fly along" onClick={onExit} style={{ height: 28, width: 26, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><X size={13} weight="bold" /></Button></UiTooltip>
-      </div>
+      {title}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)" }}>
-        <UiTooltip text={hud.playing ? "Pause (Space)" : "Play (Space)"}><Button variant="icon" type="button" aria-label={hud.playing ? "Pause" : "Play"} onClick={() => onPlay(!hud.playing)}
-          style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, border: 0, borderRadius: 3, cursor: "pointer",
-            background: "var(--pressed-bg)", boxShadow: "var(--raised-shadow)", color: "var(--ground)" }}>
-          {hud.playing ? <Pause size={14} weight="bold" /> : <Play size={14} weight="bold" />}
-        </Button></UiTooltip>
-        <Slider bare label="Route progress" min={0} max={Math.max(1, Math.round(hud.len))} value={Math.round(hud.s)} text={fmtLen(hud.s)} onChange={onSeek} />
-        <span style={{ fontSize: 12, color: "var(--ink-muted)", ...FIG }}>{fmtLen(hud.s)} / {fmtLen(hud.len)} · {fmtDur(left)} left</span>
-        <UiTooltip text="Height above ground (scroll or E / Q)"><span style={{ fontSize: 12, ...FIG }}>{Math.round(hud.hAgl)} m up</span></UiTooltip>
+        {playBtn}
+        {slider}
+        {progress}
+        {height}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 12px 8px", background: "var(--surface)", fontSize: 12, color: "var(--ink-muted)" }}>
         Speed
-        <div style={{ ...groupStyle, height: 26, gap: 2 }}>
-          {FLY_SPEEDS.map((n) => <UiTooltip key={n} text={`${n} m/s, ${Math.round(n * 3.6)} km/h`}><Button variant="segment" pressed={hud.speed === n} type="button" onClick={() => onSpeed(n)} style={{ height: 20, cursor: "pointer" }}>{SPEED_NAME[n]}</Button></UiTooltip>)}
-        </div>
+        {speeds}
         Flood
-        <UiTip text={canLink ? undefined : "Run a simulation to link the flood timeline to the flight"}><div style={{ ...groupStyle, height: 26, gap: 2 }}>
-          {/* While they are disabled, the group's tooltip says why (an inner one would win). */}
-          {LINKS.map((l) => <UiTip key={l.key} text={canLink ? l.title : undefined}><Button variant="segment" pressed={link === l.key} type="button" disabled={!canLink} onClick={() => onLink(l.key)} style={{ height: 20, cursor: "pointer" }}>{l.label}</Button></UiTip>)}
-        </div></UiTip>
+        {links}
         {below && <span style={{ marginLeft: "auto", color: "var(--ink)", ...FIG }}>{below}</span>}
       </div>
     </div>
@@ -1459,7 +1497,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   useEffect(() => { requestRenderSoon(); });
 
   return (
-    <div ref={stage} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
+    <div ref={stage} data-flying={mode === "fly" ? "" : undefined} style={{ position: "relative", width: "100%", height: "100%", minHeight: 0, background: "var(--ground)" }}>
       {aoi && <Globe key={mapGen} aoi={aoi} frames={frames} framesB={framesB} split={split} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl}
         buildingDepthsUrl={run?.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined}
         onViewer={(v) => { setViewer(v); setMapViewer(v); onViewer?.(v); }} onRestart={() => setMapGen((g) => g + 1)} />}
@@ -1585,7 +1623,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
             Move speed {freeSpeed.toFixed(freeSpeed < 1 ? 2 : 1)}× · scroll to change
           </span>
         )}
-        {mode === "fly" && <FlyHudCard hud={fly.hud} cellM={cellM} link={effLink} canLink={runDone} onLink={setLink}
+        {mode === "fly" && <FlyHudCard compact={phone} side={phone && short} hud={fly.hud} cellM={cellM} link={effLink} canLink={runDone} onLink={setLink}
           status={!run ? "No simulation yet: terrain and buildings only" : run.status === "failed" ? "Simulation failed: no water shown"
             : !runDone ? "Simulating… water appears when it finishes" : `Flood at ${fmtT(tS)}${clock.get().playing ? ", playing" : ""}`}
           below={belowOut ? "Outside the modelled area" : belowSeries ? waterBelow(belowSeries, tS) : null}

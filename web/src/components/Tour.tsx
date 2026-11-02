@@ -46,7 +46,7 @@ const TOUCH_TEXT: Record<string, Partial<Step>> = {
   map: { body: "Tap anywhere for the depth there and how it changes over time; tap elsewhere to move the pin, tap it to clear it." },
   marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
   street: { body: "In Compare, tap a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
-  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along; with Play with flight, the player and the flight play and pause together." },
+  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along; with Play with flight, the player and the flight play and pause together. The flight controls and the water below show in the card at the bottom." },
   saferoute: { body: "Long-press the map and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
 };
 const PHONE_STEPS: Step[] = [
