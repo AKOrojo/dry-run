@@ -56,13 +56,14 @@ export const PROVENANCE = "Depth estimated from the photo by SAM 3.1 and Muse Sp
 export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 
-/** A problem shown as a hazard row: a title, then the next step. `key` marks the judge-key case, shown with the lockout note. */
-export type UploadProblem = { title: string; next: string; key?: boolean };
+/** A problem shown as a hazard row: a title, then the next step. `key` marks the judge-key case, shown with the lockout note;
+ *  `another` marks a problem whose way on is a different photo (Choose another takes focus). */
+export type UploadProblem = { title: string; next: string; key?: boolean; another?: boolean };
 
 /** Client-side check before sending: the type, then the 8 MB limit. */
 export function checkPhoto(f: { type: string; size: number }): UploadProblem | null {
-  if (!(PHOTO_TYPES as readonly string[]).includes(f.type)) return { title: "That file isn't a JPEG, PNG or WebP photo.", next: "Choose a JPEG, PNG or WebP photo." };
-  if (f.size > PHOTO_MAX_BYTES) return { title: "That photo is over 8 MB.", next: "Choose a smaller one, or a screenshot of it." };
+  if (!(PHOTO_TYPES as readonly string[]).includes(f.type)) return { title: "That file isn't a JPEG, PNG or WebP photo.", next: "Choose a JPEG, PNG or WebP photo.", another: true };
+  if (f.size > PHOTO_MAX_BYTES) return { title: "That photo is over 8 MB.", next: "Choose a smaller one, or a screenshot of it.", another: true };
   return null;
 }
 
@@ -75,7 +76,7 @@ export function retryAtText(retryAfterS: number | undefined, now: Date = new Dat
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }
 
-export const NO_WATER: UploadProblem = { title: "No water found in this photo.", next: "Try one that shows the water against something of known height: a kerb, a car wheel, a door step." };
+export const NO_WATER: UploadProblem = { title: "No water found in this photo.", next: "Try one that shows the water against something of known height: a kerb, a car wheel, a door step.", another: true };
 
 /** The server answers a photo without flood water with an observation that has no depth (not an error): it is kept off the map. */
 export const noWater = (o: Pick<Observation, "est_depth_m" | "water_fraction">) => o.est_depth_m == null && o.water_fraction <= 0.01;
@@ -85,8 +86,8 @@ export const noWater = (o: Pick<Observation, "est_depth_m" | "water_fraction">) 
 export function uploadProblem(status: number, retryAfterS?: number, now: Date = new Date(), lockout = false): UploadProblem {
   if (lockout) return { title: "Adding observations needs the judge key. Paste it in the Agent tab, then come back.", next: "", key: true };
   switch (status) {
-    case 413: return { title: "That photo is over 8 MB.", next: "Choose a smaller one, or a screenshot of it." };
-    case 415: return { title: "That file isn't a JPEG, PNG or WebP photo.", next: "Choose a JPEG, PNG or WebP photo." };
+    case 413: return { title: "That photo is over 8 MB.", next: "Choose a smaller one, or a screenshot of it.", another: true };
+    case 415: return { title: "That file isn't a JPEG, PNG or WebP photo.", next: "Choose a JPEG, PNG or WebP photo.", another: true };
     case 429: return { title: "Twenty photos this hour already.", next: `Try again at ${retryAtText(retryAfterS, now)}` };
     case 502: return { title: "The image model is not answering.", next: "Nothing was saved. Try again in a minute." };
     case 401:
@@ -94,6 +95,23 @@ export function uploadProblem(status: number, retryAfterS?: number, now: Date = 
     default: return { title: "The photo could not be read.", next: "Nothing was saved. Try again in a minute." };
   }
 }
+
+// ---------------------------------------------------------------- the add card's keyboard path
+
+export type AddPhase = "choose" | "ready" | "reading";
+/** The add card's main action, which holds focus in each state: Choose a photo; then Send the photo, or Choose another when
+ *  the way on is a different photo, or Cancel while a key lockout keeps Send disabled; Cancel (the upload) while reading. */
+export type AddFocus = "choose" | "another" | "send" | "cancel" | "abort";
+export function addFocus(phase: AddPhase, problem: UploadProblem | null, locked: boolean): AddFocus {
+  if (phase === "reading") return "abort";
+  if (phase === "choose") return "choose";
+  if (problem?.another) return "another";
+  return locked ? "cancel" : "send";
+}
+/** Esc in the add card does what Close does; while a photo is being read it aborts the upload first. */
+export const addEscape = (phase: AddPhase): ("abort" | "close")[] => (phase === "reading" ? ["abort", "close"] : ["close"]);
+/** Where focus goes back to when the card closes: where it came from while that is still on the page, else the fallback (the map). */
+export const focusBack = <T extends { isConnected: boolean }>(from: T | null, fallback: T | null): T | null => (from?.isConnected ? from : fallback);
 
 // ---------------------------------------------------------------- shared stores
 
@@ -134,17 +152,36 @@ export function useObservations(aoiId?: string, runId?: string): Observation[] |
 }
 
 /** The add-a-photo flow and the open pin: which spot the Inspect card is for, a request to take the map centre, and the pin whose card is open. */
-type ObsUi = { spot: { lon: number; lat: number; seq: number } | null; centreRequest: number; open: string | null };
-let ui: ObsUi = { spot: null, centreRequest: 0, open: null };
+type ObsUi = { spot: { lon: number; lat: number; seq: number } | null; centreRequest: number; open: string | null; layersBack: number };
+let ui: ObsUi = { spot: null, centreRequest: 0, open: null, layersBack: 0 };
 let seq = 0;
 const uiSubs = new Set<() => void>();
 const setUi = (p: Partial<ObsUi>) => { ui = { ...ui, ...p }; uiSubs.forEach((f) => f()); };
 export const obsUi = { get: () => ui, subscribe: (f: () => void) => { uiSubs.add(f); return () => { uiSubs.delete(f); }; } };
 export const useObsUi = () => useSyncExternalStore(obsUi.subscribe, obsUi.get);
 
-/** Start the Inspect card for a spot (the map's menu). */
-export const startAddObservation = (lon: number, lat: number) => setUi({ spot: { lon, lat, seq: ++seq }, open: null });
+// Where the add flow was started from: the map canvas the menu returns focus to, or the Layers row (its tab has closed by
+// then, so closing the card reopens Layers and focuses the row's button: layersBack, followed by the Sidebar and App).
+let from: HTMLElement | "layers" | null = null, fromLayers = false;
+const focused = () => (typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null);
+/** The map canvas: where focus goes when the element the flow started from has gone (a phone sheet closed). */
+const mapCanvas = () => (typeof document !== "undefined" ? document.querySelector<HTMLElement>(".cesium-widget canvas") : null);
+
+/** Start the Inspect card for a spot (the map's menu, or the centre the Layers row asked for). */
+export const startAddObservation = (lon: number, lat: number) => {
+  from = fromLayers ? "layers" : focused();
+  fromLayers = false;
+  setUi({ spot: { lon, lat, seq: ++seq }, open: null });
+};
 /** Start it at the map centre (the Layers row): the map resolves the centre. */
-export const requestAddAtCentre = () => setUi({ centreRequest: ui.centreRequest + 1, open: null });
-export const endAddObservation = () => setUi({ spot: null });
+export const requestAddAtCentre = () => { fromLayers = true; setUi({ centreRequest: ui.centreRequest + 1, open: null }); };
+/** Close the add card. Focus goes back where the flow started, unless `refocus` is false (the caller moves it). */
+export const endAddObservation = (refocus = true) => {
+  const was = from;
+  from = null;
+  if (refocus && was === "layers") { setUi({ spot: null, layersBack: ui.layersBack + 1 }); return; }
+  setUi({ spot: null });
+  const back = focusBack(was === "layers" ? null : was, mapCanvas());
+  if (refocus && back) requestAnimationFrame(() => back.focus());
+};
 export const openObservation = (id: string | null) => setUi({ open: id });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { NO_WATER, noWater, agrees, cardHeading, checkPhoto, countNote, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, uploadProblem, waterInPhoto } from "./observations";
+import { addEscape, addFocus, agrees, cardHeading, checkPhoto, countNote, focusBack, NO_WATER, noWater, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, uploadProblem, waterInPhoto } from "./observations";
+import type { UploadProblem } from "./observations";
 
 const base = { est_depth_m: 0.4, depth_low_m: null, depth_high_m: null, sim_depth_m: null };
 
@@ -94,5 +95,37 @@ describe("upload problems", () => {
     expect(noWater({ est_depth_m: null, water_fraction: 0.2 })).toBe(false);
     expect(noWater({ est_depth_m: 0.3, water_fraction: 0.005 })).toBe(false);
     expect(NO_WATER.title).toBe("No water found in this photo.");
+  });
+});
+
+describe("the add card's keyboard path", () => {
+  const key: UploadProblem = uploadProblem(403);
+  it("focuses each state's main action", () => {
+    expect(addFocus("choose", null, false)).toBe("choose");
+    expect(addFocus("choose", checkPhoto({ type: "application/pdf", size: 1 }), false)).toBe("choose");  // a bad first pick
+    expect(addFocus("ready", null, false)).toBe("send");
+    expect(addFocus("reading", null, false)).toBe("abort");
+    expect(addFocus("ready", uploadProblem(502), false)).toBe("send");   // retry
+    expect(addFocus("ready", uploadProblem(429, 60), false)).toBe("send");
+    expect(addFocus("ready", NO_WATER, false)).toBe("another");
+    expect(addFocus("ready", uploadProblem(413), false)).toBe("another");
+    expect(addFocus("ready", uploadProblem(415), false)).toBe("another");
+    expect(addFocus("ready", checkPhoto({ type: "image/jpeg", size: 9e6 }), false)).toBe("another");
+  });
+  it("keeps focus off a disabled Send during a key lockout", () => {
+    expect(addFocus("ready", key, true)).toBe("cancel");
+    expect(addFocus("ready", null, true)).toBe("cancel");
+    expect(addFocus("ready", key, false)).toBe("send");  // the lockout ended: Send is back
+  });
+  it("Esc closes, and aborts a read first", () => {
+    expect(addEscape("choose")).toEqual(["close"]);
+    expect(addEscape("ready")).toEqual(["close"]);
+    expect(addEscape("reading")).toEqual(["abort", "close"]);
+  });
+  it("gives focus back where it came from, or to the map when that is gone", () => {
+    const canvas = { isConnected: true, n: "canvas" }, layers = { isConnected: true, n: "layers" }, gone = { isConnected: false, n: "gone" };
+    expect(focusBack(layers, canvas)).toBe(layers);
+    expect(focusBack(gone, canvas)).toBe(canvas);
+    expect(focusBack(null, canvas)).toBe(canvas);
   });
 });

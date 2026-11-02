@@ -524,6 +524,8 @@ export default function App() {
   // A photo of the water (map menu or Layers row) opens its card in the Inspect tab.
   const obsSpot = useObsUi().spot;
   useEffect(() => { if (obsSpot) openSide("Inspect"); }, [obsSpot?.seq]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const obsLayersBack = useObsUi().layersBack;
+  useEffect(() => { if (obsLayersBack) openSide("Layers"); }, [obsLayersBack]);  // eslint-disable-line react-hooks/exhaustive-deps
   /** The tour opens the sheet or drawer its step points into, and closes it for steps on the map or the header. */
   const tourStep = (id: string) => {
     const where: Record<string, PhoneTab> = { scenario: "Scenario", rain: "Scenario", "rain-domain": "Scenario", drainage: "Scenario", simulate: "Scenario", "sim-status": "Scenario",

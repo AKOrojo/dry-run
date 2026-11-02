@@ -1,5 +1,5 @@
 // Observation pins (board 12): uploaded observations on the map, the "Water outline" card a pin opens, and the Inspect card that adds a photo of the water.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Camera, Spinner, X } from "@phosphor-icons/react";
 import * as Cesium from "cesium";
@@ -11,10 +11,10 @@ import { useClock } from "../lib/clock";
 import { useTouch } from "../lib/breakpoint";
 import { useLockout } from "../lib/lockout";
 import {
-  addObservation, agrees, cardHeading, checkPhoto, endAddObservation, NO_WATER, noWater, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB, uploadProblem,
-  useObsUi, waterInPhoto,
+  addEscape, addFocus, addObservation, agrees, cardHeading, checkPhoto, endAddObservation, NO_WATER, noWater, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB,
+  uploadProblem, useObsUi, waterInPhoto,
 } from "../lib/observations";
-import type { UploadProblem } from "../lib/observations";
+import type { AddFocus, AddPhase, UploadProblem } from "../lib/observations";
 import { Anchored } from "./Anchored";
 import type { Anchors } from "./Anchored";
 import { FIG, Card } from "./rev5";
@@ -50,7 +50,7 @@ export function ObservationPins({ viewer, scene, anchors, aoiId, list, hidden }:
         return (
           <Anchored key={o.obs_id} anchors={anchors} scene={scene} lon={o.lon} lat={o.lat}>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Button variant="icon" aria-label={`Observation: ${pinLabel(o)}`} onClick={() => openObservation(isOpen ? null : o.obs_id)}
+              <Button variant="icon" aria-label={`Observation: ${pinLabel(o)}`} data-obs-pin={o.obs_id} onClick={() => openObservation(isOpen ? null : o.obs_id)}
                 style={{ pointerEvents: "auto", width: 26, height: 26, borderRadius: "50%", background: "var(--surface-raised)", border: `2px solid ${ringColour(agree)}`,
                   display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px var(--elev-drop)", color: "var(--ink)", padding: 0, cursor: "pointer" }}>
                 <Camera size={14} aria-hidden="true" />
@@ -122,12 +122,28 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
   const lock = useLockout();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"choose" | "ready" | "reading">("choose");
+  const [phase, setPhase] = useState<AddPhase>("choose");
   const [problem, setProblem] = useState<UploadProblem | null>(null);
   const [secs, setSecs] = useState(0);
   const [place, setPlace] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const ctl = useRef<AbortController | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const lockId = useId();
+  // Each state's main action takes focus (lib/observations.ts addFocus): on opening, and on each change while focus is in
+  // the card or was dropped with a button the change removed. A lockout keeps Send disabled until it ends.
+  const btns: Record<AddFocus, React.RefObject<HTMLButtonElement>> = {
+    choose: useRef(null), another: useRef(null), send: useRef(null), cancel: useRef(null), abort: useRef(null),
+  };
+  const opened = useRef(false);
+  const target = addFocus(phase, problem, !!lock);
+  useEffect(() => {
+    const a = document.activeElement;
+    const mine = !opened.current || a === document.body || a === null || !!box.current?.contains(a);
+    opened.current = true;
+    if (mine) btns[target].current?.focus();
+  }, [target]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const close = () => { ctl.current?.abort(); endAddObservation(); };
 
   // The place name for the spot (nearest place, as the waypoint cards say).
   useEffect(() => {
@@ -180,7 +196,8 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
       if (aoi) addObservation(aoi.aoi_id, run?.run_id, o);
       setLayer("photos", { on: true });
       openObservation(o.obs_id);
-      endAddObservation();
+      endAddObservation(false);
+      focusPin(o.obs_id);
     } catch (e) {
       if ((e as Error).name === "AbortError") { setPhase("ready"); return; }
       setProblem(uploadProblem(e instanceof ApiError ? e.status : 0, e instanceof ApiError ? e.retryAfterS : undefined, new Date(), e instanceof ApiError && !!e.lockout));
@@ -194,8 +211,17 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
   const spotText = `${coord(spot.lat, spot.lon)}${place ? ` · ${place}` : ""}`;
   const accept = "image/jpeg,image/png,image/webp";
 
+  // Esc does what Close does (aborting a read first), and goes no further: the pin card and the map keep theirs.
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    e.preventDefault();
+    e.stopPropagation();
+    for (const step of addEscape(phase)) if (step === "abort") ctl.current?.abort(); else close();
+  };
+
   return (
-    <Card title="Add an observation" right={<Button variant="icon" aria-label="Close" onClick={() => { ctl.current?.abort(); endAddObservation(); }}
+    <div ref={box} onKeyDown={onKey}>
+    <Card title="Add an observation" right={<Button variant="icon" aria-label="Close" onClick={close}
       style={{ marginLeft: "auto", width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)", cursor: "pointer" }}><X size={14} aria-hidden="true" /></Button>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px", fontSize: 13, lineHeight: "18px" }}>
         <div style={row}><span style={label}>Spot</span><span style={{ ...value, fontWeight: 400 }}>{spotText}</span></div>
@@ -213,7 +239,7 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
               <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "var(--depth-3)", animation: "dr-obs-indet 1.4s ease-in-out infinite" }} />
             </div>
             <span style={note}>Usually under a minute. The pin appears on the map when it is done, and this card opens it.</span>
-            <div><Button variant="raised" onClick={() => ctl.current?.abort()} style={{ height: 30, padding: "0 12px" }}>Cancel</Button></div>
+            <div><Button ref={btns.abort} variant="raised" onClick={() => ctl.current?.abort()} style={{ height: 30, padding: "0 12px" }}>Cancel</Button></div>
           </div>
         ) : (
           <>
@@ -223,25 +249,25 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{file?.name}</span>
                   <span style={note}>{`${sizeMB(file?.size ?? 0)} · only on this device until you send it`}</span>
-                  <div><Button variant="text" onClick={() => input.current?.click()} style={{ padding: 0, color: "var(--ink)" }}>Choose another</Button></div>
+                  <div><Button ref={btns.another} variant="text" onClick={() => input.current?.click()} style={{ padding: 0, color: "var(--ink)" }}>Choose another</Button></div>
                 </div>
               </div>
             )}
-            {phase === "choose" && <div><Button variant="raised" onClick={() => input.current?.click()} style={{ height: 30, padding: "0 12px" }}>Choose a photo</Button></div>}
+            {phase === "choose" && <div><Button ref={btns.choose} variant="raised" onClick={() => input.current?.click()} style={{ height: 30, padding: "0 12px" }}>Choose a photo</Button></div>}
             {phase === "choose" && <span style={hint}>JPEG, PNG or WebP, up to 8 MB. On a phone this opens the camera.</span>}
             <input ref={input} type="file" accept={accept} capture={touch ? "environment" : undefined} style={{ display: "none" }}
               onChange={(e) => { choose(e.target.files?.[0]); e.target.value = ""; }} />
 
-            {problem && (problem.key && lock
-              ? <LockoutNote lock={lock} />
-              : problem.key
+            {lock
+              ? <div id={lockId}><LockoutNote lock={lock} /></div>
+              : problem && (problem.key
                 ? <div style={{ padding: "12px 14px", borderLeft: "3px solid var(--danfo)", background: "color-mix(in srgb, var(--danfo) 10%, var(--surface))" }}>{problem.title}</div>
                 : <Notice message={problem.title} detail={problem.next} />)}
 
             {phase === "ready" && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button variant="danfo" onClick={send} style={{ height: 30, padding: "0 12px" }}>Send the photo</Button>
-                <Button variant="raised" onClick={() => endAddObservation()} style={{ height: 30, padding: "0 12px" }}>Cancel</Button>
+                <Button ref={btns.send} variant="danfo" onClick={send} disabled={!!lock} aria-describedby={lock ? lockId : undefined} style={{ height: 30, padding: "0 12px" }}>Send the photo</Button>
+                <Button ref={btns.cancel} variant="raised" onClick={close} style={{ height: 30, padding: "0 12px" }}>Cancel</Button>
               </div>
             )}
             <span style={note}>{PRIVACY}</span>
@@ -249,5 +275,18 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
         )}
       </div>
     </Card>
+    </div>
   );
+}
+
+/** After a send, focus moves to the new pin (it appears once the Photos layer has drawn it), or the map when it never does. */
+function focusPin(id: string) {
+  let tries = 0;
+  const find = () => {
+    const pin = document.querySelector<HTMLElement>(`[data-obs-pin="${CSS.escape(id)}"]`);
+    if (pin) { pin.focus(); return; }
+    if (++tries < 60) requestAnimationFrame(find);
+    else document.querySelector<HTMLElement>(".cesium-widget canvas")?.focus();
+  };
+  requestAnimationFrame(find);
 }

@@ -205,7 +205,7 @@ function LayersCard({ aoiId, runId }: { aoiId?: string; runId?: string }) {
               ) : <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>{r.key === "photos" ? (obs ? countNote(obs.filter((o) => !noWater(o)).length) : "") : r.note ?? ""}</span>}
             </span>
           </div></Tip>
-          {r.key === "photos" && <div style={{ padding: "0 14px 6px" }}><CtlButton variant="text" type="button" onClick={() => requestAddAtCentre()} style={{ fontSize: 12, height: 26, color: "var(--ink)" }}>+ Add a photo of the water</CtlButton></div>}
+          {r.key === "photos" && <div style={{ padding: "0 14px 6px" }}><CtlButton variant="text" type="button" onClick={() => requestAddAtCentre()} data-obs-add="" style={{ fontSize: 12, height: 26, color: "var(--ink)" }}>+ Add a photo of the water</CtlButton></div>}
           </Fragment>
         );
       })}
@@ -674,6 +674,20 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
   useEffect(() => { if (safeStart) setTab("Inspect"); }, [safeStart]);
   const obsSpot = useObsUi().spot;  // adding a photo of the water opens its card in Inspect
   useEffect(() => { if (obsSpot) setTab("Inspect"); }, [obsSpot?.seq]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Closing an add card started from the Layers row: back to Layers, focus on that row's button (it mounts a few frames later).
+  const layersBack = useObsUi().layersBack;
+  useEffect(() => {
+    if (!layersBack) return;
+    setTab("Layers");
+    let tries = 0, raf = 0;
+    const find = () => {
+      const b = document.querySelector<HTMLElement>("[data-obs-add]");
+      if (b) { b.focus(); return; }
+      if (++tries < 60) raf = requestAnimationFrame(find);
+    };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
+  }, [layersBack]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
