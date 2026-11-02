@@ -17,6 +17,7 @@ import { setFocus, useFocus } from "../lib/focus";
 import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { onUnpinRequest, setInspect, setPinnedSeries, setPinnedSpot } from "../lib/inspect";
+import { latestOnly } from "../lib/latest";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
@@ -83,6 +84,7 @@ export type MapStageProps = {
 
 const MAX_PITCH = Cesium.Math.toRadians(-12);
 const LONG_PRESS_MS = 550;
+const PIN_TAP_PX = 24;  // a tap this close to the pinned point is a tap on the pin (a fingertip, WCAG target size)
 const SAFE_ROUTE_DEBOUNCE_MS = 250;
 /** Points sampled along the usual route (every ~30 m) to mark where it is under water: the road cuts are not in the API. */
 const SAFE_BLOCK_STEP_M = 30, SAFE_BLOCK_MIN = 12, SAFE_BLOCK_MAX = 40;
@@ -370,7 +372,7 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
 }
 
 function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = false }: { r: Reading; tS: number; cellM: number; pinned: boolean; outside?: boolean; style?: CSSProperties;
-  /** A finger: no Esc to clear, a tap elsewhere moves the pin. */ touch?: boolean;
+  /** A finger: no Esc; a tap on the point clears the pin, a tap elsewhere moves it. */ touch?: boolean;
   /** Beside its point on the map: declutter() keeps it clear of the bottom controls and the edges. */ clamp?: boolean }) {
   const ser = r.ser;
   const wetM = ser?.threshold_m.flooded ?? WET_M, passM = ser?.threshold_m.road_impassable ?? IMPASSABLE_M;
@@ -413,7 +415,7 @@ function Tooltip({ r, tS, cellM, pinned, outside, style, touch = false, clamp = 
         </div>
       )}
       <div style={{ padding: "5px 10px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 11 }}>
-        {pinned ? `Pinned · ${touch ? "tap elsewhere to move it" : "Esc to clear"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
+        {pinned ? `Pinned · ${touch ? "tap it to clear, elsewhere to move" : "Esc to clear"} · ${cellM} m model cell` : `Click to pin · ${cellM} m model cell`}
       </div>
     </div>
   );
@@ -802,6 +804,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
     const canvas = viewer.canvas, s = viewer.scene;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let seq = 0;
+    const pinTap = latestOnly();  // the touch pin's own guard: a tap also fires mouseleave, which bumps seq
     let down: { x: number; y: number } | null = null;
     const local = (e: MouseEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     // The menu opens at a viewport point (its position is fixed to the window).
@@ -866,14 +869,22 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         const hit = s.pick(new Cesium.Cartesian2(x, y));
         if (typeof hit?.id === "string") { setPinned(null); setHover(null); onBuildingRef.current(hit.id, e.shiftKey); return; }
       }
-      // A finger has no hover: a tap reads the depth at that point and pins it (another tap moves the pin).
+      // A finger has no hover: a tap reads the depth at that point and pins it. A tap on the pin clears it; a tap
+      // anywhere else moves it.
       if ((e as PointerEvent).pointerType === "touch") {
+        const cur = pinnedRef.current;
+        if (cur) {
+          const h = s.globe.getHeight(Cesium.Cartographic.fromDegrees(cur.lon, cur.lat)) ?? 0;
+          const at = s.cartesianToCanvasCoordinates(Cesium.Cartesian3.fromDegrees(cur.lon, cur.lat, h));
+          if (at && Math.hypot(at.x - x, at.y - y) <= PIN_TAP_PX) { pinTap(); seq++; setPinned(null); return; }
+        }
         const p = runId ? pick(x, y) : null;
-        const mine = ++seq;
+        const current = pinTap();
+        seq++;
         setHover(null);
         if (!p || !inAoi(p.lon, p.lat) || !runId) { setPinned(null); return; }
         setPinned({ depth: NaN, max: NaN, loading: true, ...p });
-        void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (mine === seq) setPinned(r ? { ...r, ...p } : null); }, () => { if (mine === seq) setPinned(null); });
+        void fetchReading(runId, p.lon, p.lat, tSRef.current).then((r) => { if (current()) setPinned(r ? { ...r, ...p } : null); }, () => { if (current()) setPinned(null); });
         return;
       }
       if (pinnedRef.current) { setPinned(null); return; }
@@ -1018,7 +1029,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // The pinned point's depth series feeds the dock chart.
   useEffect(() => { setPinnedSeries(pinned?.ser?.depth_m ?? null); }, [pinned?.ser]);
   useEffect(() => () => setPinnedSeries(null), []);
-  useEffect(() => { setPinnedSpot(pinned && !pinned.loading ? { lon: pinned.lon, lat: pinned.lat } : null); }, [pinned?.lon, pinned?.lat, pinned?.loading]);
+  // The spot is known as soon as a tap lands: publishing it before the reading arrives keeps the street card from
+  // blinking back to "Tap a street" when a tap moves the pin.
+  useEffect(() => { setPinnedSpot(pinned ? { lon: pinned.lon, lat: pinned.lat } : null); }, [pinned?.lon, pinned?.lat]);
   useEffect(() => () => setPinnedSpot(null), []);
   useEffect(() => onUnpinRequest(() => setPinned(null)), []);
 
