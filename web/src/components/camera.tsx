@@ -160,6 +160,13 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
   }, [route]);
   const st = useRef({ s: 0, playing: false, speed: 60 as FlySpeed, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
   const [hud, setHud] = useState<FlyHud>({ s: 0, len: path.len, playing: false, speed: 60, hAgl: FLY_MIN_AGL, at: route[0] ?? [0, 0] });
+  // A new flight or route starts the HUD at the route's start during render, not in the reset effect below: effects in
+  // the same commit (the water below the camera) would otherwise read the last flight's final position.
+  const [hudFor, setHudFor] = useState({ active, path });
+  if (hudFor.active !== active || hudFor.path !== path) {
+    setHudFor({ active, path });
+    if (active) setHud((h) => ({ s: 0, len: path.len, playing: false, speed: h.speed, hAgl: FLY_MIN_AGL, at: route[0] ?? [0, 0] }));
+  }
   const sync = useCallback(() => {
     const v = st.current;
     setHud({ s: v.s, len: path.len, playing: v.playing, speed: v.speed, hAgl: v.hAgl, at: atRef.current(v.s) });
@@ -186,7 +193,7 @@ export function useFlyAlong(viewer: Cesium.Viewer | undefined, active: boolean, 
     if (!active) { st.current.playing = false; return; }
     Object.assign(st.current, { s: 0, playing: false, hAgl: FLY_MIN_AGL, yaw: 0, pitch: 0, head: NaN, gS: NaN });
     sync();
-  }, [active, path.len, sync]);
+  }, [active, path, sync]);
 
   useLookDrag(viewer, active, (dx, dy) => {
     const v = st.current;
