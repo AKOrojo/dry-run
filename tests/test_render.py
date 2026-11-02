@@ -37,6 +37,7 @@ def local_storage(tmp_path, monkeypatch):
     ratelimit._day.clear()
     monkeypatch.setattr(ratelimit, "_TEAM", "team")
     monkeypatch.setattr(ratelimit, "_JUDGE", "")
+    monkeypatch.setenv("DRYRUN_ALLOW_FAKE_RENDER", "1")
 
     def offline(*args, **kwargs):
         raise AssertionError("unexpected HTTP call")
@@ -435,3 +436,20 @@ def test_url_answers_must_be_https(monkeypatch):
     monkeypatch.setattr("httpx.post", lambda url, **kw: _Resp(200, {"data": [{"url": "http://example.com/a.png"}]}))
     with pytest.raises(httpx.HTTPError):
         media.generate_image("a street")
+
+
+@pytest.mark.parametrize("flag,status", [(None, 400), ("0", 400), ("1", 200)])
+def test_fake_provider_needs_the_dev_flag(pair, monkeypatch, flag, status):
+    base, alt, _, lonlat = pair
+    if flag is None:
+        monkeypatch.delenv("DRYRUN_ALLOW_FAKE_RENDER", raising=False)
+    else:
+        monkeypatch.setenv("DRYRUN_ALLOW_FAKE_RENDER", flag)
+    root = storage.LOCAL_DATA.parent
+    before = set(root.rglob("*"))
+    with TestClient(app) as client:
+        r = client.post("/api/render", data=form(base, alt, lonlat, provider="fake"))
+    assert r.status_code == status, r.text
+    if status == 400:
+        assert "provider=fake" in r.json()["detail"]
+        assert set(root.rglob("*")) == before, "a refused fake render must not write anything"
