@@ -34,8 +34,8 @@ ENV_VARS+=",DRYRUN_DEFAULT_AOI=${DEFAULT_AOI:-fixture-synthetic},DRYRUN_AGENT_PE
 ENV_VARS+=",DRYRUN_AGENT_PER_DAY=${AGENT_PER_DAY:-300},DRYRUN_BUILDINGS_URL=${BUILDINGS_URL:-}"
 if [[ "${SIM_BACKEND:-fake}" == "fake" || "${AGENT_PROVIDER:-fake}" == "fake" ]]; then
   echo "!! deploying with SIM_BACKEND=${SIM_BACKEND:-fake} AGENT_PROVIDER=${AGENT_PROVIDER:-fake} (placeholder physics/agent)."
-  # Demo days need real physics. The default agent provider stays fake on purpose: paid providers (meta, openrouter,
-  # baseten) are behind the judge key, so a paid default would 403 every visitor.
+  # Demo days need real physics. The default agent provider must be free (replay, or fake): paid providers (meta,
+  # openrouter, baseten) are behind the judge key, so a paid default would 403 every visitor.
   [[ "${DEMO:-0}" == "1" && "${SIM_BACKEND:-fake}" == "fake" ]] && { echo "refusing: DEMO=1 must run the solver"; exit 1; }
 fi
 
