@@ -108,6 +108,14 @@ export function addFocus(phase: AddPhase, problem: UploadProblem | null, locked:
   if (problem?.another) return "another";
   return locked ? "cancel" : "send";
 }
+/** Whether the card's new main action takes focus: always on opening or when focus was dropped (a removed button). When a
+ * lockout ends (Cancel → Send), only if focus is still on Cancel, where the lockout put it; the user may have moved on.
+ * Any other change, only while focus is in the card. */
+export function takesFocus(o: { opened: boolean; dropped: boolean; inCard: boolean; from: AddFocus | null; to: AddFocus; onFrom: boolean }): boolean {
+  if (!o.opened || o.dropped) return true;
+  if (o.from === "cancel" && o.to === "send") return o.onFrom;
+  return o.inCard;
+}
 /** Esc in the add card does what Close does; while a photo is being read it aborts the upload first. */
 export const addEscape = (phase: AddPhase): ("abort" | "close")[] => (phase === "reading" ? ["abort", "close"] : ["close"]);
 /** Where focus goes back to when the card closes: where it came from while that is still on the page, else the fallback (the map). */

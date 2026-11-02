@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addEscape, addFocus, agrees, cardHeading, checkPhoto, countNote, focusBack, NO_WATER, noWater, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, uploadProblem, waterInPhoto } from "./observations";
+import { addEscape, addFocus, agrees, cardHeading, checkPhoto, countNote, focusBack, NO_WATER, noWater, PHOTO_MAX_BYTES, pinLabel, retryAtText, ringColour, sizeMB, sourceWords, takesFocus, uploadProblem, waterInPhoto } from "./observations";
 import type { UploadProblem } from "./observations";
 
 const base = { est_depth_m: 0.4, depth_low_m: null, depth_high_m: null, sim_depth_m: null };
@@ -116,6 +116,20 @@ describe("the add card's keyboard path", () => {
     expect(addFocus("ready", key, true)).toBe("cancel");
     expect(addFocus("ready", null, true)).toBe("cancel");
     expect(addFocus("ready", key, false)).toBe("send");  // the lockout ended: Send is back
+  });
+  it("at a lockout's end, focus moves to Send only from Cancel or from nowhere", () => {
+    const end = { opened: true, dropped: false, inCard: true, from: "cancel" as const, to: "send" as const };
+    expect(takesFocus({ ...end, onFrom: true })).toBe(true);                    // still on Cancel
+    expect(takesFocus({ ...end, onFrom: false })).toBe(false);                  // moved to another control in the card
+    expect(takesFocus({ ...end, inCard: false, onFrom: false })).toBe(false);   // moved out of the card
+    expect(takesFocus({ ...end, dropped: true, inCard: false, onFrom: false })).toBe(true);  // focus was dropped
+  });
+  it("other changes take focus on opening, when dropped, or while focus is in the card", () => {
+    const ch = { opened: true, dropped: false, from: "choose" as const, to: "send" as const, onFrom: false };
+    expect(takesFocus({ ...ch, opened: false, inCard: false })).toBe(true);
+    expect(takesFocus({ ...ch, inCard: true })).toBe(true);
+    expect(takesFocus({ ...ch, inCard: false })).toBe(false);
+    expect(takesFocus({ ...ch, from: "send", to: "cancel", inCard: true })).toBe(true);  // a lockout starts: off the disabled Send
   });
   it("Esc closes, and aborts a read first", () => {
     expect(addEscape("choose")).toEqual(["close"]);

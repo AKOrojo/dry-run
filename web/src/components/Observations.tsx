@@ -11,7 +11,7 @@ import { useClock } from "../lib/clock";
 import { useTouch } from "../lib/breakpoint";
 import { useLockout } from "../lib/lockout";
 import {
-  addEscape, addFocus, addObservation, agrees, cardHeading, checkPhoto, endAddObservation, NO_WATER, noWater, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB,
+  addEscape, addFocus, addObservation, agrees, cardHeading, checkPhoto, endAddObservation, NO_WATER, noWater, openObservation, PROVENANCE, pinLabel, ringColour, sizeMB, takesFocus,
   uploadProblem, useObsUi, waterInPhoto,
 } from "../lib/observations";
 import type { AddFocus, AddPhase, UploadProblem } from "../lib/observations";
@@ -136,12 +136,15 @@ function AddObservationCard({ spot, aoi, run }: { spot: { lon: number; lat: numb
     choose: useRef(null), another: useRef(null), send: useRef(null), cancel: useRef(null), abort: useRef(null),
   };
   const opened = useRef(false);
+  const prev = useRef<AddFocus | null>(null);
   const target = addFocus(phase, problem, !!lock);
   useEffect(() => {
-    const a = document.activeElement;
-    const mine = !opened.current || a === document.body || a === null || !!box.current?.contains(a);
+    const a = document.activeElement, from = prev.current;
+    const take = takesFocus({ opened: opened.current, dropped: a === document.body || a === null, inCard: !!box.current?.contains(a),
+      from, to: target, onFrom: !!from && a === btns[from].current });
     opened.current = true;
-    if (mine) btns[target].current?.focus();
+    prev.current = target;
+    if (take) btns[target].current?.focus();
   }, [target]);  // eslint-disable-line react-hooks/exhaustive-deps
   const close = () => { ctl.current?.abort(); endAddObservation(); };
 
