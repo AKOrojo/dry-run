@@ -132,7 +132,8 @@ def test_observe(monkeypatch, sam_text, photo, wet):
     import re
 
     assert re.fullmatch(r"ob_[0-9a-f]{12}", result.obs_id)
-    assert result.mask_png == f"/api/observations/{result.obs_id}/mask.png"
+    # A dry photo stores no mask, so it points at none (the URL would 404).
+    assert result.mask_png == (f"/api/observations/{result.obs_id}/mask.png" if wet else None)
     assert result.water_fraction == pytest.approx(.078 if wet else 0, abs=.01)
     assert [b["input"][0]["content"][0]["text"] for p, b in calls if p == "/responses"] == list(observe.PROMPTS)
     if wet:
