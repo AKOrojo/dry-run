@@ -23,7 +23,7 @@ import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../l
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
 import { setMapViewer, useView } from "../lib/view";
-import { belowFetchDue, clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
+import { belowFetchDue, belowWhere, clearFlyRoute, setFlyRoute, useEvacLine, useFlyRoute } from "../lib/flyroute";
 import type { LonLat } from "../lib/flyroute";
 import { useFlyAlong, useFreeCamera } from "./camera";
 import { FLY_SPEEDS, routeLength } from "./camera";
@@ -723,14 +723,22 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   const belowAt = useRef<LonLat | null>(null);
   // Latest-wins, not an effect cleanup: the HUD moves every 100 ms, which would drop every fetch slower than that.
   const belowLatest = useMemo(latestOnly, []);
-  useEffect(() => { belowLatest(); belowAt.current = null; setBelowSeries(null); }, [mode, runDone, run, belowLatest]);
+  // Off the area the readout says so; back inside it keeps saying so until the first in-area reply replaces it. A failed
+  // fetch (null) keeps whatever the readout shows.
+  const [belowOut, setBelowOut] = useState(false);
+  useEffect(() => { belowLatest(); belowAt.current = null; setBelowSeries(null); setBelowOut(false); }, [mode, runDone, run, belowLatest]);
   useEffect(() => {
     if (mode !== "fly" || !runDone || !run) return;
-    const [lon, lat] = fly.hud.at;
-    if (!belowFetchDue([lon, lat], belowAt.current, aoi?.grid.bounds_wgs84)) return;
+    const [lon, lat] = fly.hud.at, bounds = aoi?.grid.bounds_wgs84;
+    if (belowWhere([lon, lat], bounds) === "out") {
+      if (belowAt.current) { belowLatest(); belowAt.current = null; }
+      setBelowOut(true);
+      return;
+    }
+    if (!belowFetchDue([lon, lat], belowAt.current, bounds)) return;
     belowAt.current = [lon, lat];
     const current = belowLatest();
-    getPointSeries(run.run_id, lon, lat).then((ser) => { if (current()) setBelowSeries(ser); }).catch(() => {});
+    getPointSeries(run.run_id, lon, lat).then((ser) => { if (ser && current()) { setBelowSeries(ser); setBelowOut(false); } }).catch(() => {});
   }, [mode, runDone, run, fly.hud.at, aoi?.grid.bounds_wgs84, belowLatest]);
   useFreeCamera(viewer, mode === "free", setFreeSpeed);
 
@@ -1580,7 +1588,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
         {mode === "fly" && <FlyHudCard hud={fly.hud} cellM={cellM} link={effLink} canLink={runDone} onLink={setLink}
           status={!run ? "No simulation yet: terrain and buildings only" : run.status === "failed" ? "Simulation failed: no water shown"
             : !runDone ? "Simulating… water appears when it finishes" : `Flood at ${fmtT(tS)}${clock.get().playing ? ", playing" : ""}`}
-          below={belowSeries ? waterBelow(belowSeries, tS) : null}
+          below={belowOut ? "Outside the modelled area" : belowSeries ? waterBelow(belowSeries, tS) : null}
           onPlay={flyPlay} onSpeed={fly.setSpeed} onSeek={fly.seek} onExit={backToOrbit} />}
         {mode !== "fly" && routeReady && !drawing && route.length >= 2 && (
           <RouteReadyCard len={routeLength(route)} speed={fly.hud.speed} onFly={startFly} onRedraw={() => { setRouteReady(false); startDraw(); }}

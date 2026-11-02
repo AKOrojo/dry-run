@@ -40,10 +40,20 @@ export const evacLine = {
 export const useEvacLine = () => useSyncExternalStore(evacLine.subscribe, evacLine.get);
 export function setEvacLine(pts: LonLat[] | null) { evac = pts && pts.length >= 2 ? pts : null; evacSubs.forEach((f) => f()); }
 
-/** Whether the water-below-the-camera series should be fetched at `at`: only inside the area's bounds [w, s, e, n]
- *  (the HUD starts at [0, 0], and a camera over the sea has no series) and once it is ~60 m from the last fetch. */
+/** Where the camera's ground point `at` is against the area's bounds [w, s, e, n]. "unknown" until the bounds load,
+ *  and for the fly HUD's [0, 0] placeholder before its first real position. Sea or lagoon inside the bounds is "in".
+ *  Matches the series route: the point is rounded to 4 decimals as it is sent, and the grid's east and south edges
+ *  are outside it (the cell index there is nx or ny). */
+export function belowWhere(at: LonLat, bounds: readonly number[] | undefined): "in" | "out" | "unknown" {
+  if (!bounds || (at[0] === 0 && at[1] === 0)) return "unknown";
+  const lon = Number(at[0].toFixed(4)), lat = Number(at[1].toFixed(4));
+  return lon >= bounds[0] && lon < bounds[2] && lat > bounds[1] && lat <= bounds[3] ? "in" : "out";
+}
+
+/** Whether the water-below-the-camera series should be fetched at `at`: only inside the area's bounds (off the grid
+ *  there is no series) and once it is ~60 m from the last fetch. */
 export function belowFetchDue(at: LonLat, prev: LonLat | null, bounds: readonly number[] | undefined): boolean {
+  if (belowWhere(at, bounds) !== "in") return false;
   const [lon, lat] = at;
-  if (!bounds || lon < bounds[0] || lon > bounds[2] || lat < bounds[1] || lat > bounds[3]) return false;
   return !prev || Math.hypot((lon - prev[0]) * 111320 * Math.cos((lat * Math.PI) / 180), (lat - prev[1]) * 110540) >= 60;
 }
