@@ -44,9 +44,9 @@ def serve():
     subprocess.Popen([
         "vllm", "serve", MODEL, "--revision", REVISION, "--served-model-name", SERVED_NAME,
         "--host", "0.0.0.0", "--port", str(PORT),
-        # The agent's sessions are short (a system prompt, tool schemas and results): 32K is ample and keeps the
-        # KV cache inside what the L40S has left after the weights.
-        "--max-model-len", "32768", "--gpu-memory-utilization", "0.92",
+        # A long agent session plus the brief's 12,000-token budget passed 32K (parity eval, 2026-11-02); 64K fits the
+        # KV cache the L40S has left after the weights for the one session at a time we serve.
+        "--max-model-len", "65536", "--gpu-memory-utilization", "0.92",
         # Text only: the vision tower is not loaded for images we never send.
         "--limit-mm-per-prompt", '{"image": 0}',
         # Muse Glimmer frames tool calls and reasoning in its own format: both parsers, together (vLLM recipe).

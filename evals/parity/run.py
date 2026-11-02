@@ -81,11 +81,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--providers", nargs="+", default=["meta", "openrouter"])
     ap.add_argument("--limit", type=int, default=len(QUESTIONS))
+    ap.add_argument("--only", type=int, nargs="*", help="1-based question numbers to run (a re-run of failed sessions)")
     ap.add_argument("--out", default="evals/parity/results.json")
     args = ap.parse_args()
     real_get, rows = get_provider, []
     try:
-        for q in QUESTIONS[:args.limit]:
+        for q in ([QUESTIONS[i - 1] for i in args.only] if args.only else QUESTIONS[:args.limit]):
             for p in args.providers:
                 r = session(p, q, real_get)
                 rows.append(r)
