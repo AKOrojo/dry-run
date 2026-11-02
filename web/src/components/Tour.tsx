@@ -23,7 +23,7 @@ const ALL_STEPS = [
   { id: "coords", title: "Watch the storm", body: "While it simulates, the cloud and rain follow your storm. The coordinates show where you point; type a lat, lon to go there." },
   { id: "sim-status", title: "Cached or live, then stop or clear", body: "This says whether a run opens instantly or how long it takes live, and how long until it starts when another run is ahead; while it runs the storm locks, Stop cancels it and Clear simulation empties the map." },
   { id: "map", title: "Read the water", body: "Hover for depth at any point. Click to pin it and follow it over time; click elsewhere to move the pin, click it or press Esc to clear it." },
-  { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it." },
+  { id: "camera", title: "Move like a 3D app", body: "Right-drag or Ctrl+drag to orbit, Free to fly with WASD, or draw a route and fly along it. Pick Play with flight and the timeline plays and pauses with the flight." },
   { id: "saferoute", anchor: "map", title: "Find a dry route", body: "Right-click the map, or press Shift+F10 on it, and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
   { id: "timeline", title: "Scrub through the storm", body: "Play or drag the timeline, or focus it and use the arrow keys, Page Up/Down, Home and End. Key events jump to the moment and place they happen. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { id: "marks", title: "Mark places and moments", body: "Right-click the map, or press Shift+F10 on it, to drop a waypoint; + Note pins a note at the playhead." },
@@ -46,7 +46,7 @@ const TOUCH_TEXT: Record<string, Partial<Step>> = {
   map: { body: "Tap anywhere for the depth there and how it changes over time; tap elsewhere to move the pin, tap it to clear it." },
   marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
   street: { body: "In Compare, tap a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
-  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along." },
+  camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along; with Play with flight, the player and the flight play and pause together." },
   saferoute: { body: "Long-press the map and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
 };
 const PHONE_STEPS: Step[] = [

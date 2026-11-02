@@ -692,6 +692,28 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   useEffect(() => {  // the flight reached the end (or was left): stop a linked timeline with it
     if (!fly.hud.playing && effLink === "play") clock.set({ playing: false });
   }, [fly.hud.playing]); // eslint-disable-line react-hooks/exhaustive-deps
+  // And the other way: linked, the timeline's Play and Pause (or the run reaching its end) play and pause the flight, so
+  // the two never drift. Unlinked (Hold, Across route) they stay independent.
+  // Turning the link on (or entering fly along with it on) starts them together: the timeline takes the flight's state,
+  // from T+00:00 again when it was at the end.
+  useEffect(() => {
+    if (mode !== "fly" || effLink !== "play") return;
+    const c = clock.get(), on = flyPlayingRef.current;
+    if (c.playing !== on) clock.set(on && c.t_s >= c.max_s ? { t_s: 0, playing: true } : { playing: on });
+  }, [mode, effLink]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (Subscribed to the playing flag alone: the clock ticks every frame while playing.)
+  const linkRef = useRef({ on: false, play: fly.play });
+  linkRef.current = { on: mode === "fly" && effLink === "play", play: fly.play };
+  useEffect(() => {
+    let was = clock.get().playing;
+    const off = clock.subscribe(() => {
+      const now = clock.get().playing;
+      if (now === was) return;
+      was = now;
+      if (linkRef.current.on && now !== flyPlayingRef.current) linkRef.current.play(now);
+    });
+    return () => { off(); };
+  }, []);
   useEffect(() => {
     if (mode !== "fly" || effLink !== "span" || fly.hud.len <= 0) return;
     clock.set({ playing: false, t_s: (fly.hud.s / fly.hud.len) * clock.get().max_s });
