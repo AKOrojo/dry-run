@@ -116,7 +116,10 @@ export const routeError = (e: unknown) => {
   const err = (e ?? {}) as { status?: number; retryAfterS?: number; message?: string };
   if (err.status === 429) {
     const min = err.retryAfterS ? Math.max(1, Math.ceil(err.retryAfterS / 60)) : null;
-    return `Too many routes asked for from this connection. Try again ${min ? `in ${min} min` : "in a few minutes"}.`;
+    // A day-long wait is the service-wide daily cap, not this connection's hourly one.
+    if (min != null && min >= 20 * 60) return "Routes are paused for today across the service. Try again tomorrow.";
+    const when = min == null ? "in a few minutes" : min < 45 ? `in ${min} min` : min < 90 ? "in about an hour" : `in about ${Math.round(min / 60)} hours`;
+    return `Too many routes asked for from this connection. Try again ${when}.`;
   }
   const msg = typeof e === "string" ? e : err.message ?? "";
   return /from any road/i.test(msg) ? "This spot is too far from a road. Pick one on or near a street."
