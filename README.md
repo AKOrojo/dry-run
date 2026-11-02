@@ -309,6 +309,30 @@ pipes, which the model does not represent. 311 cannot measure false alarms: a st
 have flooded. At 50 m every hit rate rises (74 % at 118 mm) but so does the baseline (53 %), so the lift falls
 to 1.4×.
 
+**Scored against USGS high-water marks** (`evals/validation/queens_hwm.py`). USGS STN event 312 "2021 Ida" has
+32 marks at 16 sites in the box (`usgs_hwm_event312_queens.csv`, from the STN API; NAVD88 converted to EGM2008 with
+PROJ). They were flagged after the storm on walls, fences, garage doors and basement entrances, and record the
+water surface. 181 mm / 4.5 h, the same cases as the drainage validation below:
+
+| Case | Water surface at the mark's cell − mark: median (MAE) | Marks > 0.3 m too low | Sites with water within 30 m | Lift |
+|---|---|---|---|---|
+| Fixed sink 13 mm/h (v0) | −0.15 m (0.78) | 14 / 32 | 13 / 16 | 1.9× |
+| Fixed sink, sewers off (v0 hero) | −0.10 m (0.78) | 8 / 32 | 13 / 16 | 1.8× |
+| Sewers 1.5 in/h (v1 default) | −0.19 m (0.77) | 14 / 32 | 13 / 16 | 2.1× |
+| Sewers 1.75 in/h (5-year) | −0.19 m (0.78) | 14 / 32 | 13 / 16 | 2.2× |
+| Sewers 0.75 in/h (half) | −0.16 m (0.73) | 14 / 32 | 13 / 16 | 2.0× |
+| Sewers, outfalls blocked (v1 hero) | −0.09 m (0.71) | 8 / 32 | 13 / 16 | 1.9× |
+| Sewers, catch basins 50 % clogged | −0.18 m (0.77) | 14 / 32 | 13 / 16 | 2.0× |
+
+A dry cell counts as its ground. The model's water surface sits 0.1–0.2 m below the marks at the median, and the
+two heroes come closest. Where the model is wet (24–26 marks), the highest surface in the 3×3 cells around a mark is
++0.06 to +0.23 m from it at the median. Depth is the weak part: the marks record 0.82 m above their own ground at
+the median, and the model gives 0.12–0.25 m in their cells. Many marks are at basement doors, ramps and sunken
+entrances. A 15 m cell's ground is 0.71 m or more above the mark's ground for a quarter of the marks, so read the
+model's depth as street depth, not depth in a stairwell. The same 3 of 16 sites stay dry within 30 m in every case
+(two on the east edge of the box, one inside a delivery ramp). Sixteen sites is a small sample (95 % CI of the hit
+rate 63–100 %), and it cannot separate the cases.
+
 ### Lagoon and sea level (`evals/validation/level_sensitivity.py`)
 The water held at the lagoon/sea cells, re-run at −0.5 (default), +0.5, +1.0 and +1.5 m EGM2008 under each
 coastal AOI's reference storm (`GET /api/aoi/{aoi_id}/level_sensitivity`):

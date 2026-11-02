@@ -1,0 +1,33 @@
+id,site_id,latitude_dd,longitude_dd,elev_ft,height_above_ground,hwm_quality_name,hwm_type_name,vertical_datum_name,waterbody,location_description
+40949,31258,40.737144,-73.846227,12.4,2.3,Fair: +/- 0.20 ft,Debris,NAVD88,Flash flooding,Horizontal debris line of pine needles and leaf debris along chain link fence.
+40952,31261,40.737636,-73.846662,12.4,4.87,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on building at first ground level balcony from southeast corner of Fairview building.
+40958,31264,40.723025,-73.878299,94.8,2.95,Fair: +/- 0.20 ft,Seed line,NAVD88,Flash flooding,Seed line on grey side wall of garage.
+40963,31268,40.739744,-73.897418,31.9,0.84,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on cement walkway wall.
+40968,31272,40.761743,-73.87616,32.4,0.6,Good: +/- 0.10 ft,Mud,NAVD88,Flash flooding,Mud line on sidewalk wall.
+40970,31258,40.736606,-73.846059,12.1,3.5,Fair: +/- 0.20 ft,Seed line,NAVD88,Flash flooding,Seed line on second fence post north of gate to parking lot to building.
+40971,31261,40.737707,-73.846818,12.6,2.44,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,"Seed line on north wall of brick building, about 30 ft north of brown door."
+40980,31276,40.723835,-73.846067,33.6,0.91,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line at bottom of ramp inside delivery door of building.
+40981,31277,40.724804,-73.846648,31.9,4.0,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,Seed line on basement wall of building.
+40983,31279,40.738118,-73.901358,32.2,6.21,Fair: +/- 0.20 ft,Stain line,NAVD88,Flash flooding,"Duct tape marked by resident on side of vinyl fence, with visible seed line underneath."
+40990,31288,40.726882,-73.848106,33.0,0.8,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on north side of white garage door.
+40992,31289,40.732376,-73.847996,32.4,0.94,Fair: +/- 0.20 ft,Seed line,NAVD88,Flash flooding,Seed line on right side corner of garage building.
+40993,31290,40.73573,-73.847329,12.8,1.8,Good: +/- 0.10 ft,Mud,NAVD88,Flash flooding,"Mud line on outside of basement door with silver handle, second door left of the corner of the building ."
+41040,31264,40.72237,-73.877717,93.6,1.05,Poor: +/- 0.40 ft,Seed line,NAVD88,Flash flooding,Seed line on white and tan vinyl fence.
+41228,31560,40.762058,-73.8793,27.1,0.74,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,Seed line on the inside of garbage can enclosure.
+41247,31580,40.764953,-73.881204,22.8,4.59,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,"Seed line in inside basement wall of home, right of basement door."
+41250,31583,40.751352,-73.901136,29.8,6.51,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,"Seed line on cement wall, right side of entrance to parking garage."
+41251,31584,40.764806,-73.88191,22.7,5.36,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,Seed line on exterior door to back of home.
+41299,31630,40.737983,-73.900683,32.5,4.44,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on north side of garage entrance to home.
+41309,31268,40.739729,-73.897388,31.9,0.87,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on cement walkway wall.
+41310,31277,40.724804,-73.846648,31.8,4.0,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,Seed line on basement wall of building.
+41312,31279,40.73809,-73.90141,32.2,5.87,Fair: +/- 0.20 ft,Seed line,NAVD88,Flash flooding,Seed line on south side of white vinyl fence.
+41314,31279,40.738021,-73.901409,32.1,5.41,Fair: +/- 0.20 ft,Seed line,NAVD88,Flash flooding,Seed line on wall of grey shed.
+41316,31288,40.726837,-73.848079,33.1,0.72,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on south side of white garage door.
+41317,31289,40.73233,-73.847971,32.4,0.76,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on concrete retaining wall.
+41319,31290,40.735743,-73.84729,12.8,2.01,Good: +/- 0.10 ft,Mud,NAVD88,Flash flooding,"Mud line on outside of basement door (gold knob), first door left of the corner of the building."
+41324,31580,40.764944,-73.881209,23.0,4.91,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,"Seed line on outside wall of home just right of basement entrance, left of steps to front door of home."
+41442,31584,40.764767,-73.881902,22.4,4.92,Excellent: +/- 0.05 ft,Seed line,NAVD88,Flash flooding,"Seed line on back door to home (with number 2421), not same door as HWM-1."
+41448,31272,40.761716,-73.87616,32.6,0.72,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on driveway wall.
+41595,31630,40.737948,-73.900688,32.6,4.32,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line at south side of garage entrance to home.
+41597,31630,40.737888,-73.900686,32.5,4.45,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,Seed line on north side of garage entrance to home.
+41629,31276,40.7238,-73.846047,34.1,0.86,Good: +/- 0.10 ft,Seed line,NAVD88,Flash flooding,"Seed line at bottom of ramp inside delivery door of building on wall, 20 ft to the left of HWM-1."
