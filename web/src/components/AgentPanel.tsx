@@ -7,7 +7,7 @@ import { ApiError, askAgent, AgentEvent, getJudgeKey, getReplays, QUESTION_MAX, 
 import { lockoutText, useLockout } from "../lib/lockout";
 import { LockoutNote } from "./LockoutNote";
 import { Notice } from "./Notice";
-import { Card, Field, Segmented, FIG, hintText } from "./rev5";
+import { Card, Field, Segmented, FIG, hintText, srOnly } from "./rev5";
 import { replayHint } from "../lib/replay";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
@@ -145,8 +145,10 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
             {voiceProblem && <span role="status" style={{ ...hintText, marginTop: -6, color: "var(--ink)" }}>{voiceProblem.text}</span>}
             {nearMax && <span id="goal-count" style={{ ...hintText, marginTop: -6 }}>
               <span style={FIG}>{q.length}</span> of <span style={FIG}>{QUESTION_MAX}</span> characters{q.length >= QUESTION_MAX ? ", the most a question can have." : "."}</span>}
-            {offRecord && <span id="replay-hint" role="status" style={{ ...hintText, marginTop: -6 }}>
-              Replay plays only the recorded questions below. Pick one, or set Model to Live (needs the judge key) or Fake to ask your own.</span>}
+            {/* Always mounted, so screen readers announce the text when it appears (a live region added with its text is
+                often silent). Hidden while empty. */}
+            <span id="replay-hint" role="status" style={offRecord ? { ...hintText, marginTop: -6 } : srOnly}>
+              {offRecord ? "Replay plays only the recorded questions below. Pick one, or set Model to Live (needs the judge key) or Fake to ask your own." : ""}</span>
             <Field label="Model" hint="Live answers need the judge key. Replay and Fake are open to everyone.">
               <Segmented<Mode> active={mode} onChange={(m) => setProvider(m === "live" ? liveProv : m)}
                 options={[{ value: "live", label: "Live" }, { value: "replay", label: "Replay" }, { value: "fake", label: "Fake" }]} />
