@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartCsv, chartFilename, chartTable, coversText, csvCell, resolveVars, slug } from "./chartdata";
+import { chartCsv, chartHeading, chartFilename, chartTable, coversText, csvCell, resolveVars, slug } from "./chartdata";
 
 const time = (s: number) => `T+${String(s / 3600).padStart(2, "0")}:00`;
 
@@ -71,5 +71,10 @@ describe("resolveVars", () => {
     expect(coversText("U+0460-052F,U+1C80-1C8A", "T+02:00")).toBe(false);
     expect(coversText("U+04??", "Ж")).toBe(true);
     expect(coversText("", "anything")).toBe(true);
+  });
+  it("puts the unit in the image title only when there is one", () => {
+    expect(chartHeading("Flooded area", "km²")).toBe("Flooded area (km²)");
+    expect(chartHeading("Flooded area", "")).toBe("Flooded area");
+    expect(chartHeading("Flooded area")).toBe("Flooded area");
   });
 });
