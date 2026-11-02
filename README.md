@@ -33,15 +33,21 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 | Meta model | Used for |
 |---|---|
 | Muse Spark 1.3 | Planner agent: tool calls over the simulator, verified briefs; vision depth estimates |
-| Muse Spark Open (Baseten; OpenRouter fallback) | "Sovereign mode": same agent on open weights |
+| Muse Spark Open (served through OpenRouter) | "Sovereign mode": same agent on open weights |
 | SAM 3.1 | Flood-water / reference-object masks from citizen photos |
 | Muse Voice Transcribe | Hands-free responder queries, biased to Lagos place names |
 | Muse Image | Before/after illustrations of interventions (labelled AI illustration) |
 
 Built with Muse Spark Open. Data attributions: `ATTRIBUTION.md`.
 
-Production deploys: Eng D runs `infra/scripts/deploy.sh` from a clean checkout of `main` after `ci` passes on that
-commit. The GitHub `deploy` workflow is manual-only (see the note at the top of `.github/workflows/deploy.yml`).
+**Live site:** https://dryrun-vcdpde6nnq-uc.a.run.app. Three areas: `lagos-lekki-v3` (Lekki–Ajah, Lagos; the
+default), `nyc-queens-v1` (Queens, New York, Hurricane Ida 2021) and `texas-guadalupe-v0` (Guadalupe River, Hunt to
+Kerrville, 4 Jul 2025). Visitors get cached simulation runs and replays of recorded agent sessions, at no cost. The
+judge key, given out through the private submission form only, unlocks live agent runs, voice, new street pictures and
+Google imagery.
+
+Production deploys: every merge to `main` deploys to Cloud Run once `ci` passes on that commit
+(`.github/workflows/deploy.yml`; the prod settings are repository variables).
 
 ## Data card: Lagos AOI (`lagos-lekki-v1` to `-v3`)
 
