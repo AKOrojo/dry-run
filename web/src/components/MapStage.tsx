@@ -17,7 +17,7 @@ import { setFocus, useFocus } from "../lib/focus";
 import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
 import { onUnpinRequest, setInspect, setPinnedSeries, setPinnedSpot } from "../lib/inspect";
-import { latestOnly } from "../lib/latest";
+import { latestOnly, newerOnly } from "../lib/latest";
 import { useSheetOpen } from "../lib/sheet";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
@@ -721,25 +721,26 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // Water below the camera: the point series at the camera's ground position, refetched every ~60 m.
   const [belowSeries, setBelowSeries] = useState<PointSeries | null>(null);
   const belowAt = useRef<LonLat | null>(null);
-  // Latest-wins, not an effect cleanup: the HUD moves every 100 ms, which would drop every fetch slower than that.
-  const belowLatest = useMemo(latestOnly, []);
+  // Newer-wins, not an effect cleanup or latest-wins: the HUD moves every 100 ms and a new fetch goes out every ~60 m,
+  // so either would drop every reply slower than that. A reset drops what is pending.
+  const belowSeq = useMemo(newerOnly, []);
   // Off the area the readout says so; back inside it keeps saying so until the first in-area reply replaces it. A failed
   // fetch (null) keeps whatever the readout shows.
   const [belowOut, setBelowOut] = useState(false);
-  useEffect(() => { belowLatest(); belowAt.current = null; setBelowSeries(null); setBelowOut(false); }, [mode, runDone, run, belowLatest]);
+  useEffect(() => { belowSeq.reset(); belowAt.current = null; setBelowSeries(null); setBelowOut(false); }, [mode, runDone, run, aoi?.aoi_id, belowSeq]);
   useEffect(() => {
     if (mode !== "fly" || !runDone || !run) return;
     const [lon, lat] = fly.hud.at, bounds = aoi?.grid.bounds_wgs84;
     if (belowWhere([lon, lat], bounds) === "out") {
-      if (belowAt.current) { belowLatest(); belowAt.current = null; }
+      if (belowAt.current) { belowSeq.reset(); belowAt.current = null; }
       setBelowOut(true);
       return;
     }
     if (!belowFetchDue([lon, lat], belowAt.current, bounds)) return;
     belowAt.current = [lon, lat];
-    const current = belowLatest();
-    getPointSeries(run.run_id, lon, lat).then((ser) => { if (ser && current()) { setBelowSeries(ser); setBelowOut(false); } }).catch(() => {});
-  }, [mode, runDone, run, fly.hud.at, aoi?.grid.bounds_wgs84, belowLatest]);
+    const take = belowSeq.start();
+    getPointSeries(run.run_id, lon, lat).then((ser) => { if (ser && take()) { setBelowSeries(ser); setBelowOut(false); } }).catch(() => {});
+  }, [mode, runDone, run, fly.hud.at, aoi?.grid.bounds_wgs84, belowSeq]);
   useFreeCamera(viewer, mode === "free", setFreeSpeed);
 
   // ----- camera state -----
