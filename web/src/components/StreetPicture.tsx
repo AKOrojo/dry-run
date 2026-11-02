@@ -32,8 +32,22 @@ const ACCEPT = "image/jpeg,image/png,image/webp";
 
 /** Before/after swipe: the after picture is drawn right of the divider. Drag it, or focus it and use the arrow keys.
  *  `size` sets the box in px (the phone's large view, at the picture's own aspect ratio); otherwise it is 16:9 at full width. */
+/** The picture's own shape, from the before image (both are drawn at the same size); 16:9 until it has loaded. A street
+ *  picture is never cropped: every box that shows one takes this aspect. */
+function useImageAspect(url: string) {
+  const [aspect, setAspect] = useState(16 / 9);
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => { if (img.naturalWidth && img.naturalHeight) setAspect(img.naturalWidth / img.naturalHeight); };
+    img.src = url;
+    return () => { img.onload = null; };
+  }, [url]);
+  return aspect;
+}
+
 function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: RenderResult; beforeLabel: string; afterLabel: string; large?: boolean; size?: { w: number; h: number } }) {
   const [split, setSplit] = useState(0.5);
+  const aspect = useImageAspect(imageUrl(API, r.before.url));
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
   const at = (x: number) => { const b = box.current?.getBoundingClientRect(); if (b) setSplit(Math.min(1, Math.max(0, (x - b.left) / b.width))); };
@@ -51,10 +65,10 @@ function BeforeAfter({ r, beforeLabel, afterLabel, large = false, size }: { r: R
     maxWidth: "calc(50% - 12px)", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" };
   return (
     <div ref={box} onPointerDown={onDown} onPointerMove={(e) => { if (drag.current) at(e.clientX); }} onPointerUp={() => { drag.current = false; }} onPointerCancel={() => { drag.current = false; }}
-      style={{ position: "relative", ...(size ? { width: size.w, height: size.h, flex: "none" } : { width: "100%", aspectRatio: "16 / 9" }), overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
-      <img src={imageUrl(API, r.before.url)} alt={`Before: ${beforeLabel}`} draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      style={{ position: "relative", ...(size ? { width: size.w, height: size.h, flex: "none" } : { width: "100%", aspectRatio: String(aspect) }), overflow: "hidden", borderRadius: "var(--radius-sm)", background: "var(--ground)", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
+      <img src={imageUrl(API, r.before.url)} alt={`Before: ${beforeLabel}`} draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
       <img src={imageUrl(API, r.after.url)} alt={`After: ${afterLabel}`} draggable={false}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", clipPath: `inset(0 0 0 ${split * 100}%)` }} />
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", clipPath: `inset(0 0 0 ${split * 100}%)` }} />
       <span style={{ ...tag, left: 8 }}>{beforeLabel}</span>
       <span style={{ ...tag, right: 8 }}>{afterLabel}</span>
       <div style={{ position: "absolute", top: 0, bottom: 0, left: `${split * 100}%`, width: 2, marginLeft: -1, background: "var(--ink)", pointerEvents: "none" }} />
@@ -312,22 +326,44 @@ export function StreetLarge() {
   }
   const where = r!.place ?? "This spot";
   if (phone) return <PhoneLarge r={r} runs={runs} where={where} close={close} shut={shut} />;
+  return <DesktopLarge r={r} runs={runs} where={where} close={close} shut={shut} />;
+}
+
+const LARGE_MAX_W = 1040, LARGE_GUTTER = 16, LARGE_PAD = 14;
+/** The desktop large view: a dialog over the page with the picture as large as the window allows at its own aspect. */
+function DesktopLarge({ r, runs, where, close, shut }: {
+  r: RenderResult; runs: { a?: RunManifest; b?: RunManifest }; where: string; close: React.RefObject<HTMLButtonElement>; shut: () => void;
+}) {
+  const head = useRef<HTMLDivElement>(null);
+  const [win, setWin] = useState({ w: window.innerWidth, h: window.innerHeight, head: 0 });
+  useEffect(() => {
+    const measure = () => setWin({ w: window.innerWidth, h: window.innerHeight, head: head.current?.offsetHeight ?? 0 });
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (head.current) ro.observe(head.current);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
+  const aspect = useImageAspect(imageUrl(API, r.before.url));
+  // The room is the dialog's content area: the window less the gutters, the dialog's border and padding, and the title bar.
+  const size = fitBox(Math.min(LARGE_MAX_W, win.w - 2 * LARGE_GUTTER) - 2 - 2 * LARGE_PAD,
+    win.h - 2 * LARGE_GUTTER - 2 - win.head - 2 * LARGE_PAD, aspect);
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) shut(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: LARGE_GUTTER,
         background: "color-mix(in srgb, var(--ground) 72%, transparent)" }}>
       <div role="dialog" aria-modal="true" aria-label={`${where} · street picture`}
-        style={{ width: "min(1040px, 100%)", maxHeight: "100%", overflow: "auto", display: "flex", flexDirection: "column", background: "var(--surface)",
+        style={{ width: `min(${LARGE_MAX_W}px, 100%)`, maxHeight: "100%", overflow: "auto", display: "flex", flexDirection: "column", background: "var(--surface)",
           border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--hairline)" }}>
+        <div ref={head} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--hairline)" }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>{where} · street picture</span>
           <span style={note}>{r.label ?? "AI illustration, not a measurement"}</span>
           <Button ref={close} variant="icon" aria-label="Close" onClick={shut}
             style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-muted)" }}><X size={16} aria-hidden="true" /></Button>
         </div>
-        <div style={{ padding: 14 }}>
-          <BeforeAfter large r={r} beforeLabel={`Before · ${side("A", runs.a)} · model ${metres(r.before.depth_m)}`}
-            afterLabel={`After · ${side("B", runs.b)} · model ${metres(r.after.depth_m)}`} />
+        <div style={{ padding: LARGE_PAD, display: "flex", justifyContent: "center" }}>
+          {size.w > 0 && <BeforeAfter large r={r} size={size} beforeLabel={`Before · ${side("A", runs.a)} · model ${metres(r.before.depth_m)}`}
+            afterLabel={`After · ${side("B", runs.b)} · model ${metres(r.after.depth_m)}`} />}
         </div>
       </div>
     </div>
@@ -341,7 +377,7 @@ function PhoneLarge({ r, runs, where, close, shut }: {
 }) {
   const room = useRef<HTMLDivElement>(null);
   const [roomSize, setRoomSize] = useState({ w: 0, h: 0 });
-  const [aspect, setAspect] = useState(16 / 9);
+  const aspect = useImageAspect(imageUrl(API, r.before.url));
   useEffect(() => {
     const el = room.current;
     if (!el) return;
@@ -349,12 +385,6 @@ function PhoneLarge({ r, runs, where, close, shut }: {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // The picture's own shape, from the before image (both are drawn at the same size).
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => { if (img.naturalWidth && img.naturalHeight) setAspect(img.naturalWidth / img.naturalHeight); };
-    img.src = imageUrl(API, r.before.url);
-  }, [r.before.url]);
   const size = fitBox(roomSize.w, roomSize.h, aspect);
   const legend: CSSProperties = { ...FIG, fontSize: 13, lineHeight: "18px", color: "var(--ink)", overflowWrap: "anywhere" };
   return (
