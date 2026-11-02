@@ -51,6 +51,7 @@ import { Tooltip as UiTooltip, Tip as UiTip } from "./controls/Tooltip";
 import { Menu } from "./controls/Menu";
 import type { MenuEntry, MenuTriggerProps } from "./controls/Menu";
 import { Button } from "./controls/Button";
+import { labelWidth, thinTicks } from "../lib/ticks";
 
 type CamMode = "orbit" | "free" | "fly";
 type ViewName = "Orbit" | "Free" | "Plan" | "Fly along";
@@ -342,11 +343,13 @@ function ScaleBar({ nice, px }: { nice: number; px: number }) {
   const km = nice >= 1000;
   const f = (n: number) => String(km ? n / 1000 : n);
   const unit = km ? " km" : " m";
+  // The middle label goes when the labels would run together (the same rule as the chart axes); the ends always show.
+  const mid = thinTicks([0, px / 2, px], ["0", f(nice / 2), `${f(nice)}${unit}`].map((t) => labelWidth(t, 11)), px, ["middle", "middle", "middle"]).includes(1);
   return (
     <div aria-label={`Scale ${f(nice)}${unit}`} style={{ position: "relative", width: px, height: 28, marginRight: 10, color: "var(--ink)", fontSize: 11, ...FIG,
       textShadow: "0 0 3px var(--ground), 0 0 1px var(--ground)" }}>
       <span style={{ position: "absolute", left: 0, top: 0, transform: "translateX(-50%)" }}>0</span>
-      <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>
+      {mid && <span style={{ position: "absolute", left: "50%", top: 0, transform: "translateX(-50%)" }}>{f(nice / 2)}</span>}
       <span style={{ position: "absolute", right: 0, top: 0, transform: "translateX(50%)", whiteSpace: "nowrap" }}>{f(nice)}{unit}</span>
       <svg width={px} height="10" viewBox={`0 0 ${px} 10`} style={{ position: "absolute", left: 0, bottom: 0, overflow: "visible" }} aria-hidden="true">
         <path d={`M1 1v8 M${px - 1} 1v8 M1 6h${px - 2}`} stroke="var(--ground)" strokeWidth="4" strokeLinecap="round" fill="none" />
@@ -586,6 +589,17 @@ function declutter(root: HTMLElement, phone = false) {
   const PAD = 3;
   const under = (r: DOMRect, list: DOMRect[]) => list.some((k) => r.left < k.right + PAD && r.right > k.left - PAD && r.top < k.bottom + PAD && r.bottom > k.top - PAD);
   const obstacles = kept.slice();
+  // On a desktop the close-up, GPU-box and rain chips give way to the controls, the legends and the credits; one still
+  // shown then keeps its place among the labels, which give way to it (a place label never sits on a close-up chip).
+  // Among themselves the higher priority stays (data-declutter-phone; a tie keeps page order).
+  if (!phone) Array.from(root.querySelectorAll<HTMLElement>("[data-declutter-phone]"))
+    .map((el) => ({ el, p: Number(el.dataset.declutterPhone) || 0, r: el.getBoundingClientRect() }))
+    .filter((c) => c.r.width > 0)
+    .sort((a, b) => b.p - a.p)
+    .forEach(({ el, r }) => {
+      if (under(r, kept)) el.style.visibility = "hidden";
+      else kept.push(r);
+    });
   for (const b of boxes) {
     const isPlace = "place" in b.el.dataset;
     const capped = phone && isPlace && places >= PHONE_PLACES;
@@ -598,12 +612,6 @@ function declutter(root: HTMLElement, phone = false) {
     if ((phone || b.el.dataset.off) && "place" in b.el.dataset) b.el.parentElement!.style.visibility = hit ? "hidden" : "";
     if (!hit) { kept.push(b.r); if ("place" in b.el.dataset) places++; }
   }
-  // On a desktop the close-up and GPU-box chips keep their places among the labels but still give way to the controls,
-  // the legends and the credits.
-  if (!phone) root.querySelectorAll<HTMLElement>("[data-declutter-phone]").forEach((el) => {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && under(r, obstacles)) el.style.visibility = "hidden";
-  });
   // A place's dot under a control or the credits goes, with its chip.
   root.querySelectorAll<HTMLElement>("[data-place]").forEach((chip) => {
     const btn = chip.parentElement!, dot = btn.firstElementChild!.getBoundingClientRect();

@@ -1,5 +1,5 @@
 // Dock (rev 5 dock()): timeline, three charts, key events. Everything reads the one clock.
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { CaretDown, Camera, ChartBar, Copy, DotsThreeVertical, NotePencil, Plus, X } from "@phosphor-icons/react";
 import type { RunEvents, RunManifest } from "../lib/api";
@@ -15,6 +15,7 @@ import { useLayers } from "../lib/layers";
 import { lazyNamed } from "../lib/lazy";
 import { chartCsv, chartFilename, chartTable } from "../lib/chartdata";
 import { chartPng } from "../lib/chartImage";
+import { labelWidth, thinTicks } from "../lib/ticks";
 const LoadsPanel = lazyNamed(() => import("./FlowHazard"), "LoadsPanel");
 const ProfileDock = lazyNamed(() => import("./FlowHazard"), "ProfileDock");
 import { drainNote, drainSeries } from "../lib/drainage";
@@ -68,6 +69,7 @@ function niceMax(v: number) {
   return (([1, 2, 2.5, 4, 5, 10].find((m) => m * p >= v) ?? 10) * p);
 }
 const tickLabel = (v: number) => String(+v.toFixed(2));
+const TICK_PX = 11;  // --chart-tick is 10.5 px on a desktop, 11 on a phone or tablet
 
 export function Chart({ series, color, playI, tTotal, width, height = 104, aria, gid, threshold, baseline, events = [], ymaxMin = 0, ghost, xTicks, span, yFmt }: {
   series: number[]; color: string; playI: number; tTotal: number; width: number; height?: number; aria: string; gid: string;
@@ -93,7 +95,10 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
   const path = (ps: (readonly [number, number])[]) => "M" + ps.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L");
   const past = pts.slice(0, pi + 1), fut = pts.slice(pi);
   const hours = Math.max(1, Math.round(tTotal / 3600));
-  const xl = [0, 1, 2, 3].map((k) => Math.round((hours * k) / 3)).filter((h, k, a) => a.indexOf(h) === k);
+  // x labels: every hour (or the given ticks), thinned so none overlap (board 13); the grid lines all stay.
+  const xl = xTicks ?? Array.from({ length: hours + 1 }, (_, h) => ({ i: (h * (n - 1)) / hours, label: `T+${String(h).padStart(2, "0")}:00` }));
+  const xAt = (tk: { i: number }) => (xTicks ? X(tk.i) : L + (pw * tk.i) / Math.max(1, n - 1));
+  const shown = thinTicks(xl.map(xAt), xl.map((tk) => labelWidth(tk.label, TICK_PX)), pw).map((k) => xl[k]);
   const style = { display: "block", overflow: "visible", fontFamily: "var(--font-sans)", fontSize: "var(--chart-tick, 10.5px)", ...FIG } as const;
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} style={style}>
@@ -133,10 +138,8 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
         </g>
       )}
       <line x1={L} y1={base} x2={W - R} y2={base} stroke="var(--control-edge)" strokeWidth="1" />
-      {xTicks ? xTicks.map((tk, k) => (
-        <text key={k} x={X(tk.i)} y={H - 5} textAnchor={k === 0 ? "start" : k === xTicks.length - 1 ? "end" : "middle"} fill="var(--ink-muted)">{tk.label}</text>
-      )) : xl.map((h, k) => (
-        <text key={h} x={L + (pw * h) / hours} y={H - 5} textAnchor={k === 0 ? "start" : h === hours ? "end" : "middle"} fill="var(--ink-muted)">T+{String(h).padStart(2, "0")}:00</text>
+      {shown.map((tk, k) => (
+        <text key={k} x={xAt(tk)} y={H - 5} textAnchor={k === 0 ? "start" : k === shown.length - 1 ? "end" : "middle"} fill="var(--ink-muted)">{tk.label}</text>
       ))}
       {events.map((e) => pts[e.i] && (
         <g key={e.id}>
@@ -154,13 +157,28 @@ export function Chart({ series, color, playI, tTotal, width, height = 104, aria,
 
 export type ChartPick = { label: string; on: boolean; onPick: () => void };
 
+/** The ⋮ "Choose chart" of a dock slot whose figure has no chart actions (Compare's By place). */
+export function ChartPicker({ menu }: { menu: ChartPick[] }) {
+  return (
+    <Menu label="Choose chart" items={menu.map((m): MenuEntry => ({ kind: "radio", label: m.label, checked: m.on, onSelect: m.onPick }))}
+      trigger={(p) => (
+        <button {...p} type="button" aria-label="Choose chart"
+          style={{ display: "flex", padding: 2, background: "transparent", border: 0, borderRadius: 3, color: "var(--ink-muted)", cursor: "pointer" }}>
+          <DotsThreeVertical size={14} weight="bold" />
+        </button>
+      )} />
+  );
+}
+
 /** The area and run the charts show: the saved image's title and file name. App provides it. */
 export const ChartArea = createContext<{ aoi: string; name: string; run?: string }>({ aoi: "map", name: "" });
 const hiddenText: CSSProperties = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const BLOCKED = "Couldn't copy. Your browser blocked the clipboard.";
 
-export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, digits = 2, times, ...rest }: {
+export function ChartFigure({ title, unit, now, nowAt, ab, last, series, empty, menu, digits = 2, times, ...rest }: {
   title: string; unit: string; now: string; last?: boolean; series?: number[]; empty?: string;
+  /** Muted context after the value ("at T+01:00"): the first thing dropped when the header is tight. */
+  nowAt?: string;
   /** Compare mode: the A / B / change line, shown under the title in place of `now`. */
   ab?: ReactNode;
   /** The ⋮ button then picks which chart this slot shows. */
@@ -176,7 +194,25 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, d
   const [table, setTable] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const msgTimer = useRef<ReturnType<typeof setTimeout>>();
-  const ch = ab ? 84 : 104;  // the A / B line takes the difference
+  // Header (board 13): the title takes the free width and truncates (full title in a tooltip), the value stays whole
+  // on the right and drops its "at T+…" first; a cell under 240 px puts the value on a line of its own, 18 px taller.
+  const titleRef = useRef<HTMLSpanElement>(null), unitRef = useRef<HTMLSpanElement>(null), valRef = useRef<HTMLSpanElement>(null), atRef = useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = useState({ at: true, cut: false });
+  const twoLine = !ab && w > 0 && w + 28 < 240;
+  useLayoutEffect(() => {
+    const t = titleRef.current;
+    if (!t || !w) return;
+    const GAP = 5, MENU = 18;
+    const titleW = t.scrollWidth, unitW = (unitRef.current?.offsetWidth ?? 0) + GAP;
+    const valW = valRef.current?.offsetWidth ?? 0, atW = nowAt && atRef.current ? atRef.current.offsetWidth + GAP : 0;
+    let at: boolean, room: number;
+    if (ab) { at = false; room = w - unitW - MENU - GAP; }
+    else if (twoLine) { at = valW + atW <= w; room = w - unitW - MENU - GAP; }
+    else { at = titleW + unitW + valW + atW + MENU + 2 * GAP <= w; room = w - unitW - valW - (at ? atW : 0) - MENU - 2 * GAP; }
+    const cut = titleW > room + 0.5;
+    if (at !== fit.at || cut !== fit.cut) setFit({ at, cut });
+  });
+  const ch = (ab ? 84 : 104) - (twoLine ? 18 : 0);  // the A / B line takes the difference
   const hasData = !!series && series.length > 1;
   const showTable = table && hasData;
   const reason = empty ?? "No data to show yet";
@@ -214,11 +250,16 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, d
     { kind: "item", label: "Save chart image", icon: <Camera size={14} weight="bold" />, disabled: !hasData, reason: hasData ? undefined : reason, onSelect: save },
   ];
   return (
-    <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, position: "relative", borderRight: last ? undefined : "1px solid var(--hairline)" }}>
-      <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
-        <span style={{ fontWeight: 600 }}>{title}</span><span style={{ color: "var(--ink-muted)" }}>({unit})</span>
-        {!ab && <span style={{ marginLeft: "auto", fontWeight: 600, ...FIG }}>{now}</span>}
-        <span style={{ position: "relative", display: "flex", alignSelf: "center" }}>
+    <figure style={{ margin: 0, display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px 8px", minWidth: 0, overflow: "hidden", position: "relative", borderRight: last ? undefined : "1px solid var(--hairline)" }}>
+      {nowAt && <span ref={atRef} aria-hidden="true" style={{ position: "absolute", visibility: "hidden", whiteSpace: "nowrap", pointerEvents: "none" }}>{nowAt}</span>}
+      <figcaption style={{ display: "flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap", minWidth: 0 }}>
+        {/* Each piece of text is its own box: the title truncates itself, the unit stays whole beside it. */}
+        <Tip text={fit.cut ? `${title} (${unit})` : null}>
+          <span ref={titleRef} style={{ flex: "0 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600 }}>{title}</span>
+        </Tip>
+        <span ref={unitRef} style={{ flex: "none", color: "var(--ink-muted)" }}>({unit})</span>
+        {!ab && !twoLine && <span style={{ flex: "none", marginLeft: "auto", fontWeight: 600, ...FIG }}><span ref={valRef}>{now}</span>{nowAt && fit.at && <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}> {nowAt}</span>}</span>}
+        <span style={{ position: "relative", display: "flex", alignSelf: "center", flex: "none", marginLeft: ab || twoLine ? "auto" : undefined }}>
           <Menu label="Chart actions" items={actions}
             trigger={(p) => (
               <Button variant="icon" {...p} type="button" aria-label={menu ? "Choose chart" : "Chart actions"}
@@ -228,6 +269,7 @@ export function ChartFigure({ title, unit, now, ab, last, series, empty, menu, d
             )} />
         </span>
       </figcaption>
+      {twoLine && <span style={{ display: "block", height: 18, marginTop: -6, lineHeight: "18px", fontWeight: 600, whiteSpace: "nowrap", ...FIG }}><span ref={valRef}>{now}</span>{nowAt && fit.at && <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}> {nowAt}</span>}</span>}
       {ab}
       <div ref={ref} style={{ height: ch, position: "relative", minWidth: 0, overflow: showTable ? "auto" : undefined }}>
         {showTable && data && (
@@ -282,6 +324,14 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
   const pct = (t: number) => (100 * t) / durS;
   const ph = pct(nowS);
   const track = useRef<HTMLDivElement>(null);
+  const [trackW, setTrackW] = useState(0);
+  useEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setTrackW(Math.floor(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const seek = (e: PointerEvent) => {
     const r = track.current!.getBoundingClientRect();
     clock.set({ t_s: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * durS, playing: false });
@@ -291,6 +341,11 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
   const fa = ts.flooded_area_km2, fmax = Math.max(...fa, 1e-9);
   const stops = fa.map((v, i) => `color-mix(in srgb, var(--depth-3) ${Math.round((55 * v) / fmax)}%, transparent) ${(100 * i / Math.max(1, frames - 1)).toFixed(2)}%`).join(",");
   const hours = Math.floor(durS / 3600);
+  // Hour labels thinned to fit the track (the same rule as the charts); a run that ends on the hour ends its last label there.
+  const endsOnHour = hours * 3600 >= durS;
+  const hourLabels = Array.from({ length: hours + 1 }, (_, h) => h);
+  const shownHours = trackW ? thinTicks(hourLabels.map((h) => (trackW * h * 3600) / durS), hourLabels.map(() => labelWidth("T+00:00", 11)), trackW,
+    hourLabels.map((h) => (h === 0 ? "start" : h === hours && endsOnHour ? "end" : "middle"))).map((k) => hourLabels[k]) : [];
   const nextEvent = () => { const e = events.find((x) => x.t > nowS + 1); clock.set({ t_s: e ? e.t : 0, playing: false }); };
   const ico = { play: <path d="M3 1.8v8.4L10 6z" fill="currentColor" />, pause: <><rect x="2.5" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /><rect x="7" y="2" width="2.5" height="8" rx=".5" fill="currentColor" /></>,
     next: <><path d="M2 2v8l6-4z" fill="currentColor" /><rect x="8.5" y="2" width="1.8" height="8" rx=".5" fill="currentColor" /></> };
@@ -331,8 +386,8 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
             </div>
           </div>
           <div style={{ position: "absolute", left: 0, right: 0, top: 52, height: 18 }}>
-            {Array.from({ length: hours + 1 }, (_, h) => (
-              <span key={h} style={{ position: "absolute", left: `${(100 * h * 3600) / durS}%`, top: 10, transform: `translateX(${h === 0 ? "0" : h * 3600 >= durS ? "-100%" : "-50%"})`, fontSize: 11,
+            {shownHours.map((h) => (
+              <span key={h} style={{ position: "absolute", left: `${(100 * h * 3600) / durS}%`, top: 10, transform: `translateX(${h === 0 ? "0" : h * 3600 >= durS ? "-100%" : "-50%"})`, fontSize: 11, whiteSpace: "nowrap",
                 color: h * 3600 <= nowS ? "var(--ink)" : "var(--ink-muted)", ...FIG }}>T+{String(h).padStart(2, "0")}:00</span>
             ))}
           </div>
@@ -466,6 +521,14 @@ function RainDock({ storm, now, layout = "row" }: { storm: RainStorm; now?: Reac
 /** Where the dock is drawn (board 13). "row": desktop, the charts in a row and key events at the right. "two": a tablet,
  *  under the map, the timeline and two charts. "extras": the tablet drawer's Timeline tab, what "two" leaves out (the
  *  third chart and key events). "stack": the phone Timeline sheet, every chart full width with key events below. */
+type SlotKey = "fa" | "rk" | "dn" | "dp" | "x";
+const SLOT_MIN = 220;
+const SLOTS_KEY = "dr_dock_charts";
+const readSlots = (): SlotKey[] | null => {
+  try { const v = JSON.parse(sessionStorage.getItem(SLOTS_KEY) ?? "null"); return Array.isArray(v) ? v : null; } catch { return null; }
+};
+const writeSlots = (v: SlotKey[]) => { try { sessionStorage.setItem(SLOTS_KEY, JSON.stringify(v)); } catch { /* private mode: this view only */ } };
+
 export type DockLayout = "row" | "two" | "extras" | "stack";
 const dockShell = (layout: DockLayout): CSSProperties => (layout === "row"
   ? { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 248px", background: "var(--surface)", borderTop: "1px solid var(--hairline)", minHeight: 0 }
@@ -473,15 +536,27 @@ const dockShell = (layout: DockLayout): CSSProperties => (layout === "row"
   : { display: "flex", flexDirection: "column", background: "var(--surface)", minHeight: 0, border: layout === "extras" ? "1px solid var(--hairline)" : undefined,
     borderRadius: layout === "extras" ? 6 : undefined, overflow: layout === "extras" ? "hidden" : undefined });
 
-export function Dock({ storm, run, series, ghost, third, side, note, layout = "row" }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
+export function Dock({ storm, run, series, ghost, third, thirdLabel, side, note, layout = "row" }: { storm?: RainStorm; run?: RunManifest; /** Depth in metres at the selected map point, one value per frame. */ series?: number[];
   layout?: DockLayout;
   /** Compare mode: run A, drawn under `run` (B) in the charts. */ ghost?: RunManifest;
-  /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. */
-  third?: ReactNode; side?: ReactNode; note?: string }) {
+  /** Replace the third chart and the Key events column; `note` replaces the timeline's frame summary. The third chart
+   *  is given the slot's "Choose chart" picks when the dock has room for fewer than three. */
+  third?: ReactNode | ((menu?: ChartPick[]) => ReactNode); /** The third chart's name in the pickers. */ thirdLabel?: string;
+  side?: ReactNode; note?: string }) {
   const { t_s, playing, speed } = useClock();
   const ts = run?.timeseries ?? null;
   // Drainage runs: the third chart can show the drain network, and the side panel where the water went (shown first).
-  const [thirdPick, setThirdPick] = useState<"drains" | "depth">("drains");
+  const [thirdPick, setThirdPick] = useState<"drains" | "depth">(() => (readSlots()?.find((k) => k === "dn" || k === "dp") === "dp" ? "depth" : "drains"));
+  // Desktop: as many charts as fit at 220 px each, 1 to 3 (board 13); each slot's ⋮ then picks its chart.
+  const [chartBox, setChartBox] = useState<HTMLDivElement | null>(null);
+  const [slots, setSlots] = useState(3);
+  const [order, setOrder] = useState<SlotKey[]>(() => readSlots() ?? []);
+  useEffect(() => {
+    if (!chartBox) return;
+    const ro = new ResizeObserver(([e]) => setSlots(Math.max(1, Math.min(3, Math.floor(e.contentRect.width / SLOT_MIN)))));
+    ro.observe(chartBox);
+    return () => ro.disconnect();
+  }, [chartBox]);
   const [sidePick, setSidePick] = useState<"water" | "events">("water");
   const rainStopS = (run?.scenario.storm.duration_h ?? 3) * 3600;
   const lay = useLayers();
@@ -526,18 +601,39 @@ export function Dock({ storm, run, series, ghost, third, side, note, layout = "r
       </div>
     : eventsOrWater);
   const narrow = layout !== "row";
-  const charts = [
-          <ChartFigure key="fa" last={narrow} title="Flooded area" unit="km²" digits={2} now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} {...common}
-            aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />,
-          <ChartFigure key="rk" last={layout === "two" ? true : narrow} title="Roads impassable" unit="km" digits={1} now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} {...common}
-            aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />,
-          third ?? (ds && thirdPick === "drains"
-            ? <ChartFigure last title="Drain network running full" unit="%" digits={0} now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
-                color="var(--depth-3)" gid="dn" ymaxMin={100} threshold={[FULL_PCT, `Full ${FULL_PCT} %`]} {...common}
-                aria={`Share of the drain network running full over time; ${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} % at the playhead`} />
-            : <ChartFigure last title="Depth at selected point" unit="m" digits={2} now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
-                color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />),
-  ];
+  const thirdKey: SlotKey = third ? "x" : ds && thirdPick === "drains" ? "dn" : "dp";
+  const avail: SlotKey[] = ["fa", "rk", ...(third ? ["x" as const] : ds ? ["dn" as const, "dp" as const] : ["dp" as const])];
+  const label: Record<SlotKey, string> = { fa: "Flooded area", rk: "Roads impassable", dn: "Drain network running full", dp: "Depth at selected point", x: thirdLabel ?? "Third chart" };
+  // Fewer than three slots: the remembered order (this session), then the default (flooded area, roads, drains).
+  const fewer = layout === "row" && slots < 3;
+  const shownKeys: SlotKey[] = fewer
+    ? [...order.filter((k) => avail.includes(k)), "fa", "rk", thirdKey].filter((k, i, a) => a.indexOf(k) === i).slice(0, slots) as SlotKey[]
+    : ["fa", "rk", thirdKey];
+  const choose = (slot: number, k: SlotKey) => {
+    const next = [...shownKeys, ...avail.filter((a) => !shownKeys.includes(a))];
+    const j = next.indexOf(k);
+    [next[slot], next[j]] = [next[j], next[slot]];
+    setOrder(next);
+    writeSlots(next);
+    if (k === "dn" || k === "dp") setThirdPick(k === "dn" ? "drains" : "depth");
+  };
+  const picks = (slot: number): ChartPick[] => avail.map((k) => ({ label: label[k], on: shownKeys[slot] === k, onPick: () => choose(slot, k) }));
+  // Three slots: only the third picks (drain network or depth), as before.
+  const thirdMenu = ds ? [{ label: label.dn, on: thirdPick === "drains", onPick: () => { setThirdPick("drains"); writeSlots(["fa", "rk", "dn"]); } },
+    { label: label.dp, on: thirdPick !== "drains", onPick: () => { setThirdPick("depth"); writeSlots(["fa", "rk", "dp"]); } }] : undefined;
+  const chart = (k: SlotKey, last: boolean, menu?: ChartPick[]): ReactNode => {
+    if (k === "fa") return <ChartFigure key="fa" last={last} title="Flooded area" unit="km²" digits={2} now={ts.flooded_area_km2[pi].toFixed(2)} ab={gfa && abNow(gfa[pi], ts.flooded_area_km2[pi], 2)} ghost={gfa} series={ts.flooded_area_km2} color="var(--depth-3)" gid="fa" events={chartEvents} menu={menu} {...common}
+      aria={`Flooded area over time; ${ts.flooded_area_km2[pi].toFixed(2)} square kilometres at the playhead, ${fmtT(t_s)}`} />;
+    if (k === "rk") return <ChartFigure key="rk" last={last} title="Roads impassable" unit="km" digits={1} now={ts.road_km_impassable[pi].toFixed(1)} ab={grk && abNow(grk[pi], ts.road_km_impassable[pi], 1)} ghost={grk} series={ts.road_km_impassable} color="var(--hazard)" gid="rk" events={chartEvents} baseline={pondKm != null ? [pondKm, `${pondKm.toFixed(1)} km closed by the planned pond`] : undefined} menu={menu} {...common}
+      aria={`Impassable road length over time; ${ts.road_km_impassable[pi].toFixed(1)} kilometres at the playhead`} />;
+    if (k === "x") return <div key="x" style={{ display: "flex", flexDirection: "column", minWidth: 0, borderRight: last ? undefined : "1px solid var(--hairline)" }}>{typeof third === "function" ? third(menu) : third}</div>;
+    if (k === "dn" && ds) return <ChartFigure key="dn" last={last} title="Drain network running full" unit="%" digits={0} now={`${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)}`} nowAt={`at ${fmtT(ts.t_s[pi])}`} series={ds} menu={menu}
+      color="var(--depth-3)" gid="dn" ymaxMin={100} threshold={[FULL_PCT, `Full ${FULL_PCT} %`]} {...common}
+      aria={`Share of the drain network running full over time; ${Math.round(ds[Math.min(pi, ds.length - 1)] ?? 0)} % at the playhead`} />;
+    return <ChartFigure key="dp" last={last} title="Depth at selected point" unit="m" digits={2} now={dp ? (dp[Math.min(pi, dp.length - 1)] ?? 0).toFixed(2) : "–"} series={dp} empty="Pick a point on the map" menu={menu}
+      color="var(--depth-3)" gid="dp" ymaxMin={0.5} threshold={[0.3, "Impassable 0.30 m"]} {...common} aria="Depth at the selected map point over time" />;
+  };
+  const charts = [chart("fa", narrow), chart("rk", layout === "two" ? true : narrow), chart(thirdKey, true, thirdMenu)];
   const profile = lay.profile.on && !ghost;
   // Narrow layouts: one chart per row, a hairline between them; the side panel then reads as a full-width list.
   const rows = (cs: ReactNode[]) => cs.map((c, k) => <div key={k} style={{ borderTop: k || layout !== "extras" ? "1px solid var(--hairline)" : undefined, minWidth: 0 }}>{c}</div>);
@@ -559,8 +655,8 @@ export function Dock({ storm, run, series, ghost, third, side, note, layout = "r
     <div data-tour="timeline" style={shell}>
       <div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", minWidth: 0 }}>
         <Timeline ts={ts} events={events} durS={durS} rainStopS={rainStopS} nowS={t_s} playing={playing} speed={speed} note={note ?? (!ghost ? drainNote(run) : undefined)} />
-        {profile ? <ProfileDock /> : <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", borderTop: "1px solid var(--hairline)", minHeight: 0 }}>
-          {charts}
+        {profile ? <ProfileDock /> : <div ref={setChartBox} style={{ display: "grid", gridTemplateColumns: `repeat(${shownKeys.length}, minmax(0, 1fr))`, borderTop: "1px solid var(--hairline)", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+          {fewer ? shownKeys.map((k, i) => chart(k, i === shownKeys.length - 1, picks(i))) : charts}
         </div>}
       </div>
       {sidePanel}

@@ -536,7 +536,7 @@ export default function App() {
   const playerRun = (pair ? pair.b : run);
   const mainDock = !cu.active && !buildingView && !agentView;
   const dock = (layout: DockLayout) => (cu.active ? <CloseUpDock /> : buildingView ? <BuildingDock sel={sel!} second={sel2} /> : agentView ? <AgentDock runs={agentList} session={session} placeVals={placeVals} shown={run?.run_id} onShow={showAgentRun} /> : <Dock storm={{ total_mm: rain, duration_h: durationH, pattern }} run={pair ? pair.b : run} ghost={pair?.a} series={pinSeries ?? undefined}
-          third={pair ? <ByPlace rows={places} /> : undefined} side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
+          third={pair ? (menu) => <ByPlace rows={places} menu={menu} /> : undefined} thirdLabel="By place" side={pair ? <WhatChanges changes={changes} active={activeChange} /> : undefined}
           note={pair ? "One clock drives A and B" : undefined} layout={layout} />);
   const narrow = bp !== "desktop";
 
