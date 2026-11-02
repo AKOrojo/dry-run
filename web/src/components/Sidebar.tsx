@@ -1,7 +1,7 @@
 // Sidebar (rev 5 tabs() + cards): Layers / Inspect / Scenario / Sources, or Compare / Inspect / Sources in Compare mode.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
+import { Broom, CheckCircle, Clock, CloudRain, Crosshair, Path, Play, Ruler, Spinner, Stop, TrendUp, Waves, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import type { AOIManifest, RunManifest } from "../lib/api";
 import { getJudgeKey, getLevelSensitivity, setJudgeKey } from "../lib/api";
@@ -17,7 +17,8 @@ import { removeWaypoint, useWaypointInfo, useWaypoints } from "../lib/waypoints"
 import { setFocus } from "../lib/focus";
 import { coord, placeLabel, WaypointDetails } from "./WaypointDetails";
 import { useExtras } from "../lib/extras";
-import { useClock } from "../lib/clock";
+import { clock as playhead, useClock } from "../lib/clock";
+import { clearSafeRoute, fmtEta, fmtKm, setSafeRoute, shelterName, usualCut, useSafeRoute } from "../lib/saferoute";
 import { useTouch } from "../lib/breakpoint";
 import { Card, CardLock, Field, FIG, mono, MiniSlider, NumberInput, raisedButton, Segmented, TextAction } from "./rev5";
 import { fmtT } from "./ds";
@@ -279,6 +280,53 @@ function Metric({ Ic, label, value, sub, color = "var(--ink)" }: { Ic: Icon; lab
   );
 }
 const m2 = (v: number | null) => (v == null ? "n/a" : `${v.toFixed(2)} m`);
+
+/** Safe route (board 12): the dry route to the nearest shelter for the frame the playhead is on. Shown once a spot is picked. */
+function SafeRouteCard({ passM }: { passM: number }) {
+  const s = useSafeRoute();
+  if (!s.origin) return null;
+  const r = s.route, dry = !!r?.reachable;
+  const muted: CSSProperties = { margin: 0, color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" };
+  const row = (k: string, v: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+      <span style={{ color: "var(--ink-muted)" }}>{k}</span>
+      <span style={{ fontWeight: 600, textAlign: "right", ...FIG }}>{v}</span>
+    </div>
+  );
+  const btn: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 8, height: 32, padding: "0 12px", fontWeight: 600 };
+  return (
+    <Card title="Safe route">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px 14px" }}>
+        {r && dry && <>
+          {row("To", shelterName(r.destination_name))}
+          {row("Distance", r.length_km != null ? fmtKm(r.length_km) : "n/a")}
+          {row("Time", r.eta_min != null ? `${fmtEta(r.eta_min)} on foot` : "n/a")}
+          {usualCut(r, s.usual)
+            ? row(`Flooded ${s.blocked.length === 1 ? "stretch" : "stretches"} avoided`, `${s.blocked.length} on the usual route at ${fmtT(s.t ?? 0)}`)
+            : <p style={{ margin: 0, fontWeight: 600 }}>Usual route is dry at {fmtT(s.t ?? 0)}</p>}
+        </>}
+        {r && !dry && <>
+          <div style={{ display: "flex", gap: 8, padding: "8px 10px", borderLeft: "3px solid var(--hazard)", background: "color-mix(in srgb, var(--hazard) 10%, var(--surface))" }}>
+            <span style={{ fontSize: 13 }}><b>No dry route at {fmtT(s.t ?? 0)}.</b> Every road out of this spot is over {passM} m deep.{s.clearT != null && ` The first one clears at ${fmtT(s.clearT)}.`}</span>
+          </div>
+          {s.clearT != null && <CtlButton variant="raised" type="button" onClick={() => playhead.set({ t_s: s.clearT ?? 0 })} style={{ ...btn, alignSelf: "flex-start" }}>Jump to {fmtT(s.clearT)}</CtlButton>}
+        </>}
+        {!r && !s.error && <p style={muted}>Finding the route…</p>}
+        {s.error && <p style={{ ...muted, color: "var(--hazard)" }}>{s.error}</p>}
+        <p style={muted}>The route follows the playhead: move the timeline and it is recomputed for that moment.</p>
+        {s.picking && <p style={muted}>Click the map to set the start.</p>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <CtlButton variant="raised" type="button" aria-pressed={s.picking} onClick={() => setSafeRoute({ picking: !s.picking })} style={btn}>
+            <Path size={14} weight="bold" />Pick another start
+          </CtlButton>
+          <CtlButton variant="raised" type="button" onClick={clearSafeRoute} style={btn}>
+            <X size={14} weight="bold" />Clear route
+          </CtlButton>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function CursorCard({ tS, passM }: { tS: number; passM: number }) {
   const touch = useTouch();
@@ -618,6 +666,8 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
     raf = requestAnimationFrame(find);
     return () => cancelAnimationFrame(raf);
   }, [basemapFocus]);
+  const safeStart = useSafeRoute().origin;
+  useEffect(() => { if (safeStart) setTab("Inspect"); }, [safeStart]);
   const before = useRef<Tab>("Scenario");
   const wasCloseup = useRef(false);
   useEffect(() => {
@@ -689,7 +739,7 @@ export function Sidebar({ aoi, run, scenario, sources, compare, onScenario, agen
         )}
         {tab === "Timeline" && timeline}
         {tab === "Inspect" && inspect}
-        {tab === "Inspect" && !inspect && <><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
+        {tab === "Inspect" && !inspect && <><SafeRouteCard passM={passM} /><CursorCard tS={t_s} passM={passM} /><WaypointsCard /><OverviewCard run={run} aoi={aoi} passM={passM} onEdit={(comparing || agentMode) && onScenario ? onScenario : () => setTab("Scenario")} />{inspectAfter}</>}
         {tab === "Scenario" && (
           <>
             {scenario.linkNote && (
