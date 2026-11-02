@@ -11,24 +11,20 @@ import { ApiError, getGoogleTilesKey } from "../lib/api";
 import { areaCache } from "../lib/areaCache";
 import { CESIUM_CHECKED } from "../lib/cesiumPin";
 import { registerScene, requestRenderSoon, watchMotion } from "../lib/render";
+import { perTheme, useTheme } from "../lib/theme";
+import { buildingToken } from "../lib/buildings";
 import { Notice } from "./Notice";
 import { Button } from "./controls/Button";
 
 // Photoreal tile detail: Cesium's default at rest, coarser while the camera moves, back REST_MS after it stops.
 const TILES_REST_SSE = 16, TILES_MOVING_SSE = 24, REST_MS = 300;
-const DEPTH_EDGES = [0.05, 0.15, 0.3, 0.5, 1, 2];  // bin lower edges -> --depth-1..6
 // Google tileset loads run one at a time: overlapping loads share ion's cached endpoint and the second fails
 // with "The Resource is already being fetched" (React's dev double effect, quick basemap toggles).
 let googleQueue: Promise<unknown> = Promise.resolve();
 /** Cesium ion asset "Google Maps 2D Satellite" (added to the account from the ion Asset Depot). */
-const cssColor = (name: string) =>
-  Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
-const buildingColor = (depth: number) => {
-  if (!(depth >= 0.15)) return cssColor("--ink-muted");
-  let bin = 0;
-  DEPTH_EDGES.forEach((edge, i) => { if (depth >= edge) bin = i; });
-  return cssColor(`--depth-${bin + 1}`);
-};
+// Read once per theme: a recolour walks every building.
+const cssColor = perTheme((name) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim()));
+const buildingColor = (depth: number) => cssColor(buildingToken(depth));
 const footprints = areaCache<string, Promise<unknown>>();
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -122,6 +118,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   layerRef.current = layerState;
   const buildings = useRef<{ primitive: Cesium.Primitive; ids: string[] }>();
   const depths = useRef(new Map<string, number>());
+  const theme = useTheme();
   const [buildingStatus, setBuildingStatus] = useState("unavailable");
   const [depthFailed, setDepthFailed] = useState(false);
 
@@ -146,6 +143,9 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     }
     requestRenderSoon();
   };
+
+  // Building colours are tokens baked into instance attributes: a theme switch repaints them.
+  useEffect(() => { recolour(); }, [theme]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     onBuildingsStatus?.(depthFailed ? "unavailable (flood depths)" : buildingStatus);
