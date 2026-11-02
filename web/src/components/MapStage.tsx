@@ -903,6 +903,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
       if (p) setMenu({ ...toVp(x, y), ...p });
     };
     if (!canvas.hasAttribute("tabindex")) canvas.tabIndex = 0;
+    // A long press is ours: no iOS callout or text selection over the menu (onContext already stops Android's menu).
+    canvas.style.setProperty("-webkit-touch-callout", "none");
+    canvas.style.userSelect = "none";
     canvas.addEventListener("keydown", onMenuKey);
     canvas.addEventListener("pointermove", onTouchMove);
     return () => {

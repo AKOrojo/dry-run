@@ -9,6 +9,8 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement, 
 import { createPortal } from "react-dom";
 import { Check } from "@phosphor-icons/react";
 import { hideTooltips } from "./Tooltip";
+import { fingerDown, liftGuard, trackPointers } from "../../lib/liftGuard";
+import type { LiftGuard } from "../../lib/liftGuard";
 
 export type MenuItem = {
   kind: "item" | "check" | "radio";
@@ -218,10 +220,23 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
     document.getElementById(itemId(active))?.focus();
   }, [open, active]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A menu opened by a long press waits for that finger to lift before outside taps close it, and the lift's own click
+  // is swallowed (lib/liftGuard.ts): otherwise it lands on the sheet's backdrop and the menu closes as it opens.
+  useEffect(() => { trackPointers(); }, []);
+  const guard = useRef<LiftGuard | null>(null);
+  const armed = () => guard.current?.armed() ?? true;
+  useEffect(() => {
+    if (!open) return;
+    const g = liftGuard(document, fingerDown);
+    guard.current = g;
+    return () => { g.dispose(); if (guard.current === g) guard.current = null; };
+  }, [open]);
+
   // Outside click closes; a trigger menu follows its trigger on scroll and resize, a point menu closes on resize.
   useEffect(() => {
     if (!open) return;
     const down = (e: PointerEvent) => {
+      if (!armed()) return;
       const t = e.target as Node;
       if (!pop.current?.contains(t) && !btn.current?.contains(t)) closeRef.current(false);
     };
@@ -318,7 +333,7 @@ export function Menu({ label, trigger, items, at, onClose, returnFocus }: Props)
         onBlur: () => { if (focusedKeys === stableTrig) focusedKeys = null; keyed.current = false; },
       })}
       {open && createPortal(<>
-        {sheet && <div aria-hidden="true" onClick={() => close()}
+        {sheet && <div aria-hidden="true" onClick={() => { if (armed()) close(); }}
           style={{ position: "fixed", inset: 0, zIndex: 1000, background: "color-mix(in srgb, var(--ground) 60%, transparent)" }} />}
         {list}
       </>, document.body)}
