@@ -86,7 +86,7 @@ function rainPatchOf(sp: Spatial | undefined): Partial<RainState> {
 
 export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
-  const [provider, setProvider] = useState("fake");
+  const [provider, setProvider] = useState("replay");
   const [judgeKeyRequired, setJudgeKeyRequired] = useState(false);
   const [ionToken, setIonToken] = useState("");
   const [buildingsUrl, setBuildingsUrl] = useState("");

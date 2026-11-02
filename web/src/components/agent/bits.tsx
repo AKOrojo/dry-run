@@ -8,7 +8,7 @@ const btnBase: CSSProperties = { display: "inline-flex", alignItems: "center", j
   borderRadius: "var(--radius-md)", font: "inherit", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" };
 
 export function Btn({ kind, icon, children, ...rest }:
-  { kind: "primary" | "raised" | "ghost"; icon?: ReactNode; children: ReactNode; onClick?: () => void; disabled?: boolean }) {
+  { kind: "primary" | "raised" | "ghost"; icon?: ReactNode; children: ReactNode; onClick?: () => void; disabled?: boolean; "aria-describedby"?: string }) {
   // The primary is a flat danfo fill with no shadow; the ghost is the text look with a transparent border.
   const look: CSSProperties = kind === "primary"
     ? { background: "var(--danfo)", color: "var(--on-danfo)", border: "1px solid var(--danfo-edge)", boxShadow: "none", fontWeight: 600 }

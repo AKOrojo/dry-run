@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api")
 class AgentRequest(BaseModel):
     # Stripped first, so a blank or whitespace-only question is a 422 before any provider (paid or not) runs.
     question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
-    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "fake")  # meta | baseten | openrouter | fake | replay
+    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "replay")  # meta | baseten | openrouter | fake | replay
     aoi_id: str | None = None  # default: DRYRUN_DEFAULT_AOI
 
 
