@@ -29,7 +29,15 @@ const segmentBase = (pressed: boolean): CSSProperties => ({
 export function buttonStyle(variant: ButtonVariant, pressed: boolean, disabled: boolean, style?: CSSProperties): CSSProperties {
   const base = variant === "raised" ? raisedButton : variant === "text" ? textBase : variant === "segment" ? segmentBase(pressed)
     : variant === "icon" ? iconBase : danfoBase;
-  return { ...base, ...style, ...(disabled ? { opacity: 0.45, cursor: "default" } : {}) };
+  return inheritFont({ ...base, ...style, ...(disabled ? { opacity: 0.45, cursor: "default" } : {}) });
+}
+
+/** `font: "inherit"` as longhands, with a weight in every state. A shorthand beside a fontWeight that comes and goes (the
+ *  pressed segment) makes React warn and can drop the weight on rerender. */
+function inheritFont(s: CSSProperties): CSSProperties {
+  if (s.font !== "inherit") return s;
+  const { font: _font, ...rest } = s;
+  return { fontFamily: "inherit", fontStyle: "inherit", lineHeight: "inherit", fontSize: "inherit", fontWeight: "inherit", ...rest };
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(props, ref) {

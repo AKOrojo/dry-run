@@ -16,7 +16,17 @@ describe("buttonStyle", () => {
   it("segment: the pressed segment is inked and semibold, the others are transparent", () => {
     expect(buttonStyle("segment", true, false)).toMatchObject({ background: "var(--pressed-bg)", color: "var(--ground)", fontWeight: 600 });
     expect(buttonStyle("segment", false, false)).toMatchObject({ background: "transparent", color: "var(--ink-muted)", padding: "0 9px" });
-    expect(buttonStyle("segment", false, false).fontWeight).toBeUndefined();
+    expect(buttonStyle("segment", false, false).fontWeight).toBe("inherit");
+  });
+
+  it("font: inherit becomes longhands with a weight in every state, so a toggled fontWeight never sits beside a shorthand", () => {
+    for (const pressed of [true, false]) {
+      const s = buttonStyle("segment", pressed, false, { font: "inherit", fontSize: 12 });
+      expect(s.font).toBeUndefined();
+      expect(s).toMatchObject({ fontFamily: "inherit", lineHeight: "inherit", fontSize: 12, fontWeight: pressed ? 600 : "inherit" });
+    }
+    expect(buttonStyle("text", false, false, { fontWeight: 600 })).toMatchObject({ fontFamily: "inherit", fontWeight: 600 });
+    expect(buttonStyle("raised", false, false, { font: "600 12px serif" }).font).toBe("600 12px serif");
   });
 
   it("icon is borderless with no padding; the call site keeps its own size and colour", () => {
