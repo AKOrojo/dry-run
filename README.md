@@ -43,7 +43,7 @@ Built with Muse Spark Open. Data attributions: `ATTRIBUTION.md`.
 Production deploys: Eng D runs `infra/scripts/deploy.sh` from a clean checkout of `main` after `ci` passes on that
 commit. The GitHub `deploy` workflow is manual-only (see the note at the top of `.github/workflows/deploy.yml`).
 
-## Data card: Lagos AOI (`lagos-lekki-v1`)
+## Data card: Lagos AOI (`lagos-lekki-v1` to `-v3`)
 
 **Area.** Lekki–Ajah corridor, W 3.470 S 6.420 E 3.620 N 6.510 (EPSG:4326), a 540 × 324 grid of 1 arc-second
 cells (~30.7 × 30.5 m). The Lagos Lagoon is along the north edge and the Atlantic along the south. Built
@@ -58,11 +58,12 @@ cells (~30.7 × 30.5 m). The Lagos Lagoon is along the north edge and the Atlant
 | Population | WorldPop R2025A (2025, constrained, alpha) | sum-resampled from 100 m; total conserved | ~470k people: constrained products count only mapped settlements, so likely low |
 | Buildings | Google Open Buildings v3 (tile 103b) | confidence ≥ 0.8, area ≥ 25 m²; 68,929 footprints | **every building is 6 m tall** (no 2.5D heights yet); centroid cell only |
 | Roads | OpenStreetMap (Geofabrik 2026-10-28) | simple graph, largest connected component; cells sampled ≤ ½ cell | unmapped or mis-tagged roads are missing; bridges come from tags |
-| Drains | OpenStreetMap waterway=drain/ditch/canal | lines buffered 1 cell, 10 / 10 / 25 mm/h | sparse mapping; many real drains are silted, unmapped drains count as 0 |
+| Drains | OpenStreetMap waterway=drain/ditch/canal | v1 / v2: lines buffered 1 cell, 10 / 10 / 25 mm/h. v3: a channel network with a drain inferred along every drivable road (see model card) | sparse mapping (OSM has 2-3 % of roadside drains); many real drains are silted; drain sizes are assumptions |
 | Shelters | OpenStreetMap schools / places of worship / community centres | higher half of land, ≤ 300 m from a road | **candidates, assumed**: not official shelters; routing skips a shelter whose cell is flooded |
 | Places | OSM neighbourhoods, named roads, open land | polygons, or Voronoi cells of named points (≤ 1.5 km); ≤ 20 vertices | neighbourhood shapes are approximate, not official boundaries; protected sites never offered as open land |
 
-Not in v1: an observed flood extent (Sentinel-1, planned as `-v2`) and building heights.
+v2 changes only the built-up loss rate (calibrated, see model card) and v3 adds the drain network; v3 is live.
+No version has building heights or an observed flood extent (the Sentinel-1 scenes showed no flooding on land).
 
 ## Model card: flood simulation
 
@@ -71,8 +72,10 @@ formulation) on the AOI's ~30 m lon/lat grid: `dryrun/sim/solver.py`. Per cell f
 `q ← (q − g·h_flow·dt·∂η/∂x) / (1 + g·dt·n²·|q| / h_flow^(7/3))`, with
 `h_flow = max(η) − max(z)`, no flow below 1 mm, adaptive `dt = 0.7·min(dx,dy)/√(g·h_max)` capped at
 60 s. A conservative limiter stops a cell sending more water than it holds, so depth never goes
-negative and the water budget closes to round-off. Rain is spatially uniform and follows the storm's
-hyetograph, integrated exactly per step. Infiltration and drains remove water at fixed per-cell rates.
+negative and the water budget closes to round-off. Rain follows the storm's hyetograph, integrated exactly per
+step (uniform by default; a cell, moving cell or polygon since contract 0.6.0).
+Infiltration removes water at fixed per-cell rates. Drains are a network with capacity, storage and outfalls on the
+live areas (`lagos-lekki-v3`, `nyc-queens-v1`, contract 0.8.0) and a fixed per-cell sink on older AOIs.
 Open-water cells (`boundary_mask`, the lagoon and the sea, wherever they are) are held at the tide
 level, so water drains out, or flows in when the tide is higher. Other domain edges are walls.
 Interventions only change physics inputs (`sim/interventions.py`), never outputs. Deterministic: the same
@@ -86,10 +89,10 @@ scenario always gives the same numbers, and runs are cached by `run_id`.
 |---|---|---|
 | Terrain | Copernicus GLO-30 (a DSM) | Not raised under buildings; light smoothing (σ = 1 cell) on land; lagoon/sea bed set ≤ −1 m; canals 1 m below their lowest bank (`pipeline/build_layers.py`) |
 | Roughness, infiltration | ESA WorldCover → `LANDCOVER_LUT` | Literature-range values, not calibrated. Built-up n = 0.05 stands in for sub-grid buildings |
-| Drains | OSM waterway=drain/ditch/canal | 10 / 10 / 25 mm/h on cells they cross; many Lagos drains are silted, and unmapped drains count as 0 |
+| Drains | OSM waterway=drain/ditch/canal; NYC DEP catch basins and outfalls | v3 / v1: a drain and sewer network, see "Drains and sewers". Older AOIs: 10 / 10 / 25 mm/h on cells they cross. Drain sizes and blockage are assumptions |
 | Open water | JRC occurrence ≥ 90 % | A body is a tide boundary if ≥ 1000 cells or touching the AOI edge; smaller water is excluded from stats only |
 | Tide | scenario | Default −0.5 m, held constant through the run (no tidal cycle) |
-| Rain | scenario | Uniform over the AOI; no infiltration-capacity decay (no soil saturation model) |
+| Rain | scenario | Uniform over the AOI unless the storm sets a footprint; no infiltration-capacity decay (no soil saturation model) |
 | Flooded / severe / passable | `sim/exposure.py` | 0.15 m / 0.5 m / 0.3 m are **assumptions**, not standards |
 | Building depth | `sim/exposure.py` | Max over the 3×3 cells around the footprint (buildings sit on raised DSM cells); `buildings_flooded_own_cell` uses the building's own cell only |
 
@@ -105,13 +108,15 @@ land cells only.
 - **30 m grid:** streets and drains narrower than a cell are sub-grid. Flow paths in flat Lagos are sensitive to
   DEM noise.
 - **Sparse drain data:** OSM drain mapping is incomplete, so baseline drainage is uncertain both ways.
-- **Constant tide, fixed rates:** no tidal cycle or soil saturation. Rain is uniform by default; since contract 0.6.0
+- **Constant tide, fixed loss rates:** no tidal cycle or soil saturation; drains are a lumped network (v3 / v1), not
+  pipe by pipe. Rain is uniform by default; since contract 0.6.0
   a storm can be a cell, a moving cell or a polygon (see "Where the rain falls" below), but observed events use one
   AOI-mean IMERG series, which has no detail inside the AOI.
 - **Local-inertial physics:** no advection term. It is accurate for slow, deep floodplain flow and runs slightly slow for
   fast fronts (dam-break test below).
-- **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation, no
-  soakaways and no unmapped drains. Against the satellite scenes the visible excess is small (drain-down check below).
+- **Water stays too long after a storm:** closed hollows empty only by infiltration. There is no evaporation and no
+  soakaways, and drains reach a hollow only where a mapped or inferred roadside drain runs through it. Against the
+  satellite scenes the visible excess is small (drain-down check below).
   `evals/validation/pits.py` shows where it sits: the DEM's closed depressions (priority-flood fill to the lagoon, sea
   and grid edge) cover 21 km² of land at ≥ 0.15 m and could hold 147 mm over all land. At the 12 Jul pass, **96.5 % of
   the land the model still has wet (1.42 of 1.48 km²) is in such depressions** (median depth 0.49 m), so the excess is
@@ -120,7 +125,7 @@ land cells only.
   30 m grid that means flood water within about 45 m, so read it as "buildings with flood water close by". Since
   contract 0.4.0, `buildings_flooded_own_cell` also counts only buildings whose own cell reaches 0.15 m. That count is
   stricter, and the DSM bias (building cells sit high) likely makes it an undercount. The truth is probably between
-  the two, so a brief should give both. On Lagos at 120 mm / 3 h the counts are 30,202 and 13,314.
+  the two, so a brief should give both. On Lagos v1 at 120 mm / 3 h the counts were 30,202 and 13,314.
 
 ### Verification (synthetic tests, `tests/test_solver.py`)
 | Check | Result |
@@ -132,6 +137,9 @@ land cells only.
 | Speed, 333 × 333 grid, 6 h simulated | 21 s, single thread (gate: < 60 s on 2 vCPU; `FT_PERF=1 pytest tests/test_solver.py`) |
 
 ### Lagos (`lagos-lekki-v2`, 540 × 324 cells) on the solver
+The live area is `lagos-lekki-v3`: v2 plus the drain network. Its numbers are in "Drains and sewers" below (120 mm /
+3 h: 21.08 km², 26,114 buildings).
+
 3 h centre-peaked storm, 6 h simulated, on one desktop core with frames and stats included. On Cloud Run (2 vCPU,
 scaled from zero) the first uncached run took 39 s at 118 mm and a cached result returns in about 0.2 s.
 
@@ -265,6 +273,10 @@ and Ida's peak hour was 3.15 in, so they surcharged), the peak hour alone (80 mm
 as a 5 km cell centred on Woodside, and the 118 mm storm with sewer capacity doubled. Each runs in 15–40 s;
 mass balance 0.0 %. The demo hero is the 181 mm storm with the sewers full: the most street water (2.4 km²
 deeper than 0.5 m) that is still tied to observed rain.
+
+The tables below are for `nyc-queens-v0` (fixed sink). The live area is `nyc-queens-v1`, with the sewer model in
+"Drains and sewers": there "sewers backed up" means the outfalls are blocked, so the pipes fill and surcharge, and the
+hero (181 mm, sewers backed up) floods 4.13 km² with a street hit of 71.8 % (lift 1.64).
 
 | Preset | Buildings with water close by | Flooded km² | Road km impassable | Max depth |
 |---|---|---|---|---|
