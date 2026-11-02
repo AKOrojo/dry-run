@@ -246,7 +246,7 @@ export default function App() {
       if (u.toString() !== window.location.href) window.history.replaceState(null, "", u.toString());
       if (r.run) {
         setRun(r.run);
-        // Offered in Compare like any run of this session; it is A there until another A is picked.
+        // Offered in Compare like any run of this session; with no pair chosen it takes its slot there (lib/compare.ts pickPair).
         if (r.run.status === "done") setLinked((p) => new Set(p).add(r.run!.run_id));
         addRun(r.run);
         clock.set({ t_s: r.t ?? 0, max_s: r.run.frames.at(-1)?.t_s ?? 0, playing: false });
@@ -584,7 +584,7 @@ export default function App() {
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
-          {pair && <CompareMapOverlay a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
+          {pair && <CompareMapOverlay phone={bp === "phone"} a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">
             {aoi?.is_synthetic && <ProvenanceBadge kind="synthetic" />}
             {replayed && <ProvenanceBadge kind="synthetic">Replay</ProvenanceBadge>}

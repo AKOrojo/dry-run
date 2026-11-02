@@ -1,5 +1,5 @@
 // Compare mode (rev 5 Compare.dc.html): pick runs A and B from this session, then B against A.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { ArrowCounterClockwise, Columns, House, RoadHorizon, Users, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -11,6 +11,7 @@ import { Button, fmtT } from "./ds";
 import { Band, Card, FIG, mono } from "./rev5";
 import { Select } from "./controls/Select";
 import { runLabel } from "../lib/runlabel";
+import { useShort } from "../lib/breakpoint";
 import type { RunNames } from "../lib/streetpic";
 import { Globe } from "./Globe";
 import { Tooltip } from "./controls/Tooltip";
@@ -156,8 +157,46 @@ function RunTag({ l, m, name, origin, style }: { l: "A" | "B"; m: RunManifest; n
   );
 }
 
+/** Phone: A and B in one card, clear of the right-edge buttons: under the map's toolbar and run badge, or beside the
+ *  toolbar on a phone on its side (the map is too short to stack them over the view switch). One line per run (the
+ *  pickers below show the id and where it came from; the row's aria-label says it too). */
+function PhoneRuns({ rows }: { rows: { l: "A" | "B"; name: string; origin: string }[] }) {
+  const el = useRef<HTMLDivElement>(null);
+  const short = useShort();
+  const [at, setAt] = useState({ top: 112, left: 12 });
+  useLayoutEffect(() => {
+    const box = el.current?.parentElement;
+    if (!box) return;
+    const place = () => {
+      const o = box.getBoundingClientRect();
+      const bar = document.querySelector<HTMLElement>("[data-map-toolbar]")?.getBoundingClientRect();
+      const marks = [...document.querySelectorAll<HTMLElement>("[data-map-toolbar], [data-chip-stack]")].map((m) => m.getBoundingClientRect()).filter((r) => r.height > 0);
+      if (short && bar) setAt({ top: Math.round(bar.top - o.top), left: Math.round(bar.right - o.left + 8) });
+      else if (marks.length) setAt({ top: Math.round(Math.max(...marks.map((r) => r.bottom)) - o.top + 8), left: 12 });
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    document.querySelectorAll("[data-map-toolbar], [data-chip-stack]").forEach((m) => ro.observe(m));
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [short]);
+  return (
+    <div ref={el} style={{ position: "absolute", top: at.top, left: at.left, right: 64, zIndex: 2, display: "flex", flexDirection: "column", background: "var(--surface-raised)",
+      border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-float)", pointerEvents: "none" }}>
+      {rows.map(({ l, name, origin }, i) => (
+        <div key={l} role="group" aria-label={`Run ${l}: ${name}, ${origin}`} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: 32, padding: "0 10px",
+          borderTop: i ? "1px solid var(--hairline)" : undefined }}>
+          <Letter l={l} size={18} />
+          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, fontWeight: 600, fontSize: 13 }}>{name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A and B labels, the view switch, and the swipe handle or difference legend, over the map. */
-export function CompareMapOverlay({ a, b, names, origin, view, onView, split, onSplit }: {
+export function CompareMapOverlay({ phone = false, a, b, names, origin, view, onView, split, onSplit }: {
+  /** One runs card in place of the two chips (they overlap at phone widths). */ phone?: boolean;
   a: RunManifest; b: RunManifest; names?: RunNames; origin: (m: RunManifest) => string; view: CompareView; onView: (v: CompareView) => void;
   split: number; onSplit: (v: number) => void;
 }) {
@@ -167,8 +206,13 @@ export function CompareMapOverlay({ a, b, names, origin, view, onView, split, on
   const left = view === "Swipe" || view === "Side by side";
   return (
     <div ref={box} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} name={names?.a ?? runLabel(a)} origin={origin(a)} style={{ top: 84, left: 64 }} />}
-      {(left || view === "B" || view === "Difference") && <RunTag l="B" m={b} name={names?.b ?? runLabel(b)} origin={origin(b)} style={{ top: 64, right: 16 }} />}
+      {phone ? <PhoneRuns rows={[
+        ...(left || view === "A" || view === "Difference" ? [{ l: "A" as const, name: names?.a ?? runLabel(a), origin: origin(a) }] : []),
+        ...(left || view === "B" || view === "Difference" ? [{ l: "B" as const, name: names?.b ?? runLabel(b), origin: origin(b) }] : []),
+      ]} /> : <>
+        {(left || view === "A" || view === "Difference") && <RunTag l="A" m={a} name={names?.a ?? runLabel(a)} origin={origin(a)} style={{ top: 84, left: 64 }} />}
+        {(left || view === "B" || view === "Difference") && <RunTag l="B" m={b} name={names?.b ?? runLabel(b)} origin={origin(b)} style={{ top: 64, right: 16 }} />}
+      </>}
       {view === "Swipe" && (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${100 * split}%`, width: 0, zIndex: 1 }}>
           <span style={{ position: "absolute", top: 0, bottom: 0, left: -1, width: 2, background: "var(--danfo)" }} />

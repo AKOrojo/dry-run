@@ -1577,7 +1577,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
 
         {!phone && <Compass headingDeg={cam.headingDeg} onReset={() => reorient(0)} />}
         {/* Top-left chip stack: the run's badge, then the "3D city unavailable" chip when Google's tiles failed. */}
-        <div style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, pointerEvents: "none" }}>
+        <div data-chip-stack="" style={{ position: "absolute", ...(phone ? { top: 66, left: 12 } : { top: 30, left: 64 }), display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, pointerEvents: "none" }}>
           {run && !!frames?.length && !closeUp.active && (
             <div data-declutter-block={phone ? "" : undefined} style={{ pointerEvents: "auto" }}>
               <ProvenanceBadge kind={kind}>{`${kind === "placeholder" ? "Placeholder physics" : "Simulated"} · ${fmtT(tS)}`}</ProvenanceBadge>
@@ -1586,7 +1586,7 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
           <PhotorealChip phone={phone} />
         </div>
         {phone ? (
-          <div data-declutter-block style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
+          <div data-declutter-block data-map-toolbar="" style={{ position: "absolute", top: 12, left: 12, display: "flex" }}>
             <ViewSwitch compact active={active} onPick={pickMode} canFly={route.length >= 2} extra={
               <RouteButton compact drawing={drawing} hasRoute={route.length >= 2} hasEvac={!!evac}
                 onDraw={startDraw} onCancel={() => { setDrawing(false); setDrawPts([]); }}
