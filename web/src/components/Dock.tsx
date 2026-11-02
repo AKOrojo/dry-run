@@ -341,7 +341,7 @@ function Timeline({ ts, events, durS, rainStopS, nowS, playing, speed, note }: {
   const [ring, setRing] = useState(false);
   const onKey = (e: React.KeyboardEvent) => {
     const to = scrubKey(e.key, nowS, durS);
-    if (to !== null) { e.preventDefault(); clock.set({ t_s: to, playing: false }); }
+    if (to !== null) { e.preventDefault(); setRing(true); clock.set({ t_s: to, playing: false }); }  // keys after a click show the ring too
   };
   const frames = ts.t_s.length;
   const stepMin = frames > 1 ? Math.round((ts.t_s[1] - ts.t_s[0]) / 60) : 0;
