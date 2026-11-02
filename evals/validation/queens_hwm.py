@@ -68,7 +68,7 @@ def main() -> None:
     rows = marks()
     cases = [
         ("fixed sink 13 mm/h", "nyc-queens-v0", None, ()),
-        ("fixed sink, sewers full (v0 hero)", "nyc-queens-v0", None, (DrainUpgrade(capacity_factor=0),)),
+        ("fixed sink, sewers off (v0 hero)", "nyc-queens-v0", None, (DrainUpgrade(capacity_factor=0),)),
         ("sewers 1.5 in/h (v1 default)", "nyc-queens-v1", None, ()),
         ("sewers 1.75 in/h (5-year)", "nyc-queens-v1", Drainage(return_period_yr=5), ()),
         ("sewers 0.75 in/h (half)", "nyc-queens-v1", Drainage(capacity_mm_h=19.05), ()),
