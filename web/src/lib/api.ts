@@ -9,6 +9,7 @@ import type { Drainage } from "../contracts/gen/ScenarioSpec";
 import type { RouteRequest } from "../contracts/gen/RouteRequest";
 import type { RouteResult } from "../contracts/gen/RouteResult";
 import type { Observation } from "../contracts/gen/Observation";
+import type { RenderResult } from "../contracts/gen/RenderResult";
 
 export const API = import.meta.env.VITE_API_BASE ?? "";
 
@@ -275,6 +276,11 @@ export const getObservations = (aoiId: string, runId?: string, signal?: AbortSig
 /** POST /api/observe: a photo of the water, multipart (file, lon, lat, t_s, run_id, source). Returns the saved observation; the judge key goes in the header as in askAgent. */
 export const postObservation = (form: FormData, signal?: AbortSignal) =>
   fetch(`${API}/api/observe`, { method: "POST", headers: { ...team(), ...judge() }, body: form, signal }).then(j<Observation>);
+
+/** Street picture pair (board 12): a cached pair is free; a new one needs the judge key (Muse Image). */
+export const postRender = (form: FormData, signal?: AbortSignal) =>
+  fetch(`${API}/api/render`, { method: "POST", headers: { ...team(), ...judge() }, body: form, signal }).then(j<RenderResult>);
+export const getRender = (id: string) => fetch(`${API}/api/render/${encodeURIComponent(id)}`).then(j<RenderResult>);
 
 /** Callers debounce hover by this much before asking for a series. */
 export const SERIES_DEBOUNCE_MS = 200;

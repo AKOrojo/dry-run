@@ -16,7 +16,7 @@ import { useExtras } from "../lib/extras";
 import { setFocus, useFocus } from "../lib/focus";
 import { EVENT_ICON, SERVER_EVENT, serverEventLabel } from "./rev5";
 import { useLayers } from "../lib/layers";
-import { setInspect, setPinnedSeries } from "../lib/inspect";
+import { onUnpinRequest, setInspect, setPinnedSeries, setPinnedSpot } from "../lib/inspect";
 import { addWaypoint, removeWaypoint, setWaypointInfo, useWaypoints } from "../lib/waypoints";
 import type { WaypointInfo } from "../lib/waypoints";
 import { placeLabel, WaypointDetails } from "./WaypointDetails";
@@ -1018,6 +1018,9 @@ export function MapStage({ rainStorm, aoi, run, frames, framesB, split, onViewer
   // The pinned point's depth series feeds the dock chart.
   useEffect(() => { setPinnedSeries(pinned?.ser?.depth_m ?? null); }, [pinned?.ser]);
   useEffect(() => () => setPinnedSeries(null), []);
+  useEffect(() => { setPinnedSpot(pinned && !pinned.loading ? { lon: pinned.lon, lat: pinned.lat } : null); }, [pinned?.lon, pinned?.lat, pinned?.loading]);
+  useEffect(() => () => setPinnedSpot(null), []);
+  useEffect(() => onUnpinRequest(() => setPinned(null)), []);
 
   // Hover tooltips stop while flying (free camera, playback) or drawing.
   useEffect(() => { if (mode === "free" || drawing || (mode === "fly" && fly.hud.playing)) setHover(null); }, [mode, drawing, fly.hud.playing]);

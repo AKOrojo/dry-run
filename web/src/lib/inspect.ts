@@ -31,3 +31,17 @@ export function setPinnedSeries(next: number[] | null) {
   pinSeries = next;
   pinSubs.forEach((f) => f());
 }
+
+// The pinned point alone (not the hover), for cards that act on a picked spot (street picture), and a way for them to
+// clear the pin ("Pick another spot").
+let pinnedSpot: { lon: number; lat: number } | null = null;
+const spotSubs = new Set<() => void>();
+const unpinSubs = new Set<() => void>();
+export const usePinnedSpot = () => useSyncExternalStore((f) => { spotSubs.add(f); return () => { spotSubs.delete(f); }; }, () => pinnedSpot);
+export function setPinnedSpot(next: { lon: number; lat: number } | null) {
+  if (next?.lon === pinnedSpot?.lon && next?.lat === pinnedSpot?.lat) return;
+  pinnedSpot = next;
+  spotSubs.forEach((f) => f());
+}
+export const requestUnpin = () => unpinSubs.forEach((f) => f());
+export const onUnpinRequest = (f: () => void) => { unpinSubs.add(f); return () => { unpinSubs.delete(f); }; };

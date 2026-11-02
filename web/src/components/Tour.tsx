@@ -34,6 +34,7 @@ const ALL_STEPS = [
   { id: "plan", title: "Inspect a building", body: "Switch to the 2D plan view and click a building for its depths and the street beside it." },
   { id: "closeup", title: "See it up close in 3D", body: "Where a 3D close-up exists, open it to see the water surface, flow and the force of water on each building." },
   { id: "compare", title: "Compare two runs", body: "Pick runs A and B, then swipe, set side by side or difference their water on the map." },
+  { id: "street", anchor: "compare", title: "See a spot as a street picture", body: "In Compare, click a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
   { id: "agent", title: "Ask the planning agent", body: "Give it a goal: it runs scenarios, charts every run against the others and writes a brief you can check." },
   { id: "voice", anchor: "agent", title: "Say it instead of typing", body: "In Agent, press the mic in the goal box and speak; pause or press it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ] as const;
@@ -44,6 +45,7 @@ type Step = { id: string; title: string; body: string; /** The element to ring, 
 const TOUCH_TEXT: Record<string, Partial<Step>> = {
   map: { body: "Tap anywhere for the depth there and how it changes over time." },
   marks: { body: "Long-press the map to drop a waypoint; + Note pins a note at the playhead." },
+  street: { body: "In Compare, tap a street to pin it: Inspect then makes a before and after street picture, drawn at the depth runs A and B found there. Swipe between them, open them large or copy a link. It is an AI illustration, not a measurement." },
   camera: { body: "One finger pans, two fingers rotate and tilt, pinch zooms. Free flies, Plan looks straight down, and a drawn route can be flown along." },
   saferoute: { body: "Long-press the map and pick Safe route from here: the way to the nearest shelter that is dry at the moment the playhead shows, and it updates as you move it." },
 };
@@ -63,6 +65,7 @@ const PHONE_STEPS: Step[] = [
   { id: "timeline", anchor: "tab-timeline", title: "Charts, events and notes", body: "The Timeline sheet has the charts and the key events. Tap an event to jump to the moment and place it happens; + Note pins a note at the playhead, and a long press on the map drops a waypoint. The ⋮ on a chart shows its numbers as a table, copies them or saves the chart as an image." },
   { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Photos from residents show as observation pins; a green ring means the photo and the model agree. Long-press the map or use the Layers row to add a photo of the water. Sources and credits are linked at the end." },
   ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
+  { ...ALL_STEPS.find((x) => x.id === "street")!, ...TOUCH_TEXT.street, anchor: "menu" },
   { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
   { ...ALL_STEPS.find((x) => x.id === "agent")!, anchor: "tab-agent" },
   { ...ALL_STEPS.find((x) => x.id === "voice")!, anchor: "tab-agent", body: "In Agent, tap the mic in the goal box and speak; pause or tap it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
