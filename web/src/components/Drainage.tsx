@@ -271,7 +271,8 @@ function useDrainLayer(aoi?: AOIManifest, run?: RunManifest, runsBase?: string) 
   const keep = shownKinds(aoi, done, card);
   const key = ["gutter_inferred", "sewer_zone", "inlet"].map((k) => +keep(k as DrainKind)).join("");
   const shown = useMemo(() => fs?.filter((f) => keep(f.properties.kind)) ?? null, [fs, key]);  // eslint-disable-line react-hooks/exhaustive-deps
-  return { on: on && !!fs && !legacy, fs: shown, fill: done ? fill ?? null : null };
+  // `all` is the whole network: the map builds it once and hides kinds per run (the run's drainage changes with the shown run).
+  return { on: on && !!fs && !legacy, built: on && !!fs, fs: shown, all: fs, keep, key, fill: done ? fill ?? null : null };
 }
 
 // ============================================================ the map layer
@@ -279,11 +280,16 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   viewer?: Cesium.Viewer; scene?: Cesium.Scene; anchors: React.MutableRefObject<Anchors>; aoi?: AOIManifest; run?: RunManifest; tS: number;
   basemap: "aerial" | "photoreal"; runsBase: string; hidden?: boolean;
 }) {
-  const { on, fs, fill } = useDrainLayer(aoi, run, runsBase);
+  const { on, built: net, all, keep, key, fill } = useDrainLayer(aoi, run, runsBase);
   const show = on && !hidden && !!viewer;
+  // The geometry stays built while the layer is only hidden (a legacy run, a close-up): showing it again is a flag, not a
+  // rebuild of Lagos's ~14k lines.
+  const build = net && !!viewer;
+  const showRef = useRef(show);
+  showRef.current = show;
   const { lines, zones, outfalls, inlets } = useMemo(() => {
     const lines: Line[] = [], zones: Zone[] = [], outfalls: Point[] = [], inlets: LL[] = [];
-    for (const f of fs ?? []) {
+    for (const f of all ?? []) {
       const p = f.properties;
       if (isLine(p.kind)) { const parts = partsOf(f).filter((q) => q.length > 1); if (parts.length) lines.push({ id: p.id, kind: p.kind, name: p.name ?? null, parts, mid: midOf(parts.reduce((a, b) => (pathM(b) > pathM(a) ? b : a))) }); }
       else if (p.kind === "sewer_zone") { const parts = partsOf(f).filter((q) => q.length > 2).map((q) => simplify(q, ZONE_TOL_M)); if (parts.length) zones.push({ id: p.id, name: p.name ?? null, parts, at: centroidOf(parts[0]) }); }
@@ -291,7 +297,14 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       else if (p.kind === "inlet" && f.geometry.type === "Point") inlets.push(f.geometry.coordinates);
     }
     return { lines, zones, outfalls, inlets };
-  }, [fs]);
+  }, [all]);
+  // What the run shows. The geometry is built from the whole network and hides the other kinds, so switching between runs
+  // with different drainage (or leaving and re-entering Compare) does not rebuild Lagos's ~14k lines.
+  const keepRef = useRef(keep);
+  keepRef.current = keep;
+  const { shownLines, shownZones, shownInlets } = useMemo(() => ({
+    shownLines: lines.filter((l) => keep(l.kind)), shownZones: keep("sewer_zone") ? zones : [], shownInlets: keep("inlet") ? inlets : [],
+  }), [lines, zones, inlets, key]);  // eslint-disable-line react-hooks/exhaustive-deps
   const fi = useMemo(() => {
     if (!fill) return -1;
     let best = 0;
@@ -307,7 +320,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const [heights, setHeights] = useState<Map<string, number> | null>(null);
   useEffect(() => {
     setHeights(null);
-    if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length && !inlets.length && !outfalls.length)) return;
+    if (!build || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length && !inlets.length && !outfalls.length)) return;
     let off = false;
     const keys = new Map<string, Cesium.Cartographic>();
     const put = (q: LL) => keys.set(llKey(q), Cesium.Cartographic.fromDegrees(q[0], q[1]));
@@ -319,7 +332,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       .then(() => { if (!off) setHeights(new Map([...keys.keys()].map((k, i) => [k, cartos[i].height ?? 0]))); })
       .catch(() => { if (!off) setHeights(new Map()); });
     return () => { off = true; };
-  }, [show, photoreal, viewer, lines, zones, inlets, outfalls]);
+  }, [build, photoreal, viewer, lines, zones, inlets, outfalls]);
 
   // Lines (with a ground-coloured halo) and sewer-zone fills. The geometry is built once per network and basemap; a time
   // step only flips per-instance show and colour for the lines and zones whose tone bucket changed (rebuilding the
@@ -328,11 +341,12 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
   const tone = useRef<{ apply: (pct: Map<string, number> | null) => void } | null>(null);
   const pctRef = useRef(pctOf);
   pctRef.current = pctOf;
+  const visible = useRef(new Map<Cesium.PrimitiveCollection, () => void>());
   // Line colours live in materials and instance attributes: a theme switch rebuilds the layer in the new tokens.
   const theme = useTheme();
   useEffect(() => {
     const drop = () => { tone.current = null; if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
-    if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
+    if (!build || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
     if (photoreal && !heights) return;
     let live = true, stop = () => {}, unswap = () => {};
     const ready = photoreal ? Promise.resolve() : Promise.all([Cesium.GroundPolylinePrimitive.initializeTerrainHeights(), Cesium.GroundPrimitive.initializeTerrainHeights()]);
@@ -404,8 +418,18 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
         const toned = st.dash
           ? [1, 2, 3, 4].map((b) => linePrim(ls, st.width, { color: toneColor(BUCKET_PCT[b]), dash: true }, (id) => b0(id) === b))
           : [linePrim(ls, st.width, { perColor: (id) => toneColor(BUCKET_PCT[Math.max(1, b0(id))]) }, (id) => b0(id) > 0)];
-        return { ls, muted, halo, toned, dash: !!st.dash };
+        return { kind, ls, muted, halo, toned, dash: !!st.dash };
       }).filter((k): k is NonNullable<typeof k> => k != null);
+      // The kinds the shown run hides, and the whole layer while it is hidden, stay built, not drawn.
+      const byKind: [DrainKind, (Prim | null)[]][] = [["sewer_zone", [fillPrim, zoneLine]], ...kinds.map((k): [DrainKind, (Prim | null)[]] => [k.kind, [k.muted, k.halo, ...k.toned]])];
+      const vis = () => {
+        if (viewer.isDestroyed() || col.isDestroyed()) return;
+        col.show = showRef.current;
+        for (const [kind, ps] of byKind) for (const p of ps) if (p) p.prim.show = keepRef.current(kind);
+        viewer.scene.requestRender();
+      };
+      vis();
+      visible.current.set(col, vis);
 
       const seen = new Map<string, number>();
       [...lines, ...zones].forEach((x) => seen.set(x.id, b0(x.id)));
@@ -494,18 +518,20 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
       viewer.scene.requestRender();
     }).catch(() => { /* terrain heights unavailable: no drains drawn */ });
     return () => { live = false; stop(); unswap(); };
-  }, [show, viewer, lines, zones, basemap, heights, theme]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [build, viewer, lines, zones, basemap, photoreal && heights, theme]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Another run's drainage, or the layer hidden or shown again: only what is drawn changes.
+  useEffect(() => { for (const [c, vis] of visible.current) if (c.isDestroyed()) visible.current.delete(c); else vis(); }, [key, show]);
   // A time step: only the tones change.
   useEffect(() => { tone.current?.apply(pctOf); }, [toneKey]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); }, [viewer]);
 
   // Inlets: small dots, only at street scale (the points outside the view are culled by Cesium).
   useEffect(() => {
-    if (!show || !viewer || viewer.isDestroyed() || !inlets.length || !heights) return;
+    if (!show || !viewer || viewer.isDestroyed() || !shownInlets.length || !heights) return;
     const globe = viewer.scene.globe, lift = photoreal ? PHOTOREAL_LIFT_M : 1;
     const pts = new Cesium.PointPrimitiveCollection();
     const ink = cssColor("--ink").withAlpha(0.7);
-    inlets.forEach(([lon, lat]) => pts.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, (heights?.get(llKey([lon, lat])) ?? globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0) + lift), pixelSize: 4, color: ink, outlineWidth: 0 }));
+    shownInlets.forEach(([lon, lat]) => pts.add({ position: Cesium.Cartesian3.fromDegrees(lon, lat, (heights?.get(llKey([lon, lat])) ?? globe.getHeight(Cesium.Cartographic.fromDegrees(lon, lat)) ?? 0) + lift), pixelSize: 4, color: ink, outlineWidth: 0 }));
     pts.show = false;
     viewer.scene.primitives.add(pts);
     const s = viewer.scene;
@@ -524,7 +550,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     s.postRender.addEventListener(near);
     s.requestRender();
     return () => { if (!s.isDestroyed()) { s.postRender.removeEventListener(near); s.primitives.remove(pts); } };
-  }, [show, viewer, inlets, photoreal, heights, theme]);
+  }, [show, viewer, shownInlets, photoreal, heights, theme]);
 
   // Outfall marks as billboards (hundreds of them; DOM marks would be re-placed every frame).
   useEffect(() => {
@@ -559,30 +585,30 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     let last = 0;
     const move = (e: MouseEvent) => {
       const now = performance.now();
-      if (s.isDestroyed() || now - last < 150 || !zones.length) return;
+      if (s.isDestroyed() || now - last < 150 || !shownZones.length) return;
       last = now;
       const r = canvas.getBoundingClientRect();
       const hit = c.pickEllipsoid(new Cesium.Cartesian2(e.clientX - r.left, e.clientY - r.top), s.globe.ellipsoid);
       if (!hit) { setHoverZone(null); return; }
       const g = Cesium.Cartographic.fromCartesian(hit), q: LL = [Cesium.Math.toDegrees(g.longitude), Cesium.Math.toDegrees(g.latitude)];
-      setHoverZone(zones.find((z) => z.parts.some((ring) => inRing(q, ring)))?.id ?? null);
+      setHoverZone(shownZones.find((z) => z.parts.some((ring) => inRing(q, ring)))?.id ?? null);
     };
     const leave = () => setHoverZone(null);
     canvas.addEventListener("mousemove", move);
     canvas.addEventListener("mouseleave", leave);
     // The viewer may already be destroyed (the area changed): its getters throw then, so use what was captured above.
     return () => { c.moveEnd.removeEventListener(update); canvas.removeEventListener("mousemove", move); canvas.removeEventListener("mouseleave", leave); };
-  }, [show, viewer, zones]);
+  }, [show, viewer, shownZones]);
   const inView = (q: LL) => !cam.rect || (q[0] >= cam.rect[0] && q[0] <= cam.rect[2] && q[1] >= cam.rect[1] && q[1] <= cam.rect[3]);
   const zoneLabels = useMemo(() => {
-    const named = zones.filter((z) => z.name);
+    const named = shownZones.filter((z) => z.name);
     const top = pctOf ? named.filter((z) => inView(z.at)).sort((a, b) => (pctOf.get(b.id) ?? 0) - (pctOf.get(a.id) ?? 0)).slice(0, ZONE_LABELS) : [];
     const hov = named.find((z) => z.id === hoverZone);
     return hov && !top.includes(hov) ? [...top, hov] : top;
-  }, [zones, pctOf, cam, hoverZone]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shownZones, pctOf, cam, hoverZone]);  // eslint-disable-line react-hooks/exhaustive-deps
   const outfallChips = useMemo(() => (cam.h < INLET_MAX_M ? outfalls.filter((o) => inView(o.at)).slice(0, OUTFALL_CHIPS) : []), [outfalls, cam]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const chips = useMemo(() => !pctOf ? [] : lines.map((l) => ({ l, pct: pctOf.get(l.id) ?? 0 })).filter((x) => x.pct >= CHIP_MIN_PCT).sort((a, b) => b.pct - a.pct).slice(0, CHIP_MAX), [lines, pctOf]);
+  const chips = useMemo(() => !pctOf ? [] : shownLines.map((l) => ({ l, pct: pctOf.get(l.id) ?? 0 })).filter((x) => x.pct >= CHIP_MIN_PCT).sort((a, b) => b.pct - a.pct).slice(0, CHIP_MAX), [shownLines, pctOf]);
   if (!show) return null;
   const level = run?.scenario.interventions?.find((i) => i.type === "tide") as { boundary_level_m: number } | undefined;
   const recvDefault = aoi?.drainage_default?.receiving ?? null;

@@ -275,11 +275,14 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   );
 }
 
+// Built once: toLocale*String with options builds a new formatter per call, and this runs for every recording on
+// every render of the panel.
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+
 /** "2026-10-29T20:20:45+00:00" -> "29 Oct, 20:20 UTC"; unparseable input is shown as given. */
 function fmtRecorded(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const day = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
-  return `${day}, ${time} UTC`;
+  return `${DAY.format(d)}, ${TIME.format(d)} UTC`;
 }
