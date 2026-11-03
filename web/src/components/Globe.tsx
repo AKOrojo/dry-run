@@ -182,9 +182,20 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   const [buildingStatus, setBuildingStatus] = useState("unavailable");
   const [depthFailed, setDepthFailed] = useState(false);
 
+  // A theme, layer or depth change repaints every house: a chunk per slice, so a whole city does not block a frame
+  // (entering Compare repaints the main map's houses for the pair). A newer repaint replaces one still running.
+  const recolourGen = useRef(0);
   const recolour = () => {
-    for (const c of buildings.current) paint(c);
-    requestRenderSoon();
+    const gen = ++recolourGen.current, list = [...buildings.current];
+    let i = 0;
+    const step = () => {
+      if (gen !== recolourGen.current) return;
+      const slice = performance.now();
+      while (i < list.length && performance.now() - slice < SLICE_MS) paint(list[i++]);
+      requestRenderSoon();
+      if (i < list.length) setTimeout(step, 0);
+    };
+    step();
   };
   const paint = (current: Chunk) => {
     if (current.primitive.isDestroyed() || !current.primitive.ready) return;
