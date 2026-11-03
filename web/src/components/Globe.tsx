@@ -57,9 +57,10 @@ function clearStaleRequests() {
   for (let i = heap.length; i < slots.length; i++) slots[i] = undefined;
 }
 
-// Resolves once the viewer's terrain provider is usable (immediately for the ellipsoid).
+// Resolves once the viewer's terrain provider is usable (immediately for the ellipsoid, or once World Terrain failed:
+// a refusal often comes before the caller asks, and its errorEvent does not fire again for a late listener).
 function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
-  if (!terrain || terrain.ready) return Promise.resolve();
+  if (!terrain || terrain.ready || terrainDown) return Promise.resolve();
   return new Promise((resolve) => {
     terrain.readyEvent.addEventListener(() => resolve());
     terrain.errorEvent.addEventListener(() => resolve());
