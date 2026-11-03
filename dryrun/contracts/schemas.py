@@ -637,7 +637,7 @@ class Brief(_Base):
     claims: list[Claim]
     recommended_run_id: str | None = None
     model: str
-    provider: Literal["meta", "baseten", "openrouter", "fake"]
+    provider: Literal["meta", "baseten", "openrouter", "modal", "fake"]
 
 
 class AgentEvent(_Base):

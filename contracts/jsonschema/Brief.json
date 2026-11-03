@@ -103,6 +103,7 @@
         "meta",
         "baseten",
         "openrouter",
+        "modal",
         "fake"
       ],
       "title": "Provider",

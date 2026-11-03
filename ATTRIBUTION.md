@@ -12,6 +12,7 @@ No third-party dataset is committed to this repo. Third-party data lives only in
 | Source | Use | Licence / terms | Required credit |
 |---|---|---|---|
 | Muse Spark Open | sovereign-mode agent (served through OpenRouter; the Baseten deployment was never listed) | Muse Model License | "Built with Muse Spark Open" (in the app footer) |
+| Muse Glimmer 30B (Meta; FP8 block-scaled checkpoint `RedHatAI/Muse-Glimmer-30B-FP8-block`) | judge-only sovereign agent, served by vLLM on our Modal app (`infra/modal/glimmer.py`) | Apache-2.0 | none required; named in the agent panel |
 | Cesium ion (Community tier) | serves the Bing basemap, World Terrain and Google 3D tiles; token restricted by URL | Cesium ion terms; Community tier is non-commercial | Cesium ion logo in the on-screen credit display. Owner decision 2026-10-30: the non-commercial tier is acceptable for this hackathon demo |
 | Bing Maps Aerial, via Cesium ion (default ion imagery asset) | basemap imagery on the globe | Cesium ion terms; Microsoft Bing Maps terms | Cesium's on-screen credit display (ion and Microsoft logos); never hide `viewer.creditDisplay` |
 | Google Photorealistic 3D Tiles (ion asset 2275207) | 3D basemap (#82); the Bing globe stays as the alternative basemap | Google Map Tiles API terms | Google logo and data attributions in Cesium's on-screen credit display; never hide or restyle `viewer.creditDisplay` |

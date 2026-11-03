@@ -86,6 +86,8 @@ export default function App() {
   const [aoi, setAoi] = useState<AOIManifest>();
   const [provider, setProvider] = useState("replay");
   const [judgeKeyRequired, setJudgeKeyRequired] = useState(false);
+  const [glimmer, setGlimmer] = useState(false);
+  const [liveProvider, setLiveProvider] = useState<string | null>(null);
   const [ionToken, setIonToken] = useState("");
   const [buildingsUrl, setBuildingsUrl] = useState("");
   const [defaultAoi, setDefaultAoi] = useState("");
@@ -234,7 +236,7 @@ export default function App() {
   useEffect(() => {
     getAOIs().then(setAois, () => setAois([]));
     getConfig().then(async (h) => {
-      setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setIonToken(h.cesium_ion_token); setGoogleAvailable(!!h.google_tiles_available);
+      setBuildingsUrl(h.buildings_url); setDefaultAoi(h.default_aoi); setRunsBase(h.runs_base); setProvider(h.agent_provider); setJudgeKeyRequired(!!h.judge_key_required); setGlimmer(!!h.glimmer_available); setLiveProvider(h.live_provider ?? null); setIonToken(h.cesium_ion_token); setGoogleAvailable(!!h.google_tiles_available);
       const r = await resolveLink(shared, { getRun, getAOI, defaultAoi: h.default_aoi, successors: h.aoi_successors, picked: () => picked.current });
       if (!r) return;
       setAoi(r.aoi);
@@ -617,7 +619,7 @@ export default function App() {
           inspectAfter={pair || plan ? <>{pair && <StreetPictureCard aoi={aoi} a={pair.a} b={pair.b} names={names} />}{plan && <HowToInspectCard />}</> : undefined} onScenario={() => setMode("Scenario")} agentMode={mode === "Agent"} agent={
           <>
             {agentList.length > 0 && <RunsCard runs={agentList} shown={run?.run_id} recommended={session.recommended} onShow={showAgentRun} />}
-            <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} onReplay={setReplayed} onEvents={setAgentEvents}
+            <AgentPanel defaultProvider={provider} aoiId={aoi?.aoi_id} onAoi={switchAoi} judgeKeyRequired={judgeKeyRequired} glimmerAvailable={glimmer} liveProvider={liveProvider} onReplay={setReplayed} onEvents={setAgentEvents}
               briefExtra={session.place && agentList.length > 1 ? <BriefPlaceBars place={session.place} runs={agentList} vals={placeVals} session={session} shown={run?.run_id} onShow={showAgentRun} /> : undefined}
               onRun={(id) => { setAgentIds((p) => new Set(p).add(id)); getRun(id).then((m) => { setRun(m); addRun(m); startClock(m); setAgentShown((s) => (s?.id === id ? s : { id, picked: false })); }); }} />
           </>

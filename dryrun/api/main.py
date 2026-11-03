@@ -265,6 +265,10 @@ def config():
             "agent_provider": os.getenv("DRYRUN_AGENT_PROVIDER", "replay"),
             # Sovereign mode = Muse Spark Open, via OpenRouter (prod) or Baseten (hackathon partner, pending approval).
             "sovereign_provider_available": bool(_secret("OPENROUTER_API_KEY") or _secret("BASETEN_API_KEY")),
+            # The model a judge's Live runs on by default (the agent panel names it); null when no paid provider has a key.
+            "live_provider": _live_provider(),
+            # Muse Glimmer 30B on our Modal app (judges only): the agent panel offers it as a live model.
+            "glimmer_available": bool(os.getenv("MODAL_BASE_URL") and _secret("MODAL_PROXY_TOKEN_ID") and _secret("MODAL_PROXY_TOKEN_SECRET")),
             # Paid providers need X-Judge-Key (or the team token): the UI shows a key box when this is true.
             "judge_key_required": ratelimit.paid_access_configured(),
             # Cesium ion tokens are public client tokens (restrict allowed URLs in the ion dashboard);
@@ -290,6 +294,19 @@ def google_tiles_key(request: Request):
     ratelimit.require_paid_access(request)
     limit(request, "google_key", per_hour=60)
     return JSONResponse({"key": key}, headers={"Cache-Control": "no-store"})
+
+
+def _live_provider() -> str | None:
+    """DRYRUN_LIVE_PROVIDER, else a paid default provider, else the first paid provider whose key is set (Glimmer on Modal
+    is offered beside it, not as it)."""
+    if v := os.getenv("DRYRUN_LIVE_PROVIDER", "").strip():
+        return v
+    if (default := os.getenv("DRYRUN_AGENT_PROVIDER", "replay")) not in ("replay", "fake"):
+        return default
+    for name, env in (("meta", "META_API_KEY"), ("openrouter", "OPENROUTER_API_KEY"), ("baseten", "BASETEN_API_KEY")):
+        if _secret(env):
+            return name
+    return None
 
 
 def _secret(name: str) -> str:

@@ -25,6 +25,8 @@ MAX_CALLS_PER_TURN = 6
 MAX_TOOL_CALLS = 24
 BRIEF_MAX_TOKENS = 12000
 SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
+# What the UI calls a provider's model, where its id would say less.
+MODEL_LABEL = {"modal": "Muse Glimmer 30B"}
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ def _parse_brief(text: str, p) -> Brief:
             json_err = json_err or exc
             continue
         if isinstance(data, dict) and "claims" in data:
-            data.update(model=p.model, provider=p.name)
+            data.update(model=MODEL_LABEL.get(p.name, p.model), provider=p.name)
             try:
                 return Brief.model_validate(data)
             except ValueError as exc:  # report THIS, not JSON noise from later braces inside the object
@@ -114,10 +116,14 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
     aoi_id = aoi_id or os.getenv("DRYRUN_DEFAULT_AOI", "fixture-synthetic")
     start = time.time()
     deadline = start + SESSION_DEADLINE_S
+    wakes = getattr(p, "wakes", False)
+    if wakes:
+        yield AgentEvent(kind="thought", data={"text": f"{MODEL_LABEL.get(p.name, p.model)} runs on our own GPU, which sleeps "
+                                               "when idle. The first answer can take a few minutes while it starts."})
     dispatched = 0
     msgs: list[dict] = [{"role": "system", "content": SYSTEM.format(aoi_id=aoi_id)},
                         {"role": "user", "content": question}]
-    for _ in range(MAX_STEPS):
+    for step in range(MAX_STEPS):
         if time.time() > deadline:
             yield AgentEvent(kind="thought", data={"text": "Time budget reached; writing the brief."})
             break
@@ -127,6 +133,8 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
             yield _error_event("chat", exc)
             yield AgentEvent(kind="done", data={})
             return
+        if wakes and step == 0:
+            deadline = time.time() + SESSION_DEADLINE_S  # the session's time starts once the model is up
         if turn.content:
             yield AgentEvent(kind="thought", data={"text": turn.content})
         if not turn.tool_calls:

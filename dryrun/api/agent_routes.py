@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api")
 class AgentRequest(BaseModel):
     # Stripped first, so a blank or whitespace-only question is a 422 before any provider (paid or not) runs.
     question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
-    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "replay")  # meta | baseten | openrouter | fake | replay
+    provider: str = os.getenv("DRYRUN_AGENT_PROVIDER", "replay")  # meta | baseten | openrouter | modal | fake | replay
     aoi_id: str | None = None  # default: DRYRUN_DEFAULT_AOI
 
 
@@ -30,9 +30,9 @@ def agent(req: AgentRequest, request: Request):
 
     if req.aoi_id is not None:
         _check_aoi(req.aoi_id)  # 400 malformed, 404 unknown, before any paid call
-    if req.provider not in {"meta", "baseten", "openrouter", "fake", "replay"}:
-        raise HTTPException(400, "provider must be meta | baseten | openrouter | fake | replay")
-    paid = req.provider not in {"fake", "replay"}  # meta, baseten and openrouter bill the team's credits
+    if req.provider not in {"meta", "baseten", "openrouter", "modal", "fake", "replay"}:
+        raise HTTPException(400, "provider must be meta | baseten | openrouter | modal | fake | replay")
+    paid = req.provider not in {"fake", "replay"}  # meta, baseten, openrouter and modal bill the team's credits
     rec = None
     if req.provider == "replay":
         rec = replay.find(req.question)

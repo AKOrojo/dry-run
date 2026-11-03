@@ -616,7 +616,7 @@ function SourcesCard({ sources }: { sources: string[] }) {
       </ul>
       {note && <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>{note}</p>}
       <p style={{ margin: 0, padding: "8px 14px 10px", borderTop: "1px solid var(--hairline)", color: "var(--ink-muted)", fontSize: 12, lineHeight: "17px" }}>
-        Built with Muse Spark Open. Not an operational warning system.
+        Built with Muse Spark Open and Muse Glimmer 30B. Not an operational warning system.
       </p>
     </Card>
   );

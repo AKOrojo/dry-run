@@ -3,6 +3,7 @@
   meta     -> Meta Model API, Muse Spark 1.3            (standard mode: user uploads)
   baseten  -> Muse Spark Open, "sovereign mode"         ($10K open-weights bonus)
   openrouter -> Muse Spark Open via OpenRouter          (sovereign mode until Baseten -1026 is live)
+  modal    -> Muse Glimmer 30B on our own Modal app     (sovereign mode on an inference partner; judges only)
   fake     -> scripted, no network; used by tests and by Eng B before keys exist
 
 Day-1 TODO (Eng C): confirm base URLs, model ids and tool-call/JSON-schema
@@ -37,6 +38,17 @@ DEFAULTS = {
         "model": os.getenv("OPENROUTER_MODEL", "meta/muse-spark-open"),
         "key_env": "OPENROUTER_API_KEY",
     },
+    # Muse Glimmer 30B (open weights) served by vLLM on our Modal app, infra/modal/glimmer.py (owner 2026-11-02).
+    # The endpoint takes a Modal proxy auth token, not a bearer key; it scales to zero, so the first call of a
+    # session may wait for a cold start (MODAL_TIMEOUT_S).
+    "modal": {
+        "base_url": os.getenv("MODAL_BASE_URL", ""),
+        "model": os.getenv("MODAL_MODEL", "muse-glimmer-30b"),
+        "key_env": "MODAL_PROXY_TOKEN_ID",
+        "secret_env": "MODAL_PROXY_TOKEN_SECRET",
+        "timeout": float(os.getenv("MODAL_TIMEOUT_S", "540")),  # plus the 240 s session: under Cloud Run's 900 s
+        "wakes": True,
+    },
 }
 
 
@@ -64,6 +76,14 @@ class OpenAICompatProvider:
         self.key = os.environ.get(cfg["key_env"], "").strip()
         if self.key in ("", "unset"):  # bootstrap seeds secrets with the placeholder "unset"
             raise RuntimeError(f"{cfg['key_env']} is not set for provider '{name}'")
+        self.timeout = cfg.get("timeout", 60)
+        self.wakes = cfg.get("wakes", False)  # scales to zero: the first call may wait for the model to start
+        self.headers = {"Authorization": f"Bearer {self.key}"}
+        if "secret_env" in cfg:
+            secret = os.environ.get(cfg["secret_env"], "").strip()
+            if secret in ("", "unset") or not self.base_url:
+                raise RuntimeError(f"{cfg['secret_env']} or the base URL is not set for provider '{name}'")
+            self.headers = {"Modal-Key": self.key, "Modal-Secret": secret}
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
              response_format: dict | None = None, max_tokens: int = 4000) -> Turn:
@@ -77,8 +97,10 @@ class OpenAICompatProvider:
         from dryrun.api.errors import content_filtered
 
         for attempt in range(1 + CONTENT_FILTER_RETRIES):
-            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=60,
-                           headers={"Authorization": f"Bearer {self.key}"})
+            # Modal answers a request still running at 150 s (a cold start) with 303 See Other to a URL that returns the
+            # result: follow it (same host, so the proxy-token headers go along).
+            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=self.timeout, headers=self.headers,
+                           follow_redirects=self.wakes)
             if not content_filtered(r):
                 break
             log.warning("llm_content_filter provider=%s model=%s attempt=%d", self.name, self.model, attempt + 1)
