@@ -334,7 +334,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
     const drop = () => { tone.current = null; if (viewer && !viewer.isDestroyed() && prev.current && !prev.current.isDestroyed()) viewer.scene.primitives.remove(prev.current); prev.current = undefined; };
     if (!show || !viewer || viewer.isDestroyed() || (!lines.length && !zones.length)) { drop(); if (viewer && !viewer.isDestroyed()) viewer.scene.requestRender(); return; }
     if (photoreal && !heights) return;
-    let live = true, stop = () => {};
+    let live = true, stop = () => {}, unswap = () => {};
     const ready = photoreal ? Promise.resolve() : Promise.all([Cesium.GroundPolylinePrimitive.initializeTerrainHeights(), Cesium.GroundPrimitive.initializeTerrainHeights()]);
     ready.then(() => {
       if (!live || viewer.isDestroyed()) return;
@@ -372,9 +372,9 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
         if (!insts.length) return null;
         const appearance = per ? new Cesium.PolylineColorAppearance() : new Cesium.PolylineMaterialAppearance({ material: material(look.color, look.dash) });
         const prim = photoreal
-          ? new Cesium.Primitive({ geometryInstances: insts, asynchronous: false, appearance,
+          ? new Cesium.Primitive({ geometryInstances: insts, asynchronous: true, appearance,
               depthFailAppearance: per ? new Cesium.PolylineColorAppearance() : new Cesium.PolylineMaterialAppearance({ material: material(look.color.withAlpha(look.color.alpha * 0.45), look.dash) }) })
-          : new Cesium.GroundPolylinePrimitive({ geometryInstances: insts, asynchronous: false, appearance });
+          : new Cesium.GroundPolylinePrimitive({ geometryInstances: insts, asynchronous: true, appearance });
         col.add(prim);
         built.push({ prim, ids });
         return { prim, ids };
@@ -389,7 +389,7 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
           geometry: new Cesium.PolygonGeometry({ polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(ring.flat())) }),
           attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(toneColor(pct0?.get(z.id) ?? null).withAlpha(0.2)) } });
       }));
-      const zoneFill = zoneInsts.length ? new Cesium.GroundPrimitive({ geometryInstances: zoneInsts, asynchronous: false, classificationType: photoreal ? Cesium.ClassificationType.BOTH : Cesium.ClassificationType.TERRAIN,
+      const zoneFill = zoneInsts.length ? new Cesium.GroundPrimitive({ geometryInstances: zoneInsts, asynchronous: true, classificationType: photoreal ? Cesium.ClassificationType.BOTH : Cesium.ClassificationType.TERRAIN,
         appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }) }) : null;
       const fillPrim: Prim | null = zoneFill ? { prim: zoneFill, ids: zoneIds } : null;
       if (zoneFill && fillPrim) { col.add(zoneFill); built.push(fillPrim); }
@@ -475,14 +475,25 @@ export function DrainsMap({ viewer, scene, anchors, aoi, run, tS, basemap, runsB
         if (frame) cancelAnimationFrame(frame);
         run();
       };
-      drop();
+      // The geometry builds in Cesium's workers (built synchronously, Lagos's ~14k ground polylines blocked the page for
+      // seconds): the layer drawn so far stays until every primitive of this one is ready, then they swap.
       viewer.scene.primitives.add(col);
-      prev.current = col;
       tone.current = { apply };
       apply(pctRef.current);  // the fill may have moved on while this was building
+      const swap = () => {
+        if (!live || viewer.isDestroyed() || !built.every((p) => p.prim.ready)) return;
+        viewer.scene.postRender.removeEventListener(swap);
+        if (prev.current !== col) { drop(); prev.current = col; tone.current = { apply }; }
+        viewer.scene.requestRender();
+      };
+      viewer.scene.postRender.addEventListener(swap);
+      unswap = () => {
+        if (!viewer.isDestroyed()) viewer.scene.postRender.removeEventListener(swap);
+        if (prev.current !== col && !viewer.isDestroyed() && !col.isDestroyed()) viewer.scene.primitives.remove(col);
+      };
       viewer.scene.requestRender();
     }).catch(() => { /* terrain heights unavailable: no drains drawn */ });
-    return () => { live = false; stop(); };
+    return () => { live = false; stop(); unswap(); };
   }, [show, viewer, lines, zones, basemap, heights, theme]);  // eslint-disable-line react-hooks/exhaustive-deps
   // A time step: only the tones change.
   useEffect(() => { tone.current?.apply(pctOf); }, [toneKey]);  // eslint-disable-line react-hooks/exhaustive-deps
