@@ -108,6 +108,8 @@ function terrainReady(terrain?: Cesium.Terrain): Promise<void> {
 const osm = () => new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/",
   credit: new Cesium.Credit('© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors', true) });
 let terrainDown = false;
+/** The area whose default basemap was last applied. */
+let basemapAoi: string | undefined;
 const why = (err: unknown) => (err instanceof Error ? err.message : String(err));
 /** `p` in place of the base imagery layer, with its show, alpha, saturation and brightness. */
 function swapBase(v: Cesium.Viewer, p: Cesium.ImageryProvider) {
@@ -575,8 +577,14 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
 
   useEffect(showNearest, [tS, layerState.water.on, layerState.water.opacity]);
 
-  // Default basemap per area: Google 3D where it has real buildings, otherwise our 3D houses on aerial imagery.
-  useEffect(() => { setBasemap(aoi.photoreal_buildings ? "photoreal" : "aerial"); }, [aoi.aoi_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Default basemap per area: Google 3D where it has real buildings, otherwise our 3D houses on aerial imagery. Set when
+  // the area changes, not per globe: Compare's second globe re-applying it flipped the shared basemap (and with it every
+  // layer built per basemap) to Photoreal and, with ion down, straight back.
+  useEffect(() => {
+    if (basemapAoi === aoi.aoi_id) return;
+    basemapAoi = aoi.aoi_id;
+    setBasemap(aoi.photoreal_buildings ? "photoreal" : "aerial");
+  }, [aoi.aoi_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Aerial imagery: Bing through ion for everyone; Google Map Tiles 2D when picked (judges and the team, our own key
   // from /api/tiles/google-key, capped per day). Google only replaces Bing once a real tile over the area loads, and
