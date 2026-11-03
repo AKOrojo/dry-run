@@ -570,7 +570,12 @@ export default function App() {
     <ChartArea.Provider value={chartArea}>
     <div className={`dr-app body bp-${bp}${view.sidebar ? "" : " no-sidebar"}${view.timeline ? "" : " no-timeline"}${drawer ? " drawer-open" : ""}${bp === "phone" && sheet ? " sheet-open" : ""}`}>
       <TopBar rainText={rainSummary(rainState)} aois={aois} aoiId={aoi?.aoi_id} aoiName={aoi?.name} defaultAoi={defaultAoi} onAoi={switchAoi} rainMm={rain} durationH={durationH} pattern={pattern}
-        mode={mode} onMode={(m) => { setMode(m); setView({ sidebar: true }); }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
+        mode={mode} onMode={(m) => {
+          setMode(m); setView({ sidebar: true });
+          // On a phone the sheet snaps to peek in this same render: left to the Sidebar's mode effect, it lands a render
+          // later, and the view switch (placed from the sheet as it mounts) shows a frame or more in the wrong place.
+          if (bp === "phone" && m === "Compare") openSide("Compare");
+        }} agentRuns={session.runIds.length} onTour={() => setTour(true)}
         onCopyLink={copyLink} onSaveImage={saveImage} layout={bp} drawerOpen={drawer} onDrawer={() => setDrawer((d) => !d)} />
       <div className="dr-main">
         <div className="dr-map" data-tour="map">

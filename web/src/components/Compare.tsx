@@ -1,5 +1,6 @@
 // Compare mode (rev 5 Compare.dc.html): pick runs A and B from this session, then B against A.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { CSSProperties, PointerEvent } from "react";
 import { ArrowCounterClockwise, Columns, House, RoadHorizon, Users, Waves } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
@@ -238,10 +239,13 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
       const peek = !sheet.hidden && sheet.dataset.sheet === "peek" && h > 0;
       setLift(peek ? Math.max(0, Math.round(own.getBoundingClientRect().bottom - (area.getBoundingClientRect().bottom - h))) : 0);
     };
-    place();
-    const ro = new ResizeObserver(place);
+    place();  // in this layout pass: the first paint has the switch where it belongs
+    // The observers fire before the next paint, but a plain setState from them renders in a later task: flush it now, so
+    // a sheet that moved is never painted with the switch where it was.
+    const now = () => flushSync(place);
+    const ro = new ResizeObserver(now);
     ro.observe(own); ro.observe(area);
-    const mo = new MutationObserver(place);
+    const mo = new MutationObserver(now);
     mo.observe(sheet, { attributes: true, attributeFilter: ["hidden", "data-sheet", "data-sheet-h"] });
     return () => { ro.disconnect(); mo.disconnect(); };
   }, [phone]);
