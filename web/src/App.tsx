@@ -528,10 +528,11 @@ export default function App() {
     setSheet(t);
     if (t !== "Timeline") setSideTab(sideOf(t));
   };
-  /** The side panel asks for a tab (a mode change, a picked building, the Sources link): open it where it lives. */
+  /** The side panel asks for a tab (a mode change, a picked building, the Sources link): open it where it lives.
+   *  Compare opens at peek on a phone, so both panes, their labels and the view switch show. */
   const openSide = (t: Tab) => {
     setSideTab(t);
-    if (bp === "phone") { if (sheet !== phoneOf(t)) setSnap("half"); setSheet(phoneOf(t)); }
+    if (bp === "phone") { if (t === "Compare") setSnap("peek"); else if (sheet !== phoneOf(t) || snap === "peek") setSnap("half"); setSheet(phoneOf(t)); }
     else if (bp === "tablet") setDrawer(true);
   };
   // The "3D city unavailable" chip's Details opens Layers (the sheet on a phone, the drawer on a tablet).

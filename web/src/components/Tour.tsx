@@ -66,7 +66,7 @@ const PHONE_STEPS: Step[] = [
   { ...ALL_STEPS.find((x) => x.id === "layers")!, anchor: "tab-layers", body: "In Layers, switch between Photoreal 3D and Aerial and turn layers on. Photos from residents show as observation pins; a green ring means the photo and the model agree. Long-press the map or use the Layers row to add a photo of the water. Sources and credits are linked at the end." },
   ...ALL_STEPS.filter((x) => ["flow", "gpu3d", "closeup"].includes(x.id)),
   { ...ALL_STEPS.find((x) => x.id === "street")!, ...TOUCH_TEXT.street, anchor: "menu" },
-  { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent, see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
+  { id: "menu", title: "More in the menu", body: "Switch between Scenario, Compare and Agent (Compare opens with both maps in view; drag its sheet up to pick runs A and B), see the storm, share a link, save the map image, show coordinates, retake this tour or change the theme." },
   { ...ALL_STEPS.find((x) => x.id === "agent")!, anchor: "tab-agent" },
   { ...ALL_STEPS.find((x) => x.id === "voice")!, anchor: "tab-agent", body: "In Agent, tap the mic in the goal box and speak; pause or tap it again to stop. The words fill the box so you can fix them before you ask. Voice needs the judge key." },
 ];
