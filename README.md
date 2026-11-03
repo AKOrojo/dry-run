@@ -39,7 +39,7 @@ web (React + CesiumJS) --/api--> FastAPI on Cloud Run --> sim engine (local-iner
 | Muse Voice Transcribe | Hands-free responder queries, biased to Lagos place names |
 | Muse Image | Before/after illustrations of interventions (labelled AI illustration) |
 
-Built with Muse Spark Open. Data attributions: `ATTRIBUTION.md`.
+Built with Muse Spark Open and Muse Glimmer 30B. Data attributions: `ATTRIBUTION.md`.
 
 **Live site:** https://dryrun-vcdpde6nnq-uc.a.run.app. Three areas: `lagos-lekki-v3` (Lekki–Ajah, Lagos; the
 default), `nyc-queens-v1` (Queens, New York, Hurricane Ida 2021) and `texas-guadalupe-v0` (Guadalupe River, Hunt to
