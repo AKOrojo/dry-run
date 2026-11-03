@@ -399,6 +399,14 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   leader?: Cesium.Viewer;
 }) {
   const [v, setV] = useState<Cesium.Viewer>();
+  // The globe mounts in the task after the first paint: creating a Cesium viewer (and its first frame) inside the click
+  // that opened Compare kept the page from painting for hundreds of ms on a slow phone.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const f = requestAnimationFrame(() => { t = setTimeout(() => setMounted(true), 0); });
+    return () => { cancelAnimationFrame(f); clearTimeout(t); };
+  }, []);
   // Bumped by "Restart map" on this side only; the camera sync below follows the new viewer (and a restarted leader).
   const [mapGen, setMapGen] = useState(0);
   useEffect(() => {
@@ -423,9 +431,9 @@ export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBa
   }, [leader, v]);
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", background: "var(--ground)" }}>
-      <Globe key={mapGen} aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
+      {mounted && <Globe key={mapGen} aoi={aoi} frames={frames} tS={tS} ionToken={ionToken} buildingsUrl={buildingsUrl} onViewer={setV}
         onRestart={() => setMapGen((g) => g + 1)}
-        buildingDepthsUrl={run.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined} />
+        buildingDepthsUrl={run.building_depths ? `${runsBase.replace(/\/$/, "")}/${run.run_id}/${run.building_depths}` : undefined} />}
     </div>
   );
 }
