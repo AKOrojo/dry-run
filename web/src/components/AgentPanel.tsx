@@ -12,6 +12,7 @@ import { replayHint } from "../lib/replay";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
 import { Stepper, briefPhase, buildSteps, lastBudget, mmss } from "./agent/Steps";
+import { revealIn } from "../lib/reveal";
 import { TextField } from "./controls/TextField";
 import { Button } from "./controls/Button";
 import { VoiceButton } from "./agent/Voice";
@@ -23,6 +24,7 @@ type Mode = "live" | "replay" | "fake";
 
 const SUGGESTIONS = ["Which places flood first?", "Compare new drains with green space in Lekki Phase 1", "Is Admiralty Way passable at the peak?"];
 const MODEL_NAME: Record<string, string> = { meta: "Muse Spark 1.3", openrouter: "Muse Spark Open", modal: "Muse Glimmer 30B" };
+const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const CSS = `@keyframes dr-spin{to{transform:rotate(360deg)}}@keyframes dr-indet{0%{margin-left:-40%}100%{margin-left:100%}}
 .dr-spin{animation:dr-spin 1s linear infinite}.dr-indet{animation:dr-indet 1.4s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.dr-spin,.dr-indet{animation:none}}`;
@@ -117,6 +119,12 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   const steps = buildSteps(events, ts);
   const budget = lastBudget(events);
   const writing = busy && !err ? briefPhase(events, ts) : undefined;
+  // The writing row and the Failure card can land below the fold (a phone sheet at half): bring each into view once
+  // when it appears, not on timer ticks.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const reveal = (sel: string, card = false) => requestAnimationFrame(() => revealIn(rootRef.current, sel, card, reducedMotion()));
+  useEffect(() => { if (writing) reveal("[data-agent-writing]"); }, [writing?.t0]);
+  useEffect(() => { if (err) reveal("[data-agent-failure]", true); }, [err]);
   const modelName = brief?.model ?? introMatch?.[1] ?? MODEL_NAME[provider] ?? provider;
   const started = events.length > 0 || busy || !!err;
 
@@ -200,7 +208,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
 
   const rateLimited = !!err && wait > 0;
   return (
-    <div style={stack}>
+    <div ref={rootRef} style={stack}>
       <style>{CSS}</style>
       {replayed && (
         <Card title="Replay" right={<span style={{ marginLeft: "auto" }}><Badge>Replay</Badge></span>}>
@@ -228,7 +236,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
       )}
       {brief && <><BriefCard brief={brief} />{briefExtra}<ClaimsCard brief={brief} /></>}
       {err && (
-        <Card title="Live model" right={<span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--hazard)" }}>
+        <Card title="Live model" right={<span data-agent-failure style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--hazard)" }}>
           <Dot color="var(--hazard)" />{wait > 0 || (lock && err.code === "rate_limited") ? "Rate-limited" : "Unavailable"}</span>}>
           <Notice message={lock && err.code === "rate_limited" ? lockoutText(lock.scope, lock.leftS) : err.message} wait={wait} total={waitTotal}
             detail={wait > 0 ? <>Retrying in <span style={FIG}>{wait}</span> s.</> : undefined} note="Your steps so far are kept.">
