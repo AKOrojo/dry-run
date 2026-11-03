@@ -622,10 +622,9 @@ How the pictures are made, and why:
 
 Everything in this repository was built for the hackathon and the git history is the record —
 real timestamps, nothing backdated, no pre-existing codebase or product reused. The first commit
-is the team's scaffold (data contracts, placeholder backends, deploy scripts), written from our
-own feasibility plan on Oct 27 2026 with AI assistance, reviewed by the team, and committed the
-next morning. Everything after it is day-by-day work by the four of us, with AI assistance noted
-in the commit body where it did the bulk of the writing.
+is the scaffold (data contracts, placeholder backends, deploy scripts), written from our own
+feasibility plan on Oct 27 2026 with AI assistance and committed the next morning. Everything
+after it is day-by-day work by one developer working with AI coding agents.
 
 The map interaction and layout borrow ideas from FireTrace (interaction and layout ideas only; no code,
 assets or data from it are used).
