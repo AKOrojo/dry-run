@@ -30,18 +30,20 @@ const CSS = `@keyframes dr-spin{to{transform:rotate(360deg)}}@keyframes dr-indet
 const inputBox = { background: "var(--ground)", border: "1px solid var(--control-edge)", borderRadius: "var(--radius-md)",
   boxShadow: "inset 0 1px 2px var(--elev-drop-soft)", color: "var(--ink)", font: "inherit" } as const;
 
-export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defaultProvider, aoiId, judgeKeyRequired = false, glimmerAvailable = false }:
+export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defaultProvider, aoiId, judgeKeyRequired = false, glimmerAvailable = false, liveProvider }:
   { onRun: (runId: string) => void; onAoi?: (aoiId: string) => void; onReplay?: (replayed: boolean) => void;
     /** The session's events so far (Agent mode's runs card, dock charts and log read them). */
     onEvents?: (events: AgentEvent[]) => void;
     /** Shown under the brief (the per-run bars for the studied place). */
     briefExtra?: ReactNode;
     defaultProvider: string; aoiId?: string; judgeKeyRequired?: boolean;
-    /** The server can reach Muse Glimmer 30B on our Modal app: Live offers it beside the default live model. */ glimmerAvailable?: boolean }) {
+    /** The server can reach Muse Glimmer 30B on our Modal app: Live offers it beside the default live model. */ glimmerAvailable?: boolean;
+    /** The paid provider Live runs on by default (/api/config.live_provider), when the default provider is Replay or Fake. */
+    liveProvider?: string | null }) {
   const [q, setQ] = useState("");
   const [provider, setProvider] = useState(defaultProvider);
   useEffect(() => setProvider(defaultProvider), [defaultProvider]);
-  const baseLive = defaultProvider === "fake" || defaultProvider === "replay" ? "meta" : defaultProvider;
+  const baseLive = defaultProvider === "fake" || defaultProvider === "replay" ? (liveProvider ?? "meta") : defaultProvider;
   // The live model last picked (the default one, or Muse Glimmer 30B), kept while Replay or Fake is on.
   const [lastLive, setLastLive] = useState(baseLive);
   useEffect(() => setLastLive(baseLive), [baseLive]);

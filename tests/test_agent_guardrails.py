@@ -570,3 +570,19 @@ def test_unknown_spatial_place_fails_before_spending_budget():
     with pytest.raises(ValueError):
         tools.dispatch("run_simulation", args, session)
     assert session.runs == 0
+
+
+@pytest.mark.parametrize("env,expected", [
+    ({}, None),
+    ({"OPENROUTER_API_KEY": "k"}, "openrouter"),
+    ({"META_API_KEY": "unset", "OPENROUTER_API_KEY": "k"}, "openrouter"),  # the bootstrap placeholder is no key
+    ({"META_API_KEY": "k", "OPENROUTER_API_KEY": "k"}, "meta"),
+    ({"META_API_KEY": "k", "DRYRUN_LIVE_PROVIDER": "openrouter"}, "openrouter"),
+    ({"DRYRUN_AGENT_PROVIDER": "baseten"}, "baseten"),
+])
+def test_config_names_the_live_provider_a_judge_gets(client, monkeypatch, env, expected):
+    for k in ("META_API_KEY", "OPENROUTER_API_KEY", "BASETEN_API_KEY", "DRYRUN_LIVE_PROVIDER", "DRYRUN_AGENT_PROVIDER"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    assert client.get("/api/config").json()["live_provider"] == expected
