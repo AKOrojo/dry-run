@@ -32,6 +32,8 @@ ENV_VARS+=",DRYRUN_PUBLIC_RUNS_BASE=https://storage.googleapis.com/${RUNS_BUCKET
 ENV_VARS+=",DRYRUN_SIM_BACKEND=${SIM_BACKEND:-fake},DRYRUN_AGENT_PROVIDER=${AGENT_PROVIDER:-fake},DRYRUN_WARM_ON_START=1"
 ENV_VARS+=",DRYRUN_DEFAULT_AOI=${DEFAULT_AOI:-fixture-synthetic},DRYRUN_AGENT_PER_HOUR=${AGENT_PER_HOUR:-12}"
 ENV_VARS+=",DRYRUN_AGENT_PER_DAY=${AGENT_PER_DAY:-300},DRYRUN_BUILDINGS_URL=${BUILDINGS_URL:-}"
+# The paid model a judge's Live runs use (owner 2026-11-02: Meta's Muse Spark 1.3; OpenRouter stays the sovereign option).
+ENV_VARS+=",DRYRUN_LIVE_PROVIDER=${LIVE_PROVIDER:-meta}"
 # Judges-only Muse Glimmer on Modal (Eng C). Not a secret; without it the UI hides the choice.
 ENV_VARS+=",MODAL_BASE_URL=${MODAL_BASE_URL:-https://bensmithofficial01--dryrun-glimmer-serve.us-east.modal.run/v1}"
 if [[ "${SIM_BACKEND:-fake}" == "fake" || "${AGENT_PROVIDER:-fake}" == "fake" ]]; then

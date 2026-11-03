@@ -38,6 +38,7 @@ jobs:
       REGION: ${{ vars.GCP_REGION }}
       SIM_BACKEND: ${{ vars.SIM_BACKEND }}
       AGENT_PROVIDER: ${{ vars.AGENT_PROVIDER }}
+      LIVE_PROVIDER: ${{ vars.LIVE_PROVIDER }}
       DEFAULT_AOI: ${{ vars.DEFAULT_AOI }}
       BUILDINGS_URL: ${{ vars.BUILDINGS_URL }}
       DEMO: ${{ vars.DEMO }}  # "1" keeps one instance warm (min-instances 1)
