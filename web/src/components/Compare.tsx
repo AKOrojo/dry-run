@@ -394,11 +394,34 @@ export function WhatChanges({ changes, active }: { changes: Change[]; active: nu
 }
 
 /** Side by side: the right-hand map (run B), following the main map's camera every frame. */
-export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBase, leader }: {
+export function SideGlobe({ aoi, run, frames, tS, ionToken, buildingsUrl, runsBase, leader, plan = false, onBuilding, onViewer }: {
   aoi: AOIManifest; run: RunManifest; frames?: { t_s: number; url: string }[]; tS: number; ionToken: string; buildingsUrl?: string; runsBase: string;
   leader?: Cesium.Viewer;
+  /** Plan view: a click on a house selects it, as on the main map (the same id is the same building in both runs). */
+  plan?: boolean; onBuilding?: (id: string, shift: boolean) => void; onViewer?: (v?: Cesium.Viewer) => void;
 }) {
   const [v, setV] = useState<Cesium.Viewer>();
+  useEffect(() => { onViewer?.(v); return () => onViewer?.(undefined); }, [v]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const onBuildingRef = useRef(onBuilding);
+  onBuildingRef.current = onBuilding;
+  useEffect(() => {
+    if (!v || !plan) return;
+    const c = v.scene.canvas;
+    let down: { x: number; y: number } | null = null;
+    const press = (e: globalThis.PointerEvent) => { down = e.button === 0 ? { x: e.clientX, y: e.clientY } : null; };
+    const release = (e: globalThis.PointerEvent) => {
+      if (e.button !== 0 || !down || v.isDestroyed()) return;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4;
+      down = null;
+      if (moved) return;
+      const r = c.getBoundingClientRect();
+      const hit = v.scene.pick(new Cesium.Cartesian2(e.clientX - r.left, e.clientY - r.top));
+      if (typeof hit?.id === "string") onBuildingRef.current?.(hit.id, e.shiftKey);
+    };
+    c.addEventListener("pointerdown", press);
+    c.addEventListener("pointerup", release);
+    return () => { c.removeEventListener("pointerdown", press); c.removeEventListener("pointerup", release); };
+  }, [v, plan]);
   // The globe mounts in the task after the first paint: creating a Cesium viewer (and its first frame) inside the click
   // that opened Compare kept the page from painting for hundreds of ms on a slow phone.
   const [mounted, setMounted] = useState(false);
