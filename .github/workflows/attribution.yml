@@ -1,0 +1,27 @@
+name: attribution
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]   # edited: a PR body changed after opening is checked too
+  push:
+    branches: [main]
+jobs:
+  attribution:
+    # Owner rule: no mention of the AI vendor or its coding agent anywhere in the public record: PR title and body,
+    # commit messages and authors, or tracked files. The words are assembled at run time so this file passes itself.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: no vendor attribution
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pat="$(printf 'cl%sde|anth%spic' au ro)"; bad=0
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -qiE "$pat"; then echo "::error::PR title or body mentions it"; bad=1; fi
+          range="$HEAD"; git cat-file -e "$BASE^{commit}" 2>/dev/null && range="$BASE..$HEAD"
+          if git log --format='%h %an %ae %cn %ce%n%B' "$range" | grep -iE "$pat"; then echo "::error::a commit message or author mentions it"; bad=1; fi
+          if git grep -ilE "$pat" "$HEAD" -- .; then echo "::error::tracked files mention it"; bad=1; fi
+          exit $bad
