@@ -316,7 +316,12 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       layer.current = undefined; viewer.current = undefined; onViewer?.(undefined);
       const scene = v.scene;
       const { frameState: frame, context } = scene as unknown as { frameState: Record<string, unknown>; context: object };  // 1.146 layout
+      // Cesium's destroy leaves the WebGL context alive until the canvas is collected. Compare mounts a globe per visit,
+      // and at Chrome's limit (16) the oldest context, the main map's, was lost: released here instead.
+      const gl = (context as { _gl?: WebGLRenderingContext })._gl;
+      const loseGl = gl?.isContextLost() ? null : gl?.getExtension("WEBGL_lose_context");
       if (!v.isDestroyed()) v.destroy();
+      loseGl?.loseContext();
       releaseDestroyed(scene); releaseDestroyed(v);
       // Cesium module-level scratch objects keep the last frame state (model draw commands) and the last glTF texture
       // job (its WebGL context). Emptied, they no longer hold the photoreal tile tree or this context's shader cache.
