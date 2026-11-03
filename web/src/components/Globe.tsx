@@ -287,7 +287,17 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     // Rendering stops on any exception in the render loop: a scene render error or a throw in a pre/postRender listener,
     // which Scene.render does not catch. Both reach the widget's showErrorPanel; ours logs the stack (in production too, so
     // the next one says where it came from) and shows "The map stopped drawing" instead of Cesium's panel.
+    let resumes = 0;
     v.cesiumWidget.showErrorPanel = (_title: string, _message: string | undefined, err: unknown) => {
+      // A failed request (a sky-box face, under a network burst) is thrown once from update() and then dropped: the map
+      // draws on without it. A few per globe; past that, the panel.
+      if (err instanceof Cesium.RequestErrorEvent && resumes < 3 && !v.isDestroyed()) {
+        resumes++;
+        console.warn(`Cesium render skipped a failed request (area ${aoi.aoi_id}): ${errorText(err)}`);
+        v.useDefaultRenderLoop = true;
+        v.scene.requestRender();
+        return;
+      }
       console.error(`Cesium render error (area ${aoi.aoi_id}, basemap ${layerRef.current.basemap}): ${errorText(err)}`);
       if (import.meta.env.DEV) { const w = window as unknown as { __renderErrors?: number }; w.__renderErrors = (w.__renderErrors ?? 0) + 1; }
       setStopped("error");
