@@ -26,6 +26,41 @@ let googleQueue: Promise<unknown> = Promise.resolve();
 const cssColor = perTheme((name) => Cesium.Color.fromCssColorString(getComputedStyle(document.documentElement).getPropertyValue(name).trim()));
 const buildingColor = (depth: number) => cssColor(buildingToken(depth));
 const footprints = areaCache<string, Promise<unknown>>();
+type Footprint = { id: string; hierarchy: Cesium.PolygonHierarchy; height: number; centroid: Cesium.Cartographic };
+// Parsed once per download, and the ground under each sampled once: Compare's second globe builds from the same lists.
+const parsedFootprints = areaCache<string, Promise<Footprint[]>>();
+const footprintGround = areaCache<string, Promise<number[]>>();
+// Building work runs in slices of about SLICE_MS between frames, and in primitives of CHUNK houses: one primitive of a
+// whole city packs, uploads and recolours in single tasks of hundreds of ms (Lagos: 69k houses).
+const SLICE_MS = 8, CHUNK = 3000;
+const yieldToMain = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+async function parseFootprints(data: unknown): Promise<Footprint[]> {
+  const collection = data as { type?: string; features?: unknown[] };
+  if (collection?.type !== "FeatureCollection" || !Array.isArray(collection.features)) throw new Error("Invalid footprints");
+  const parsed: Footprint[] = [];
+  const ids = new Set<string>();
+  let slice = performance.now();
+  for (const item of collection.features) {
+    if (performance.now() - slice > SLICE_MS) { await yieldToMain(); slice = performance.now(); }
+    try {
+      const feature = item as { properties?: { id?: unknown; height_m?: unknown }; geometry?: { type?: string; coordinates?: unknown[] } };
+      const id = feature.properties?.id;
+      const height = feature.properties?.height_m;
+      if ((typeof id !== "string" && typeof id !== "number") || ids.has(String(id)) ||
+          typeof height !== "number" || !Number.isFinite(height) || feature.geometry?.type !== "Polygon") continue;
+      const ring = feature.geometry.coordinates?.[0];
+      if (!Array.isArray(ring) || ring.length < 4) continue;
+      if (!ring.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90)) continue;
+      const points = ring.map((p) => [p[0], p[1]]);
+      if (new Set(points.map((p) => p.join(","))).size < 3) continue;
+      parsed.push({ id: String(id), height, hierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(points.flat())),
+        centroid: Cesium.Cartographic.fromDegrees(points.reduce((a, p) => a + p[0], 0) / points.length, points.reduce((a, p) => a + p[1], 0) / points.length) });
+      ids.add(String(id));
+    } catch { /* Skip malformed footprints. */ }
+  }
+  return parsed;
+}
 
 async function fetchJson(url: string): Promise<unknown> {
   const response = await fetch(url);
@@ -125,12 +160,11 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   const photorealBuildings = useRef(false);
   /** Metres to raise our buildings so they stand on the photoreal mesh instead of under it (0 on aerial). */
   const meshLift = useRef(0);
-  const applyLift = () => {
-    const p = buildings.current?.primitive;
-    if (!p || p.isDestroyed()) return;
+  const applyLift = (only?: Chunk) => {
     const [cw, cs, ce, cn] = aoi.grid.bounds_wgs84;
     const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(Cesium.Cartesian3.fromDegrees((cw + ce) / 2, (cs + cn) / 2), new Cesium.Cartesian3());
-    p.modelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.multiplyByScalar(up, meshLift.current, up));
+    const lift = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.multiplyByScalar(up, meshLift.current, up));
+    for (const c of only ? [only] : buildings.current) if (!c.primitive.isDestroyed()) c.primitive.modelMatrix = lift;
     requestRenderSoon();
   };
   photorealBuildings.current = !!aoi.photoreal_buildings;
@@ -141,15 +175,19 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   const layerState = useLayers();
   const layerRef = useRef(layerState);
   layerRef.current = layerState;
-  const buildings = useRef<{ primitive: Cesium.Primitive; ids: string[] }>();
+  type Chunk = { primitive: Cesium.Primitive; ids: string[] };
+  const buildings = useRef<Chunk[]>([]);
   const depths = useRef(new Map<string, number>());
   const theme = useTheme();
   const [buildingStatus, setBuildingStatus] = useState("unavailable");
   const [depthFailed, setDepthFailed] = useState(false);
 
   const recolour = () => {
-    const current = buildings.current;
-    if (!current || current.primitive.isDestroyed() || !current.primitive.ready) return;
+    for (const c of buildings.current) paint(c);
+    requestRenderSoon();
+  };
+  const paint = (current: Chunk) => {
+    if (current.primitive.isDestroyed() || !current.primitive.ready) return;
     // Over Google's mesh, our boxes only make sense where the mesh has real buildings (only flooded ones are drawn
     // there); where it is 2.5D (Lagos, Texas) its blobs swallow them, so the Aerial basemap carries our 3D houses.
     current.primitive.show = layerRef.current.buildings.on && (layerRef.current.basemap !== "photoreal" || photorealBuildings.current);
@@ -166,7 +204,6 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
       const attributes = current.primitive.getGeometryInstanceAttributes(id);
       if (attributes) attributes.color = Cesium.ColorGeometryInstanceAttribute.toValue(color);
     }
-    requestRenderSoon();
   };
 
   // Building colours are tokens baked into instance attributes: a theme switch repaints them.
@@ -289,80 +326,87 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     setBuildingStatus(buildingsUrl ? "loading…" : "unavailable");
     if (!v || !buildingsUrl) return;
     let cancelled = false;
-    let primitive: Cesium.Primitive | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const chunks: Chunk[] = [];
+    const timers = new Set<ReturnType<typeof setTimeout>>();
     let pending = footprints.get(buildingsUrl);
     if (!pending) {
       pending = fetchJson(buildingsUrl);
       pending.catch(() => footprints.delete(buildingsUrl));  // let a later mount retry a failed download
       footprints.set(buildingsUrl, pending);
     }
-    pending.then(async (data) => {
-      if (cancelled || v.isDestroyed()) return;
-      const collection = data as { type?: string; features?: unknown[] };
-      if (collection?.type !== "FeatureCollection" || !Array.isArray(collection.features)) throw new Error("Invalid footprints");
-      const parsed: { id: string; points: number[][]; height: number }[] = [];
-      const ids = new Set<string>();
-      for (const item of collection.features) {
-        try {
-          const feature = item as { properties?: { id?: unknown; height_m?: unknown }; geometry?: { type?: string; coordinates?: unknown[] } };
-          const id = feature.properties?.id;
-          const height = feature.properties?.height_m;
-          if ((typeof id !== "string" && typeof id !== "number") || ids.has(String(id)) ||
-              typeof height !== "number" || !Number.isFinite(height) || feature.geometry?.type !== "Polygon") continue;
-          const ring = feature.geometry.coordinates?.[0];
-          if (!Array.isArray(ring) || ring.length < 4) continue;
-          if (!ring.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90)) continue;
-          const points = ring.map((p) => [p[0], p[1]]);
-          if (new Set(points.map((p) => p.join(","))).size < 3) continue;
-          parsed.push({ id: String(id), points, height });
-          ids.add(String(id));
-        } catch { /* Skip malformed footprints. */ }
-      }
+    let parsing = parsedFootprints.get(buildingsUrl);
+    if (!parsing) {
+      parsing = pending.then(parseFootprints);
+      parsing.catch(() => parsedFootprints.delete(buildingsUrl));
+      parsedFootprints.set(buildingsUrl, parsing);
+    }
+    const gone = () => cancelled || v.isDestroyed();
+    parsing.then(async (parsed) => {
+      if (gone()) return;
       // Ground = the drawn terrain at each centroid, sampled in one batch (0 on the ellipsoid or on failure).
-      const ground = parsed.map(() => 0);
+      let ground = parsed.map(() => 0);
       try {
         await terrainReady(terrainRef.current);
-        if (cancelled || v.isDestroyed()) return;
+        if (gone()) return;
         if (!(v.terrainProvider instanceof Cesium.EllipsoidTerrainProvider)) {
-          const cartos = parsed.map((b) => Cesium.Cartographic.fromDegrees(
-            b.points.reduce((a, p) => a + p[0], 0) / b.points.length, b.points.reduce((a, p) => a + p[1], 0) / b.points.length));
-          // Level 12 (~30 m posts) matches the model grid, exists everywhere (World Terrain has no level 14 over
-          // Lagos), and needs far fewer tiles than most-detailed.
-          const sampled = await Cesium.sampleTerrain(v.terrainProvider, 12, cartos);
-          sampled.forEach((c, i) => { if (Number.isFinite(c.height)) ground[i] = c.height; });
+          let sampling = footprintGround.get(buildingsUrl);
+          if (!sampling) {
+            // Level 12 (~30 m posts) matches the model grid, exists everywhere (World Terrain has no level 14 over
+            // Lagos), and needs far fewer tiles than most-detailed.
+            sampling = Cesium.sampleTerrain(v.terrainProvider, 12, parsed.map((b) => b.centroid.clone()))
+              .then((sampled) => sampled.map((c) => (Number.isFinite(c.height) ? c.height : 0)));
+            sampling.catch(() => footprintGround.delete(buildingsUrl));
+            footprintGround.set(buildingsUrl, sampling);
+          }
+          ground = await sampling;
         }
       } catch { /* Keep ground at 0. */ }
-      if (cancelled || v.isDestroyed()) return;
-      const instances = parsed.map((b, i) => new Cesium.GeometryInstance({
-        geometry: new Cesium.PolygonGeometry({
-          polygonHierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(b.points.flat())),
-          height: ground[i], extrudedHeight: ground[i] + Math.max(3, b.height),
-          vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
-        }),
-        id: b.id,
-        attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(buildingColor(0)) },
-      }));
-      if (!instances.length) { setBuildingStatus(ids.size.toLocaleString()); return; }
-      primitive = v.scene.primitives.add(new Cesium.Primitive({
-        geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false }),
-        shadows: Cesium.ShadowMode.ENABLED, asynchronous: true,
-      }));
-      buildings.current = { primitive: primitive!, ids: [...ids] };
-      const ready = () => {
-        if (cancelled || v.isDestroyed() || !primitive || primitive.isDestroyed()) return;
-        if (!primitive.ready) { timer = setTimeout(ready, 50); return; }
-        recolour();
-        applyLift();
-        setBuildingStatus(ids.size.toLocaleString());
+      if (gone()) return;
+      if (!parsed.length) { setBuildingStatus("0"); return; }
+      let ready = 0;
+      const add = (instances: Cesium.GeometryInstance[], ids: string[]) => {
+        const primitive = v.scene.primitives.add(new Cesium.Primitive({
+          geometryInstances: instances, appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false }),
+          shadows: Cesium.ShadowMode.ENABLED, asynchronous: true,
+        })) as Cesium.Primitive;
+        const chunk = { primitive, ids };
+        chunks.push(chunk);
+        buildings.current = [...buildings.current, chunk];
+        const poll = () => {
+          if (gone() || primitive.isDestroyed()) return;
+          if (!primitive.ready) { const t = setTimeout(() => { timers.delete(t); poll(); }, 50); timers.add(t); return; }
+          paint(chunk);
+          applyLift(chunk);
+          if (++ready * CHUNK >= parsed.length) setBuildingStatus(parsed.length.toLocaleString());
+        };
+        poll();
       };
-      ready();
-    }).catch(() => { if (!cancelled && !v.isDestroyed()) setBuildingStatus("unavailable"); });
+      let instances: Cesium.GeometryInstance[] = [], ids: string[] = [];
+      let slice = performance.now();
+      for (let i = 0; i < parsed.length; i++) {
+        const b = parsed[i];
+        instances.push(new Cesium.GeometryInstance({
+          geometry: new Cesium.PolygonGeometry({
+            polygonHierarchy: b.hierarchy, height: ground[i], extrudedHeight: ground[i] + Math.max(3, b.height),
+            vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+          }),
+          id: b.id,
+          attributes: { color: Cesium.ColorGeometryInstanceAttribute.fromColor(buildingColor(0)) },
+        }));
+        ids.push(b.id);
+        if (instances.length === CHUNK || i === parsed.length - 1) { add(instances, ids); instances = []; ids = []; }
+        if (performance.now() - slice > SLICE_MS) {
+          await yieldToMain();
+          if (gone()) return;
+          slice = performance.now();
+        }
+      }
+    }).catch(() => { if (!gone()) setBuildingStatus("unavailable"); });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
-      if (buildings.current?.primitive === primitive) buildings.current = undefined;
-      if (primitive && !v.isDestroyed()) v.scene.primitives.remove(primitive);
+      for (const t of timers) clearTimeout(t);
+      buildings.current = buildings.current.filter((c) => !chunks.includes(c));
+      if (!v.isDestroyed()) for (const c of chunks) v.scene.primitives.remove(c.primitive);
     };
   }, [buildingsUrl, aoi.aoi_id, token]);
 
@@ -625,12 +669,12 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
         const probes: Cesium.Cartographic[] = [];
         for (let i = 1; i < 7; i++) for (let j = 1; j < 7; j++) probes.push(Cesium.Cartographic.fromDegrees(w + ((e - w) * i) / 7, s + ((n - s) * j) / 7));
         try {
-          const own = buildings.current?.primitive;
+          const own = buildings.current.map((c) => c.primitive);
           // Probe Google's mesh alone: the transparent globe is still pickable and would answer with its own height.
           const terrain = probes.map((c) => g.getHeight(c));
           g.show = false;
           let mesh: (Cesium.Cartographic | undefined)[];
-          try { mesh = await v.scene.sampleHeightMostDetailed(probes.map((c) => c.clone()), own ? [own] : []); } finally { if (!v.isDestroyed()) g.show = true; }
+          try { mesh = await v.scene.sampleHeightMostDetailed(probes.map((c) => c.clone()), own); } finally { if (!v.isDestroyed()) g.show = true; }
           if (cancelled || v.isDestroyed()) return;
           const diffs = mesh.map((c, k) => (c && Number.isFinite(c.height) ? c.height - (terrain[k] ?? NaN) : NaN)).filter(Number.isFinite).sort((a, b) => a - b);
           meshLift.current = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0;
