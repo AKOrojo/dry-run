@@ -494,6 +494,7 @@ export default function App() {
 
   // ---- Plan view: click a building (shift: a second one to compare); ?building=<id> selects one on load.
   const [plan, setPlan] = useState(false);
+  const [sideViewer, setSideViewer] = useState<Cesium.Viewer>();
   const [pick, setPick] = useState<{ id?: string; id2?: string; fly?: boolean }>(() => {
     try { const id = new URLSearchParams(window.location.search).get("building") ?? undefined; return { id, fly: !!id }; } catch { return {}; }
   });
@@ -589,13 +590,15 @@ export default function App() {
           {side && aoi && pair && (
             <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", right: 0 }}>
               <ErrorBoundary name="second map" resetKey={aoi?.aoi_id} style={{ position: "absolute", inset: 0 }}>
-              <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer} />
+              <SideGlobe aoi={aoi} run={pair.b} frames={framesOf(pair.b)} tS={t_s} ionToken={ionToken} buildingsUrl={aoiBuildingsUrl} runsBase={runsBase} leader={mainViewer}
+                plan={plan} onBuilding={onBuilding} onViewer={setSideViewer} />
               </ErrorBoundary>
               {/* Phone: the map's buttons, once, here (MapStage portals them in; the cameras are synced). */}
               <div ref={setSideHost} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 2 }} />
             </div>
           )}
           {sel && !side && <BuildingOnMap viewer={mainViewer} sel={sel} second={sel2} />}
+          {sel && side && <><BuildingOnMap outline viewer={mainViewer} sel={sel} second={sel2} /><BuildingOnMap outline viewer={sideViewer} sel={sel} second={sel2} /></>}
           {agentView && <AgentMapOverlay runs={agentList} shown={run?.run_id} picked={agentShown?.id === run?.run_id && !!agentShown?.picked} onShow={showAgentRun} />}
           {pair && <CompareMapOverlay phone={bp === "phone"} a={pair.a} b={pair.b} names={names} origin={origin} view={cmpView} onView={setCmpView} split={split} onSplit={setSplit} />}
           <div className="dr-badges">

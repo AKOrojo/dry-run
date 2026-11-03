@@ -225,8 +225,9 @@ export function Graticule({ viewer }: { viewer?: Cesium.Viewer }) {
   );
 }
 
-/** Danfo outline round the selected footprint(s) and the popup next to the primary one. */
-export function BuildingOnMap({ viewer, sel, second }: { viewer?: Cesium.Viewer; sel: Selected; second?: Selected | null }) {
+/** Danfo outline round the selected footprint(s) and the popup next to the primary one (`outline`: no popup, as in
+ *  Compare's Side by side, where both panes outline it and the card shows the rest). */
+export function BuildingOnMap({ viewer, sel, second, outline = false }: { viewer?: Cesium.Viewer; sel: Selected; second?: Selected | null; outline?: boolean }) {
   useFrame(viewer);
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -238,7 +239,7 @@ export function BuildingOnMap({ viewer, sel, second }: { viewer?: Cesium.Viewer;
     const ents = [add(sel.b, "--danfo", false), ...(second ? [add(second.b, "--danfo", true)] : [])];
     return () => { if (!viewer.isDestroyed()) ents.forEach((x) => viewer.entities.remove(x)); };
   }, [viewer, sel.b.id, second?.b.id]);
-  if (!viewer || viewer.isDestroyed()) return null;
+  if (outline || !viewer || viewer.isDestroyed()) return null;
   const p = screen(viewer, sel.b.lon, sel.b.lat);
   if (!p) return null;
   const cut = sel.street?.first_impassable_s;
