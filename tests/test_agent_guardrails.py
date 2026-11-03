@@ -696,3 +696,13 @@ def test_config_names_the_live_provider_a_judge_gets(client, monkeypatch, env, e
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     assert client.get("/api/config").json()["live_provider"] == expected
+
+
+def test_budget_reports_the_limit_that_applies(monkeypatch):
+    # A waking provider's footer counts against the request cap from the request's start; others against the session.
+    prov, events, now = waking_run(monkeypatch, [400, 30, 30])
+    budgets = [e.data["budget"] for e in events if e.kind == "tool_result"]
+    assert budgets and all(b["deadline_s"] == loop.REQUEST_BUDGET_S for b in budgets)
+    assert budgets[0]["elapsed_s"] >= 400
+    events = run_provider(monkeypatch, ScriptedProvider(stop_after=1))
+    assert all(e.data["budget"]["deadline_s"] == loop.SESSION_DEADLINE_S for e in events if e.kind == "tool_result")

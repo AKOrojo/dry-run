@@ -38,8 +38,11 @@ export function briefPhase(events: AgentEvent[], ts: number[]): Writing | undefi
   return i < 0 ? undefined : { model: String(events[i].data.model ?? ""), t0: ts[i] };
 }
 
-export const lastBudget = (events: AgentEvent[]): Budget | undefined =>
-  [...events].reverse().find((e) => e.kind === "tool_result" && e.data.budget)?.data.budget;
+/** The newest budget; elapsed never reads past the limit (a tool can finish after it). */
+export function lastBudget(events: AgentEvent[]): Budget | undefined {
+  const b: Budget | undefined = [...events].reverse().find((e) => e.kind === "tool_result" && e.data.budget)?.data.budget;
+  return b && { ...b, elapsed_s: Math.min(b.elapsed_s, b.deadline_s) };
+}
 
 export const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const dur = (ms: number) => ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : mmss(ms / 1000);
@@ -93,7 +96,7 @@ export function Stepper({ steps, running, thought, now, onRun, writing }:
         );
       })}
       {writing && (
-        <div style={{ display: "flex", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--hairline)" }}>
+        <div data-agent-writing style={{ display: "flex", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--hairline)" }}>
           <span style={{ width: 22, height: 22, flex: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%",
             border: "1.5px solid var(--danfo)", color: "var(--danfo-text)" }}>
             <CircleNotch size={14} weight="bold" className="dr-spin" aria-label="Running" />

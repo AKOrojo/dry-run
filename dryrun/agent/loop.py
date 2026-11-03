@@ -181,7 +181,8 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
                 except Exception as exc:  # noqa: BLE001 - feed errors back so the model can recover
                     result = {"error": repr(exc)}
             budget = {"runs_used": session.runs, "runs_max": tools.MAX_RUNS_PER_SESSION,
-                      "elapsed_s": round(time.time() - start, 1), "deadline_s": SESSION_DEADLINE_S}
+                      # The limit that applies: a waking provider's request cap counts from the request's start.
+                      "elapsed_s": round(time.time() - start, 1), "deadline_s": REQUEST_BUDGET_S if hard else SESSION_DEADLINE_S}
             yield AgentEvent(kind="tool_result", data={"name": c.name, "result": result, "budget": budget})
             if c.name == "run_simulation" and result.get("status") == "done":
                 yield AgentEvent(kind="run_ready", data={"run_id": result["run_id"]})
