@@ -5,7 +5,7 @@
  * and run json-schema-to-typescript to regenerate this file.
  */
 
-export type Kind = "thought" | "tool_call" | "tool_result" | "run_ready" | "brief" | "error" | "done";
+export type Kind = "thought" | "tool_call" | "tool_result" | "phase" | "run_ready" | "brief" | "error" | "done";
 
 /**
  * Streamed to the UI over SSE from POST /agent (one JSON per event).

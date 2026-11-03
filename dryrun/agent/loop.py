@@ -25,6 +25,10 @@ MAX_CALLS_PER_TURN = 6
 MAX_TOOL_CALLS = 24
 BRIEF_MAX_TOKENS = 12000
 SESSION_DEADLINE_S = 240  # well under the 900 s Cloud Run request timeout
+# A provider that scales to zero spends minutes starting before the 240 s begin, so its whole request gets a hard cap
+# under Cloud Run's 900 s timeout, and the brief must start with at least BRIEF_MIN_S of it left.
+REQUEST_BUDGET_S = float(os.getenv("DRYRUN_AGENT_REQUEST_BUDGET_S", "840"))
+BRIEF_MIN_S = 60
 # What the UI calls a provider's model, where its id would say less.
 MODEL_LABEL = {"modal": "Muse Glimmer 30B"}
 
@@ -105,6 +109,14 @@ def _error_event(stage: str, exc: BaseException) -> AgentEvent:
     return AgentEvent(kind="error", data={"stage": stage, **info, "error": info["message"]})
 
 
+def _out_of_time(label: str) -> list[AgentEvent]:
+    msg = (f"{label} ran out of time before it could finish the brief. Try again; a second try is usually faster "
+           "because the model is already running.")
+    return [AgentEvent(kind="error", data={"stage": "brief", "code": "llm_timeout", "retryable": True,
+                                           "message": msg, "error": msg}),
+            AgentEvent(kind="done", data={})]
+
+
 def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -> Iterator[AgentEvent]:
     try:
         p = get_provider(provider_name)
@@ -117,18 +129,24 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
     start = time.time()
     deadline = start + SESSION_DEADLINE_S
     wakes = getattr(p, "wakes", False)
+    label = MODEL_LABEL.get(getattr(p, "name", ""), getattr(p, "model", "the model"))
+    hard = start + REQUEST_BUDGET_S if wakes else None
+
+    def capped() -> dict:  # each call of a waking provider ends before the request's hard cap
+        return {"timeout": max(1.0, min(p.timeout, hard - time.time()))} if hard else {}
+
     if wakes:
-        yield AgentEvent(kind="thought", data={"text": f"{MODEL_LABEL.get(p.name, p.model)} runs on our own GPU, which sleeps "
+        yield AgentEvent(kind="thought", data={"text": f"{label} runs on our own GPU, which sleeps "
                                                "when idle. The first answer can take a few minutes while it starts."})
     dispatched = 0
     msgs: list[dict] = [{"role": "system", "content": SYSTEM.format(aoi_id=aoi_id)},
                         {"role": "user", "content": question}]
     for step in range(MAX_STEPS):
-        if time.time() > deadline:
+        if time.time() > deadline or (hard and hard - time.time() < 2 * BRIEF_MIN_S):
             yield AgentEvent(kind="thought", data={"text": "Time budget reached; writing the brief."})
             break
         try:
-            turn = p.chat(msgs, tools=tools.TOOL_SPECS)
+            turn = p.chat(msgs, tools=tools.TOOL_SPECS, **capped())
         except Exception as exc:  # noqa: BLE001 - provider HTTP errors/timeouts -> UI error event
             yield _error_event("chat", exc)
             yield AgentEvent(kind="done", data={})
@@ -173,16 +191,21 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
             yield AgentEvent(kind="thought", data={"text": f"{text}; writing the brief."})
             break
 
+    if hard and hard - time.time() < BRIEF_MIN_S:
+        yield from _out_of_time(label)
+        return
+    yield AgentEvent(kind="phase", data={"phase": "brief", "model": label})
     msgs.append({"role": "user", "content": BRIEF_INSTRUCTIONS})
     schema = {"type": "json_schema", "json_schema": {"name": "brief", "schema": BRIEF_SCHEMA}}
     brief, err = None, None
     last_exc: Exception | None = None
     for attempt in range(2):  # one retry with the validation error fed back
-        if attempt and time.time() > deadline + 60:
+        if attempt and (time.time() > deadline + 60 or (hard and hard - time.time() < BRIEF_MIN_S)):
             break
         try:
             # Reasoning models spend much of max_tokens thinking; 4000 truncated long briefs mid-JSON.
-            turn = p.chat(msgs, response_format=schema if attempt == 0 else None, max_tokens=BRIEF_MAX_TOKENS)
+            turn = p.chat(msgs, response_format=schema if attempt == 0 else None, max_tokens=BRIEF_MAX_TOKENS,
+                          **capped())
             brief = _parse_brief(turn.content or "", p)
             break
         except Exception as exc:  # noqa: BLE001
@@ -191,6 +214,9 @@ def run(question: str, provider_name: str = "meta", aoi_id: str | None = None) -
             msgs.append({"role": "user", "content": f"That was not valid. Error: {err}. Reply with the JSON only."})
     if brief is None:
         log.warning("agent brief error: %s", err)
+        if hard and isinstance(last_exc, httpx.TimeoutException):
+            yield from _out_of_time(label)
+            return
         if isinstance(last_exc, httpx.HTTPError):
             yield _error_event("brief", last_exc)
         else:  # the model answered, but not with a valid brief

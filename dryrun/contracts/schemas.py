@@ -643,5 +643,5 @@ class Brief(_Base):
 class AgentEvent(_Base):
     """Streamed to the UI over SSE from POST /agent (one JSON per event)."""
 
-    kind: Literal["thought", "tool_call", "tool_result", "run_ready", "brief", "error", "done"]
+    kind: Literal["thought", "tool_call", "tool_result", "phase", "run_ready", "brief", "error", "done"]
     data: dict

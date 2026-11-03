@@ -325,36 +325,146 @@ def test_modal_is_reached_only_with_a_judge_key_or_the_team_token(client, monkey
     assert made == ["fake", "modal", "modal"]
 
 
-def test_modal_provider_sends_the_proxy_token_not_a_bearer_key(monkeypatch):
-    import httpx
-
+def modal_provider(monkeypatch):
     from dryrun.meta import providers
 
     monkeypatch.setitem(providers.DEFAULTS["modal"], "base_url", "https://example.modal.run/v1")
     monkeypatch.setenv("MODAL_PROXY_TOKEN_ID", "wk-test")
     monkeypatch.setenv("MODAL_PROXY_TOKEN_SECRET", "ws-test")
+    return providers.get_provider("modal")
+
+
+def ok_response(url):
+    import httpx
+
+    return httpx.Response(200, json={"id": "x", "choices": [{"message": {"content": "ok"}}]},
+                          request=httpx.Request("GET", url))
+
+
+def test_modal_provider_sends_the_proxy_token_not_a_bearer_key(monkeypatch):
+    import httpx
+
     sent = {}
 
-    class R:
-        status_code = 200
-        text = ""
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"id": "x", "choices": [{"message": {"content": "ok"}}]}
-
-    def fake_post(url, json, timeout, headers, follow_redirects=False):
-        sent.update(url=url, timeout=timeout, headers=headers, follow=follow_redirects)
-        return R()
+    def fake_post(url, json, timeout, headers):
+        sent.update(url=url, timeout=timeout, headers=headers)
+        return ok_response(url)
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    p = providers.get_provider("modal")
+    p = modal_provider(monkeypatch)
     assert p.chat([{"role": "user", "content": "hi"}]).content == "ok"
     assert sent["url"] == "https://example.modal.run/v1/chat/completions"
     assert sent["headers"] == {"Modal-Key": "wk-test", "Modal-Secret": "ws-test"}
-    assert sent["timeout"] > 60 and p.wakes and sent["follow"]  # Modal's 303 for a request past 150 s is followed
+    assert sent["timeout"] > 60 and p.wakes
+
+
+def test_modal_redirects_are_followed_inside_one_time_cap(monkeypatch):
+    # Modal answers a request past 150 s with 303; every hop must share the caller's cap, not restart it.
+    import httpx
+
+    from dryrun.meta import providers
+
+    clock = [0.0]
+    monkeypatch.setattr(providers.time, "monotonic", lambda: clock[0])
+    hops = []
+
+    def fake_post(url, json, timeout, headers):
+        hops.append(("post", url, timeout))
+        clock[0] += 150
+        return httpx.Response(303, headers={"location": "/v1/result/abc"}, request=httpx.Request("POST", url))
+
+    def fake_get(url, timeout, headers):
+        hops.append(("get", url, timeout, headers["Modal-Key"]))
+        clock[0] += 150
+        if len(hops) < 3:
+            return httpx.Response(303, headers={"location": "/v1/result/abc"}, request=httpx.Request("GET", url))
+        return ok_response(url)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx, "get", fake_get)
+    p = modal_provider(monkeypatch)
+    assert p.chat([{"role": "user", "content": "hi"}], timeout=500).content == "ok"
+    assert hops == [("post", "https://example.modal.run/v1/chat/completions", 500),
+                    ("get", "https://example.modal.run/v1/result/abc", 350, "wk-test"),
+                    ("get", "https://example.modal.run/v1/result/abc", 200, "wk-test")]
+    hops.clear()
+    clock[0] = 0
+    with pytest.raises(httpx.TimeoutException):  # the cap is spent before the result: no further hop
+        p.chat([{"role": "user", "content": "hi"}], timeout=280)
+    assert [h[0] for h in hops] == ["post", "get"]
+
+
+class WakingProvider(ScriptedProvider):
+    """A scale-to-zero provider on a fake clock: each call takes `costs[i]` seconds, or raises when that is None."""
+
+    name, timeout, wakes = "modal", 540.0, True
+
+    def __init__(self, now, costs, stop_after=1):
+        super().__init__(stop_after=stop_after)
+        self.now, self.costs, self.timeouts = now, list(costs), []
+
+    def chat(self, messages, tools=None, response_format=None, max_tokens=4000, timeout=None):
+        self.timeouts.append((self.now[0], timeout))
+        cost = self.costs.pop(0)
+        if cost is None or cost > timeout:
+            import httpx
+
+            self.now[0] += timeout
+            raise httpx.ReadTimeout("timed out")
+        self.now[0] += cost
+        return super().chat(messages, tools, response_format, max_tokens)
+
+
+def waking_run(monkeypatch, costs, stop_after=1):
+    now = [0.0]
+    monkeypatch.setattr(loop.time, "time", lambda: now[0])
+    prov = WakingProvider(now, costs, stop_after)
+    monkeypatch.setattr(loop, "get_provider", lambda name: prov)
+    return prov, list(loop.run("question", provider_name="modal", aoi_id=fixtures.AOI_ID)), now
+
+
+def assert_out_of_time(events):
+    assert [e.kind for e in events[-2:]] == ["error", "done"]
+    err = events[-2].data
+    assert err["stage"] == "brief" and err["code"] == "llm_timeout" and err["retryable"] is True
+    assert "Muse Glimmer 30B ran out of time" in err["message"] and not any(c.isdigit() for c in err["message"].replace("30B", ""))
+    assert not any(e.kind == "brief" for e in events)
+
+
+def test_waking_provider_brief_that_cannot_finish_ends_cleanly_before_the_request_cap(monkeypatch):
+    # Cold start 400 s, a tool turn, then a brief that would take longer than what is left of the request.
+    prov, events, now = waking_run(monkeypatch, [400, 30, 900, 900])
+    assert_out_of_time(events)
+    phase = [e for e in events if e.kind == "phase"]
+    assert len(phase) == 1 and phase[0].data == {"phase": "brief", "model": "Muse Glimmer 30B"}
+    assert all(t + timeout <= loop.REQUEST_BUDGET_S for t, timeout in prov.timeouts)
+    assert now[0] <= loop.REQUEST_BUDGET_S
+    assert len(prov.timeouts) == 3  # no retry once the brief call used up the request's time
+
+
+def test_waking_provider_skips_the_brief_when_too_little_time_is_left(monkeypatch):
+    # A slow cold start and a slow tool turn leave less than the brief minimum: no brief call is started at all.
+    prov, events, now = waking_run(monkeypatch, [400, loop.REQUEST_BUDGET_S - 400 - loop.BRIEF_MIN_S / 2], stop_after=2)
+    assert_out_of_time(events)
+    assert prov.brief_calls == 0 and len(prov.timeouts) == 2
+    assert not any(e.kind == "phase" for e in events)
+
+
+def test_waking_provider_stops_tool_turns_to_leave_room_for_the_brief(monkeypatch):
+    # After the tool turn there are under two brief-minimums left: go straight to the brief, which fits.
+    prov, events, now = waking_run(monkeypatch, [400, loop.REQUEST_BUDGET_S - 400 - loop.BRIEF_MIN_S * 1.5, 30],
+                                   stop_after=2)
+    kinds = [e.kind for e in events]
+    assert kinds[-3:] == ["phase", "brief", "done"]
+    assert any(e.kind == "thought" and "Time budget reached" in e.data["text"] for e in events)
+    assert prov.tool_turns == 2 and prov.brief_calls == 1
+
+
+def test_phase_event_announces_the_brief(monkeypatch):
+    events = run_provider(monkeypatch, ScriptedProvider(stop_after=1))
+    kinds = [e.kind for e in events]
+    assert kinds.index("phase") == kinds.index("brief") - 1
+    assert events[kinds.index("phase")].data == {"phase": "brief", "model": "scripted"}
 
 
 def test_modal_without_its_url_or_secret_is_not_configured(monkeypatch):

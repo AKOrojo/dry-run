@@ -11,7 +11,7 @@ import { Card, Field, Segmented, FIG, hintText, srOnly } from "./rev5";
 import { replayHint } from "../lib/replay";
 import { Badge, Btn, Dot, Footer, Pad } from "./agent/bits";
 import { BriefCard, ClaimsCard, briefText } from "./agent/Brief";
-import { Stepper, buildSteps, lastBudget, mmss } from "./agent/Steps";
+import { Stepper, briefPhase, buildSteps, lastBudget, mmss } from "./agent/Steps";
 import { TextField } from "./controls/TextField";
 import { Button } from "./controls/Button";
 import { VoiceButton } from "./agent/Voice";
@@ -116,6 +116,7 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
   const thought = thoughts.length ? (thoughts[thoughts.length - 1].data.text as string) : undefined;
   const steps = buildSteps(events, ts);
   const budget = lastBudget(events);
+  const writing = busy && !err ? briefPhase(events, ts) : undefined;
   const modelName = brief?.model ?? introMatch?.[1] ?? MODEL_NAME[provider] ?? provider;
   const started = events.length > 0 || busy || !!err;
 
@@ -220,8 +221,8 @@ export function AgentPanel({ onRun, onAoi, onReplay, onEvents, briefExtra, defau
           </Card>
           <Card title="Steps" right={<span style={{ ...FIG, marginLeft: "auto", fontSize: 13, color: "var(--ink-muted)" }}>
             {steps.length} {steps.length === 1 ? "step" : "steps"}</span>}>
-            <Stepper steps={steps} running={busy} thought={thought} now={now} onRun={onRun} />
-            {steps.length === 0 && !thought && <div style={{ padding: 14, fontSize: 13, color: "var(--ink-muted)" }}>{busy ? "Waiting for the first step." : "No steps yet."}</div>}
+            <Stepper steps={steps} running={busy} thought={thought} now={now} onRun={onRun} writing={writing} />
+            {steps.length === 0 && !thought && !writing && <div style={{ padding: 14, fontSize: 13, color: "var(--ink-muted)" }}>{busy ? "Waiting for the first step." : "No steps yet."}</div>}
           </Card>
         </>
       )}
