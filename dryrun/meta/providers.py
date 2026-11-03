@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 
 log = logging.getLogger("dryrun.llm")
@@ -86,7 +87,7 @@ class OpenAICompatProvider:
             self.headers = {"Modal-Key": self.key, "Modal-Secret": secret}
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             response_format: dict | None = None, max_tokens: int = 4000) -> Turn:
+             response_format: dict | None = None, max_tokens: int = 4000, timeout: float | None = None) -> Turn:
         import httpx
 
         body = {"model": self.model, "messages": messages, "max_tokens": max_tokens}
@@ -96,11 +97,24 @@ class OpenAICompatProvider:
             body["response_format"] = response_format
         from dryrun.api.errors import content_filtered
 
+        end = time.monotonic() + (timeout or self.timeout)
+
+        def left() -> float:  # a caller's timeout caps the whole call; without one, each attempt gets self.timeout
+            if end - time.monotonic() <= 0:
+                raise httpx.ReadTimeout("call time budget spent")
+            return end - time.monotonic()
+
         for attempt in range(1 + CONTENT_FILTER_RETRIES):
+            if attempt and timeout is None:
+                end = time.monotonic() + self.timeout
+            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=left(), headers=self.headers)
             # Modal answers a request still running at 150 s (a cold start) with 303 See Other to a URL that returns the
-            # result: follow it (same host, so the proxy-token headers go along).
-            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=self.timeout, headers=self.headers,
-                           follow_redirects=self.wakes)
+            # result. Follow it by hand (same host, so the proxy-token headers go along): httpx would restart the
+            # timeout on every hop, and the caller's timeout is a cap on the whole call.
+            for _ in range(10):
+                if not (self.wakes and r.is_redirect):
+                    break
+                r = httpx.get(str(r.url.join(r.headers["location"])), timeout=left(), headers=self.headers)
             if not content_filtered(r):
                 break
             log.warning("llm_content_filter provider=%s model=%s attempt=%d", self.name, self.model, attempt + 1)

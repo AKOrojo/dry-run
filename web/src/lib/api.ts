@@ -64,7 +64,7 @@ export type AOIManifest = {
   drainage_default?: DrainageDefault | null;
   grid: { bounds_wgs84: [number, number, number, number]; nx: number; ny: number; cell_size_m: number };
 };
-export type AgentEvent = { kind: "thought" | "tool_call" | "tool_result" | "run_ready" | "brief" | "error" | "done"; data: any };
+export type AgentEvent = { kind: "thought" | "tool_call" | "tool_result" | "phase" | "run_ready" | "brief" | "error" | "done"; data: any };
 
 // Team rehearsals: run `localStorage.setItem("dr_team_token", "<DRYRUN_ADMIN_TOKEN>")` in the console
 // once to bypass the public rate limits. Never commit the token.
