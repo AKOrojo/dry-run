@@ -135,6 +135,9 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
   const h = drag ? drag.h : target;
   return (
     <section ref={box} id={SHEET_ID} role="tabpanel" aria-labelledby={tab ? tabId(tab) : undefined} aria-label={tab ? undefined : `${title} panel`} data-sheet={snap}
+      /* The resting height (px) of this snap, its 1 px top border included (outside `height`): what the sheet
+         animates to, for overlays placed above it. */
+      data-sheet-h={room ? target + 1 : undefined}
       hidden={hidden} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: room ? h : "50%", zIndex: 4, display: hidden ? "none" : "flex", flexDirection: "column",
         background: "var(--ground)", borderTop: "1px solid var(--hairline)", borderRadius: "8px 8px 0 0", boxShadow: "var(--shadow-float)", overflow: "hidden",
         transition: drag ? "none" : "height 0.2s ease-out" }}>

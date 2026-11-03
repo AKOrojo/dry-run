@@ -229,18 +229,20 @@ export function CompareMapOverlay({ phone = false, a, b, names, origin, view, on
   // Phone: the view switch (and the difference legend above it) sits above the sheet at peek, which covers the map's foot.
   const [lift, setLift] = useState(0);
   useLayoutEffect(() => {
-    const sheet = document.getElementById(SHEET_ID), own = box.current;
-    if (!phone || !sheet || !own) return;
+    const sheet = document.getElementById(SHEET_ID), own = box.current, area = sheet?.parentElement;
+    if (!phone || !sheet || !own || !area) return;
+    // From where the sheet comes to rest (data-sheet-h), not from its rect: that moves for the 0.2 s of its height
+    // animation, and a read mid-way would leave the switch lifted for the snap it left.
     const place = () => {
-      const peek = !sheet.hidden && sheet.dataset.sheet === "peek";
-      const next = peek ? Math.max(0, Math.round(own.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top)) : 0;
-      setLift(next);
+      const h = Number(sheet.dataset.sheetH);
+      const peek = !sheet.hidden && sheet.dataset.sheet === "peek" && h > 0;
+      setLift(peek ? Math.max(0, Math.round(own.getBoundingClientRect().bottom - (area.getBoundingClientRect().bottom - h))) : 0);
     };
     place();
     const ro = new ResizeObserver(place);
-    ro.observe(sheet); ro.observe(own);
+    ro.observe(own); ro.observe(area);
     const mo = new MutationObserver(place);
-    mo.observe(sheet, { attributes: true, attributeFilter: ["hidden", "data-sheet"] });
+    mo.observe(sheet, { attributes: true, attributeFilter: ["hidden", "data-sheet", "data-sheet-h"] });
     return () => { ro.disconnect(); mo.disconnect(); };
   }, [phone]);
   const switchBottom = lift ? lift + 8 : 44;
