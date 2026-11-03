@@ -138,6 +138,7 @@ export default function App() {
   const [sideTab, setSideTab] = useState<Tab>("Scenario");
   const [sheet, setSheet] = useState<PhoneTab | null>(null);
   const [snap, setSnap] = useState<Snap>("half");
+  const [snapInstant, setSnapInstant] = useState(false);  // the next sheet height change jumps (entering Compare)
   const [drawer, setDrawer] = useState(false);
   const [sheetBody, setSheetBody] = useState<HTMLDivElement | null>(null);
   // The coordinate chip moves into the phone's ⋮ menu: off when a phone opens the page, back on when it widens.
@@ -529,10 +530,11 @@ export default function App() {
     if (t !== "Timeline") setSideTab(sideOf(t));
   };
   /** The side panel asks for a tab (a mode change, a picked building, the Sources link): open it where it lives.
-   *  Compare opens at peek on a phone, so both panes, their labels and the view switch show. */
+   *  Compare opens at peek on a phone, so both panes, their labels and the view switch show. That is a mode change, so
+   *  the sheet jumps there: the second globe being built can stall a 0.2 s ease for seconds, hiding the switch. */
   const openSide = (t: Tab) => {
     setSideTab(t);
-    if (bp === "phone") { if (t === "Compare") setSnap("peek"); else if (sheet !== phoneOf(t) || snap === "peek") setSnap("half"); setSheet(phoneOf(t)); }
+    if (bp === "phone") { if (t === "Compare") { setSnap("peek"); setSnapInstant(true); } else if (sheet !== phoneOf(t) || snap === "peek") setSnap("half"); setSheet(phoneOf(t)); }
     else if (bp === "tablet") setDrawer(true);
   };
   // The "3D city unavailable" chip's Details opens Layers (the sheet on a phone, the drawer on a tablet).
@@ -598,7 +600,7 @@ export default function App() {
         </div>
         {bp !== "phone" && view.timeline && dock(bp === "tablet" ? "two" : "row")}
         {bp === "phone" && (
-          <Sheet hidden={!sheet} tab={sheet} fullOnly={short} title={sheet === "Scenario" && comparing ? "Compare" : sideTab === "Sources" && sheet === "Layers" ? "Sources" : sheet ?? ""} snap={snap} onSnap={setSnap} onClose={() => setSheet(null)}
+          <Sheet hidden={!sheet} tab={sheet} fullOnly={short} title={sheet === "Scenario" && comparing ? "Compare" : sideTab === "Sources" && sheet === "Layers" ? "Sources" : sheet ?? ""} snap={snap} onSnap={setSnap} instant={snapInstant} onInstantDone={() => setSnapInstant(false)} onClose={() => setSheet(null)}
             head={sheet === "Timeline" && playerRun?.status === "done" ? <MiniPlayer inline run={playerRun} /> : undefined}>
             <div ref={setSheetBody} style={{ display: sheet && sheet !== "Timeline" ? "flex" : "none", flex: "1 1 auto", minHeight: 0, flexDirection: "column" }} />
             {sheet === "Timeline" && <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", paddingBottom: "env(safe-area-inset-bottom)" }}>{dock("stack")}</div>}

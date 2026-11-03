@@ -71,7 +71,9 @@ const HALF_MIN = 344;
 
 /** A bottom sheet over the map. Drag the handle between half and full height, or down past half to close. Opened at
  *  peek (the header alone), a tap or ArrowUp raises it to half and a drag can land it on peek again. */
-export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = false, tab, fullOnly = false, children }: {
+export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = false, tab, fullOnly = false, instant = false, onInstantDone, children }: {
+  /** One shot: the next height change jumps instead of easing (a mode change, not the user's snap), then onInstantDone. */
+  instant?: boolean; onInstantDone?: () => void;
   /** A phone on its side: no half snap, the sheet opens at full height; drag down closes it. */ fullOnly?: boolean;
   title: string; snap: Snap; onSnap: (s: Snap) => void; onClose: () => void;
   /** The tab-bar tab this sheet is the panel of. */ tab?: PhoneTab | null;
@@ -133,6 +135,13 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
     return () => window.removeEventListener("keydown", esc);
   }, [onClose, hidden]);
   const h = drag ? drag.h : target;
+  // Commit the jump with the transition off (reading offsetHeight applies it now), then hand the flag back: turning the
+  // ease on again before the browser applied the jump would animate it after all.
+  useLayoutEffect(() => {
+    if (!instant) return;
+    void box.current?.offsetHeight;
+    onInstantDone?.();
+  }, [instant]);  // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <section ref={box} id={SHEET_ID} role="tabpanel" aria-labelledby={tab ? tabId(tab) : undefined} aria-label={tab ? undefined : `${title} panel`} data-sheet={snap}
       /* The resting height (px) of this snap, its 1 px top border included (outside `height`): what the sheet
@@ -140,7 +149,7 @@ export function Sheet({ title, snap: snapProp, onSnap, onClose, head, hidden = f
       data-sheet-h={room ? target + 1 : undefined}
       hidden={hidden} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: room ? h : "50%", zIndex: 4, display: hidden ? "none" : "flex", flexDirection: "column",
         background: "var(--ground)", borderTop: "1px solid var(--hairline)", borderRadius: "8px 8px 0 0", boxShadow: "var(--shadow-float)", overflow: "hidden",
-        transition: drag ? "none" : "height 0.2s ease-out" }}>
+        transition: drag || instant ? "none" : "height 0.2s ease-out" }}>
       <div ref={headEl} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
         style={{ position: "relative", flex: "none", touchAction: "none", cursor: "grab", background: "var(--surface)", borderBottom: "1px solid var(--hairline)" }}>
         {/* The handle's target is the top 40 px of the header; the title sits under its lower half. */}
