@@ -146,7 +146,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   // referer-setting proxy (VITE_ION_SERVER, e.g. /ion/ proxied by vite.live.config.ts).
   if (import.meta.env.DEV && import.meta.env.VITE_ION_SERVER) Cesium.Ion.defaultServer = new URL(import.meta.env.VITE_ION_SERVER, window.location.href).href;
   const el = useRef<HTMLDivElement>(null);
-  const [stopped, setStopped] = useState<"error" | "lost" | null>(null);
+  const [stopped, setStopped] = useState<"error" | "lost" | "nogl" | null>(null);
   const onRestartRef = useRef(onRestart);
   onRestartRef.current = onRestart;
   const viewer = useRef<Cesium.Viewer>();
@@ -232,17 +232,27 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
     if (!el.current) return;
     const ionImagery = !!token && !layers.get().ionDown;
     terrainRef.current = token && !terrainDown ? Cesium.Terrain.fromWorldTerrain() : undefined;
-    const v = new Cesium.Viewer(el.current, {
-      timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
-      homeButton: false, sceneModePicker: false, fullscreenButton: false, navigationHelpButton: false, infoBox: false,
-      shadows: true,
-      // Render on demand: an idle map draws nothing. Cesium renders for camera moves and tile loads; lib/render.ts asks
-      // for frames when our own state changes.
-      requestRenderMode: true, maximumRenderTimeChange: Infinity,
-      ...(terrainRef.current ? { terrain: terrainRef.current } : {}),
-      // Without an ion token (or with ion refusing this session) OSM tiles (attribution shown by Cesium credits).
-      ...(ionImagery ? {} : { baseLayer: new Cesium.ImageryLayer(osm()) }),
-    });
+    // Without WebGL (hardware acceleration off, a blocklisted GPU, the browser out of contexts) the constructor throws.
+    // That browser can't draw any map, so a restart won't help: say why and what to try; the rest of the app stays usable.
+    let v: Cesium.Viewer;
+    try {
+      v = new Cesium.Viewer(el.current, {
+        timeline: false, animation: false, baseLayerPicker: false, geocoder: false,
+        homeButton: false, sceneModePicker: false, fullscreenButton: false, navigationHelpButton: false, infoBox: false,
+        shadows: true,
+        // Render on demand: an idle map draws nothing. Cesium renders for camera moves and tile loads; lib/render.ts asks
+        // for frames when our own state changes.
+        requestRenderMode: true, maximumRenderTimeChange: Infinity,
+        ...(terrainRef.current ? { terrain: terrainRef.current } : {}),
+        // Without an ion token (or with ion refusing this session) OSM tiles (attribution shown by Cesium credits).
+        ...(ionImagery ? {} : { baseLayer: new Cesium.ImageryLayer(osm()) }),
+      });
+    } catch (err) {
+      console.error(`Cesium could not start (area ${aoi.aoi_id}): ${errorText(err)}`);
+      el.current.replaceChildren();  // the half-built widget and Cesium's own error panel
+      setStopped("nogl");
+      return;
+    }
     // ion refuses: a flat globe (buildings stay at ground 0), and the street map unless Google's imagery is showing.
     terrainRef.current?.errorEvent.addEventListener((err) => {
       terrainDown = true;
@@ -801,7 +811,7 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <div ref={el} style={{ position: "absolute", inset: 0 }} />
-      {stopped && <MapStopped lost={stopped === "lost"} onRestart={onRestart} />}
+      {stopped && <MapStopped why={stopped} onRestart={onRestart} />}
     </div>
   );
 }
@@ -809,17 +819,19 @@ export function Globe({ aoi, frameUrl, frames, framesB, split, tS, ionToken, bui
 /** The error and its stack as one line of text for the console (an Error's own toString drops the stack). */
 export const errorText = (err: unknown) => (err instanceof Error ? `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ""}` : String(err));
 
-/** Shown over the map when it stopped drawing: what happened and a way back. */
-function MapStopped({ lost, onRestart }: { lost: boolean; onRestart: () => void }) {
+/** Shown over the map when it stopped drawing, or never started: what happened and a way back. */
+function MapStopped({ why, onRestart }: { why: "error" | "lost" | "nogl"; onRestart: () => void }) {
   return (
     <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
       background: "color-mix(in srgb, var(--ground) 70%, transparent)", zIndex: 5 }}>
       <div style={{ width: "min(380px, 100%)", display: "flex", flexDirection: "column", gap: 10, padding: 14, background: "var(--surface)",
         border: "1px solid var(--hairline)", borderRadius: 6, boxShadow: "var(--card-shadow)" }}>
-        <Notice message="The map stopped drawing." detail={lost
-          ? "The graphics card reset (often when another tab or app uses it heavily). Restart the map to draw it again; the run and your view settings stay."
-          : "Something went wrong while drawing the map. Restart it to draw again; the run and your view settings stay."} />
-        <div><Button variant="raised" onClick={onRestart} style={{ height: 30, padding: "0 12px", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 600 }}>Restart map</Button></div>
+        {why === "nogl"
+          ? <Notice message="Your browser couldn't start 3D graphics." detail="Turn on hardware acceleration in your browser settings, close other map tabs, or try another browser. The rest of Dry Run still works." />
+          : <Notice message="The map stopped drawing." detail={why === "lost"
+            ? "The graphics card reset (often when another tab or app uses it heavily). Restart the map to draw it again; the run and your view settings stay."
+            : "Something went wrong while drawing the map. Restart it to draw again; the run and your view settings stay."} />}
+        {why !== "nogl" && <div><Button variant="raised" onClick={onRestart} style={{ height: 30, padding: "0 12px", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 600 }}>Restart map</Button></div>}
       </div>
     </div>
   );
